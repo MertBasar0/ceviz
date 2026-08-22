@@ -10,12 +10,12 @@
 #   - Tailscale varsa backend'i tailnet'e /ceviz olarak yayinlar
 #   - Telefonda okutacagin QR + pairing bilgisini basar
 #
-# Repo kok dizininde ya da watch-ceviz/ icinde calistirilabilir.
+# Ceviz repo kok dizininde calistirilabilir.
 set -euo pipefail
 
 # --- Repo kokunu bul (bu script deploy/ altinda) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$(dirname "$SCRIPT_DIR")"          # watch-ceviz/
+APP_DIR="$(dirname "$SCRIPT_DIR")"          # Ceviz repo root
 cd "$APP_DIR"
 
 PORT="${WATCH_CEVIZ_PORT:-8080}"

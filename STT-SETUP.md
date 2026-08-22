@@ -24,6 +24,9 @@ OpenAI artık zorunlu değil; yalnızca opsiyonel fallback.
 - Türkçe sesli komutlar için öneri: GPU açılınca `large-v3`; CPU'da kalınırsa `small`/`medium`.
 
 ## Servis
-`watch-ceviz-backend.service` (systemd --user, port 8080) bu venv'i + bu env'leri kullanır.
-Kopyası: `deploy/watch-ceviz-backend.service`. Boot'ta otomatik (linger + WSL autostart).
-Kurulum: `cp deploy/watch-ceviz-backend.service ~/.config/systemd/user/ && systemctl --user enable --now watch-ceviz-backend`.
+
+`bash deploy/install.sh`, mevcut repo yolu, token ve STT ayarlarıyla
+`watch-ceviz-backend.service` dosyasını otomatik üretir ve `systemd --user`
+altında başlatır. `deploy/watch-ceviz-backend.service` yalnızca elle kurulum
+için düzenlenmesi gereken bir şablondur; kişisel yollar veya gerçek token
+içermez.

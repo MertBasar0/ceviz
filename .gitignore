@@ -1,0 +1,15 @@
+# Pairing QR files contain the local backend access token.
+ceviz-*-pairing.png
+
+# Local credentials and generated artifacts.
+.auth-token
+.venv/
+__pycache__/
+*.py[cod]
+backend.log
+build/
+DerivedData/
+*.xcodeproj/
+*.xcarchive
+*.ipa
+.DS_Store

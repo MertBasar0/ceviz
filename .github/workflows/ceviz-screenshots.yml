@@ -1,0 +1,211 @@
+name: Ceviz Screenshots (Simulator)
+
+# App Store ekran goruntulerini uretir. Demo modu sayesinde veriler sabit:
+# simulatorde uygulama yapilandirilmamis oldugu icin kendiliginden demo
+# moduna duser ve her kosuda ayni ekranlar cikar. Ekranlar arasinda
+# gezinmek icin UI testi yerine `ceviz://job/<id>` deep link'leri kullanilir.
+
+on:
+  # workflow_dispatch ancak workflow bir kez calistiktan sonra kullanilabilir
+  # (GitHub varsayilan branch'te gormedigi dosyayi dispatch etmiyor). Bu dar
+  # kapsamli push tetikleyicisi yalnizca bu dosya degistiginde calisir.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ceviz-screenshots.yml"
+
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "iPhone simulator model"
+        required: false
+        default: "iPhone 16 Pro Max"
+        type: string
+      language:
+        description: "Uygulama dili (en / tr)"
+        required: false
+        default: "en"
+        type: string
+
+concurrency:
+  group: ceviz-screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Capture simulator screenshots
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          PINNED=/Applications/Xcode_26.4.1.app
+          if [ -d "$PINNED" ]; then
+            sudo xcode-select -s "$PINNED/Contents/Developer"
+          else
+            LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+            [ -n "$LATEST" ] || { echo "Xcode bulunamadi"; exit 1; }
+            echo "Sabitlenen Xcode yok, kullanilacak: $LATEST"
+            sudo xcode-select -s "$LATEST/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Boot simulator
+        id: boot
+        run: |
+          set -euo pipefail
+          DEVICE="${{ inputs.device || 'iPhone 16 Pro Max' }}"
+          LIST=$(xcrun simctl list devices available)
+
+          echo "== Runner'daki iPhone simulatorleri =="
+          echo "$LIST" | grep -i "iPhone" || echo "  (hic iPhone yok)"
+          echo
+
+          # NOT: grep eslesme bulamazsa 1 doner; pipefail + set -e ile adim
+          # tani basmadan olur. Bu yuzden her secim denemesi `|| true` ile.
+          pick () { echo "$LIST" | grep -E "$1" | tail -1 | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/' || true; }
+
+          UDID=$(echo "$LIST" | grep -m1 -F "$DEVICE (" | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/' || true)
+          CHOSEN="$DEVICE"
+          if [ -z "$UDID" ]; then
+            echo "!! '$DEVICE' yok — mevcut en buyuk Pro Max'e dusuluyor"
+            UDID=$(pick "iPhone .*Pro Max \(")
+            CHOSEN="en yeni Pro Max"
+          fi
+          if [ -z "$UDID" ]; then
+            echo "!! Pro Max de yok — herhangi bir iPhone'a dusuluyor"
+            UDID=$(pick "iPhone .*\(")
+            CHOSEN="herhangi bir iPhone"
+          fi
+          if [ -z "$UDID" ]; then
+            echo "Kullanilabilir iPhone simulatoru bulunamadi."
+            exit 1
+          fi
+
+          NAME=$(echo "$LIST" | grep -F "$UDID" | sed -E 's/^ *(.*) \([0-9A-Fa-f-]{36}\).*/\1/' | head -1)
+          echo "Secilen cihaz: $NAME ($CHOSEN) — $UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          echo "DEVICE_NAME=$NAME" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          # Durum cubugu App Store icin temiz gorunsun.
+          xcrun simctl status_bar "$UDID" override \
+            --time "09:41" --batteryState charged --batteryLevel 100 \
+            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
+
+      - name: Build app for the booted simulator
+        run: |
+          set -euo pipefail
+          # -sdk yerine -destination: gomulu watch app'i Xcode kendiliginden
+          # watchsimulator icin derler (iOS SDK'sinda WatchKit yok).
+          xcodebuild \
+            -project CevizWatch.xcodeproj \
+            -scheme CevizBridge \
+            -configuration Release \
+            -destination "id=$UDID" \
+            -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME="" \
+            build | tail -20
+          APP_PATH=$(find "$PWD/build/dd/Build/Products" -maxdepth 2 -name "CevizBridge.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "CevizBridge.app bulunamadi"; find "$PWD/build/dd/Build/Products" -maxdepth 2 | head -20; exit 1
+          fi
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "Uygulama: $APP_PATH"
+
+      - name: Install and launch (demo mode)
+        run: |
+          set -euo pipefail
+          xcrun simctl install "$UDID" "$APP_PATH"
+          LANG_CODE="${{ inputs.language || 'en' }}"
+          # Taze kurulumda token/sunucu yok -> DemoMode kendiliginden aktif.
+          # Screenshot argumani, izin diyaloğunun urun ekranlarini kapatmasini
+          # engeller; normal TestFlight acilis davranisini degistirmez.
+          xcrun simctl launch "$UDID" com.mertbasar.cevizwatch \
+            -AppleLanguages "($LANG_CODE)" -AppleLocale "${LANG_CODE}_US" \
+            -cvzScreenshots
+          sleep 6
+
+      - name: Capture screens
+        run: |
+          set -euo pipefail
+          OUT="$PWD/build/screenshots"
+          mkdir -p "$OUT"
+
+          LANG_CODE="${{ inputs.language || 'en' }}"
+          BUNDLE=com.mertbasar.cevizwatch
+
+          shot () {  # shot <dosya-adi>
+            sleep 3
+            # simctl PNG'ye gereksiz bir alpha kanali ekliyor. Dogrudan JPEG
+            # alarak App Store'un alpha-kanalsiz dosya kosulunu sagla.
+            xcrun simctl io "$UDID" screenshot --type=jpeg "$OUT/$1.jpg"
+            echo "  yakalandi: $1.jpg"
+          }
+
+          # simctl openurl "Open in Ceviz?" onay diyalogu aciyor ve
+          # otomasyonda dokunacak kimse olmadigi icin orada kilitleniyor.
+          # Bunun yerine uygulamayi istenen ekranda yeniden baslat.
+          open_job () {  # open_job <job-id> <dosya-adi>
+            xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+            sleep 1
+            xcrun simctl launch "$UDID" "$BUNDLE" \
+              -AppleLanguages "($LANG_CODE)" -AppleLocale "${LANG_CODE}_US" \
+              -cvzScreenshots -cvzScreen "$1" >/dev/null
+            # Soguk baslangic + ilk render: kisa beklemede bos kare cikiyor.
+            sleep 7
+            shot "$2"
+          }
+
+          echo "== 1) Ana ekran (son isler) =="
+          shot "01-home"
+
+          echo "== 2) Deploy raporu (zincir gezinme gorunur) =="
+          open_job "job-demo-01" "02-report-deploy"
+
+          echo "== 3) Zincirin ikinci isi =="
+          open_job "job-demo-02" "03-report-chain"
+
+          echo "== 4) Incident (girdi bekliyor durumu) =="
+          open_job "job-demo-04" "04-report-incident"
+
+          echo "== 5) PR ozeti =="
+          open_job "job-demo-03" "05-report-pr"
+
+          ls -la "$OUT"
+
+      - name: Report image sizes
+        run: |
+          set -euo pipefail
+          cd build/screenshots
+          for f in *.jpg; do
+            SIZE=$(sips -g pixelWidth -g pixelHeight "$f" | awk '/pixel/{printf "%s ", $2}')
+            ALPHA=$(sips -g hasAlpha "$f" | awk '/hasAlpha/{print $2}')
+            echo "  $f -> ${SIZE}alpha=${ALPHA}"
+            [ "$ALPHA" = "no" ] || { echo "$f hala alpha kanali iceriyor"; exit 1; }
+          done
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceviz-screenshots-${{ inputs.language || 'en' }}
+          path: build/screenshots/*.jpg
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Shutdown simulator
+        if: always()
+        run: xcrun simctl shutdown "$UDID" || true

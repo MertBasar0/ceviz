@@ -14,7 +14,7 @@ Son güncelleme: **23 Ağustos 2026**
 - Dış grup dağıtım doğrulaması:
   <https://github.com/MertBasar0/openclaw/actions/runs/32605320929>
 - GitHub prerelease:
-  <https://github.com/MertBasar0/openclaw/releases/tag/ceviz-watch-v2026.6.5-beta.2>
+  <https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.2>
 
 Build yalnızca App Store Connect'e yüklenmiş değildir; dış `Beta` grubuna
 atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştır.
@@ -43,6 +43,8 @@ atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştı
   bildirimden sonuca geçişi açıklayacak biçimde güncellendi.
 - `ceviz-watch-v2026.6.5-beta.2` etiketi ve **Ceviz 2026.6.5 Beta 2** GitHub
   prerelease'i yayımlandı.
+- Ceviz kaynakları OpenClaw fork'undaki kalıcı ürün branch'inden bağımsız
+  `MertBasar0/ceviz` reposuna, ürün geçmişi korunarak taşındı.
 
 ## Açık beta için kabul edilen doğrulama riski
 

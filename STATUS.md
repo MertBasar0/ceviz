@@ -19,6 +19,29 @@ Son güncelleme: **23 Ağustos 2026**
 Build yalnızca App Store Connect'e yüklenmiş değildir; dış `Beta` grubuna
 atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştır.
 
+## Bağımsız repo geçişi
+
+- Aktif repo: <https://github.com/MertBasar0/ceviz>
+- Varsayılan branch: `main`
+- Ceviz'e ait sekiz ürün commit'i, OpenClaw geçmişi taşınmadan korundu ve
+  `watch-ceviz/` içeriği yeni repo köküne düzleştirildi.
+- Beta 1 ve Beta 2 tag/prerelease kayıtları yeni repoda yeniden yayımlandı.
+- Build ve screenshot workflow'ları yeni kök yollarına ve `main` branch'ine
+  uyarlandı; GitHub tarafından aktif workflow olarak tanındı.
+- Yeni kök düzende backend/contract testleri yerelde **34/34** geçti.
+
+GitHub mevcut Actions secret değerlerini dışarı vermediği için imzalı build
+workflow'unun yeni repoda çalıştırılmasından önce aşağıdaki secret'lar yeniden
+girilmelidir. İlk migration push'u bu nedenle `[skip ci]` ile yapıldı:
+
+- `APPLE_API_ISSUER_ID`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_KEY_P8`
+- `APPLE_CERTIFICATE_P12`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `OPENCLAW_PUSH_RELAY_BASE_URL`
+
 ## Tamamlananlar
 
 - Apple Watch'taki terminal bildiriminin sonucuna dokunulduğunda ana ekranın
@@ -61,10 +84,12 @@ bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum 
 
 ## Sıradaki işler
 
-1. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
-2. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
+1. Actions secret'larını yeni `MertBasar0/ceviz` reposuna yeniden gir ve ilk
+   imzalı `workflow_dispatch` build'ini doğrula.
+2. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
+3. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
    geri bildirimleri izle.
-3. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
+4. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
    doğrula; sonuçları bu dosyaya ekle.
 
 ## Güvenlik ve yerel artefaktlar

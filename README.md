@@ -101,8 +101,8 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 ## Security
 
 Report suspected vulnerabilities privately as described in
-[SECURITY.md](SECURITY.md). Never place pairing tokens, signing credentials,
-voice content, or unredacted job reports in a public issue.
+[SECURITY.md](.github/SECURITY.md). Never place pairing tokens, signing
+credentials, voice content, or unredacted job reports in a public issue.
 
 ## License and trademarks
 

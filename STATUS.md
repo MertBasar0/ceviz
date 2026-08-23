@@ -22,8 +22,8 @@ atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştı
 ## Bağımsız repo geçişi
 
 - Aktif repo: <https://github.com/MertBasar0/ceviz>
-- Görünürlük: **PRIVATE** — Apple signing secret'ları yeniden girilip yeni
-  repodan imzalı build doğrulanana kadar public yapılmayacak.
+- Görünürlük: **PRIVATE** — signing migration doğrulandı; yalnızca açık kullanıcı
+  onayıyla yeniden public yapılacak.
 - Varsayılan branch: `main`
 - Ceviz'e ait sekiz ürün commit'i, OpenClaw geçmişi taşınmadan korundu ve
   `watch-ceviz/` içeriği yeni repo köküne düzleştirildi.

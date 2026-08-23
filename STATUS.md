@@ -32,9 +32,8 @@ atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştı
   uyarlandı; GitHub tarafından aktif workflow olarak tanındı.
 - Yeni kök düzende backend/contract testleri yerelde **34/34** geçti.
 
-GitHub mevcut Actions secret değerlerini dışarı vermediği için imzalı build
-workflow'unun yeni repoda çalıştırılmasından önce aşağıdaki secret'lar yeniden
-girilmelidir. İlk migration push'u bu nedenle `[skip ci]` ile yapıldı:
+GitHub mevcut Actions secret değerlerini dışarı vermediği için aşağıdaki
+secret'lar yeni repoya güvenli kaynaklarından yeniden girildi:
 
 - `APPLE_API_ISSUER_ID`
 - `APPLE_API_KEY_ID`
@@ -42,6 +41,18 @@ girilmelidir. İlk migration push'u bu nedenle `[skip ci]` ile yapıldı:
 - `APPLE_CERTIFICATE_P12`
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_TEAM_ID`
+
+Yeni Apple Distribution sertifikası için iPhone ve Watch provisioning
+profilleri yenilendi. Bağımsız repodaki ilk imzalı build ve TestFlight upload
+başarıyla tamamlandı:
+
+- Build: **2026.6.5 (1787509178)**
+- App Store Connect işlenme durumu: **VALID**
+- Workflow: <https://github.com/MertBasar0/ceviz/actions/runs/32657599799>
+
+Bu build repo/secret/signing migration doğrulaması içindir; kullanıcıya dönük
+kod değişikliği içermediğinden public external gruba eklenmedi. Public Beta 2
+build `1787435232` dış testerlar için aktif kalmaktadır.
 
 ## Tamamlananlar
 
@@ -85,8 +96,7 @@ bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum 
 
 ## Sıradaki işler
 
-1. Actions secret'larını yeni `MertBasar0/ceviz` reposuna yeniden gir ve ilk
-   imzalı `workflow_dispatch` build'ini doğrula.
+1. Repo görünürlüğünü public'a döndürme kararını ver.
 2. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
 3. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
    geri bildirimleri izle.

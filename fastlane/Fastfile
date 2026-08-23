@@ -32,16 +32,14 @@ def ensure_watch_push_capability
   end
 end
 
-# Her hedef icin distribution provisioning profili olustur/getir (cloud signing DEGIL).
-# Sertifika repo gecisinde yenilendi; iki profil de yeni distribution
-# sertifikasini icerecek sekilde yeniden uretilmeli.
+# Her hedef icin distribution provisioning profili olustur/getir (cloud signing DEGIL)
 def provision(api_key)
   profiles = {}
   BUNDLE_IDS.each do |bid|
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: bid,
-      force: true,
+      force: bid == WATCH_BUNDLE_ID,
       output_path: "build/profiles"
     )
     profiles[bid] = lane_context[SharedValues::SIGH_NAME]

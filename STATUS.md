@@ -40,7 +40,6 @@ girilmelidir. İlk migration push'u bu nedenle `[skip ci]` ile yapıldı:
 - `APPLE_CERTIFICATE_P12`
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_TEAM_ID`
-- `OPENCLAW_PUSH_RELAY_BASE_URL`
 
 ## Tamamlananlar
 

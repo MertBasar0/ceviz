@@ -87,6 +87,10 @@ build `1787435232` dış testerlar için aktif kalmaktadır.
   hakları saklı tutuldu. GitHub lisansı `Apache-2.0` olarak tanıdı.
 - `.github/SECURITY.md` özel bildirim kanalı, desteklenen sürümler, kapsam ve
   operasyonel güvenlik uyarılarıyla yayımlandı.
+- Canlı Ceviz ürün sayfasına public repo bağlantısı, doğrudan clone/install
+  komutları, Tailscale önerisi ve QR eşleştirme adımları eklendi:
+  <https://basarlabs.com.tr/ceviz/>. GitHub Pages dağıtımı başarıyla doğrulandı:
+  <https://github.com/MertBasar0/basarlabs-site/actions/runs/32663945841>.
 
 ## Açık beta için kabul edilen doğrulama riski
 
@@ -103,11 +107,10 @@ bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum 
 
 ## Sıradaki işler
 
-1. Canlı ürün sayfasına yeni GitHub repo ve kurulum bağlantısını ekle.
-2. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
-3. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
+1. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
+2. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
    geri bildirimleri izle.
-4. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
+3. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
    doğrula; sonuçları bu dosyaya ekle.
 
 ## Güvenlik ve yerel artefaktlar

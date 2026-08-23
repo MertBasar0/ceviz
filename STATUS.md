@@ -80,6 +80,13 @@ build `1787435232` dış testerlar için aktif kalmaktadır.
   prerelease'i yayımlandı.
 - Ceviz kaynakları OpenClaw fork'undaki kalıcı ürün branch'inden bağımsız
   `MertBasar0/ceviz` reposuna, ürün geçmişi korunarak taşındı.
+- Public repo README'sine gereksinimler, clone/install, bağlantı seçimi, QR
+  eşleşme ve credential güvenliği dahil uçtan uca onboarding eklendi.
+- Kaynak kod ve dokümantasyon Apache-2.0 ile lisanslandı; Ceviz adı, logo,
+  uygulama ikonları ve marka kimliği ayrı marka/brand-asset koşullarıyla tüm
+  hakları saklı tutuldu. GitHub lisansı `Apache-2.0` olarak tanıdı.
+- `.github/SECURITY.md` özel bildirim kanalı, desteklenen sürümler, kapsam ve
+  operasyonel güvenlik uyarılarıyla yayımlandı.
 
 ## Açık beta için kabul edilen doğrulama riski
 
@@ -96,8 +103,7 @@ bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum 
 
 ## Sıradaki işler
 
-1. Public repo için lisans kararını ver ve kurulum bağlantılarının yeni repoya
-   yöneldiğini doğrula.
+1. Canlı ürün sayfasına yeni GitHub repo ve kurulum bağlantısını ekle.
 2. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
 3. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
    geri bildirimleri izle.

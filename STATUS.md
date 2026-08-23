@@ -22,8 +22,8 @@ atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştı
 ## Bağımsız repo geçişi
 
 - Aktif repo: <https://github.com/MertBasar0/ceviz>
-- Görünürlük: **PRIVATE** — signing migration doğrulandı; yalnızca açık kullanıcı
-  onayıyla yeniden public yapılacak.
+- Görünürlük: **PUBLIC** — signing migration sonrasında kullanıcı onayıyla
+  yeniden public yapıldı.
 - Varsayılan branch: `main`
 - Ceviz'e ait sekiz ürün commit'i, OpenClaw geçmişi taşınmadan korundu ve
   `watch-ceviz/` içeriği yeni repo köküne düzleştirildi.
@@ -96,7 +96,8 @@ bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum 
 
 ## Sıradaki işler
 
-1. Repo görünürlüğünü public'a döndürme kararını ver.
+1. Public repo için lisans kararını ver ve kurulum bağlantılarının yeni repoya
+   yöneldiğini doğrula.
 2. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
 3. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
    geri bildirimleri izle.

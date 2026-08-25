@@ -11,6 +11,19 @@ struct QueuedCommand: Codable, Identifiable {
     var retryCount: Int 
 } 
 
+private final class SendAttemptGate {
+    private let lock = NSLock()
+    private var finished = false
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return false }
+        finished = true
+        return true
+    }
+}
+
 
 class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExtendedRuntimeSessionDelegate {
     static let shared = WatchSessionManager()
@@ -43,6 +56,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     /// Bekleyen is kaydi bu sureden eskiyse anlamsizdir; diriltmeyiz.
     private static let pendingJobMaxAge: TimeInterval = 15 * 60
     private static let lastTerminalJobDefaultsKey = "cvz.lastTerminalJobId"
+    private static let pendingCommandsDefaultsKey = "cvz.pendingCommands.v1"
+    /// Sesli komutlar uzun süre sonra sürpriz biçimde çalıştırılmamalı.
+    private static let pendingCommandMaxAge: TimeInterval = 15 * 60
 
     enum HandoffState: Equatable {
         case idle
@@ -139,6 +155,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
 
     override init() {
         super.init()
+        restorePendingCommands()
         if WCSession.isSupported() {
             let session = WCSession.default
             session.delegate = self
@@ -249,6 +266,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         WKInterfaceDevice.current().play(status == "completed" ? .success : .failure)
         if WCSession.default.isReachable {
             fetchJobs()
+            processQueue()
         }
     }
 
@@ -277,6 +295,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         pendingCommands.removeAll {
             $0.timestamp.timeIntervalSince1970 <= configuredAt
         }
+        persistPendingCommands()
         let pendingJobAt = UserDefaults.standard.double(forKey: Self.pendingJobAtDefaultsKey)
         let hasNewerPendingJob = pendingJobAt > configuredAt
 
@@ -378,7 +397,11 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     }
 
     @discardableResult
-    private func applySummarizeReply(_ reply: [String: Any], jobId: String) -> String {
+    private func applySummarizeReply(
+        _ reply: [String: Any],
+        jobId: String,
+        completion: (() -> Void)? = nil
+    ) -> String {
         let summary = reply["summary"] as? String ?? "Unknown response"
         let requiresPhoneHandoff = reply["requires_phone_handoff"] as? Bool ?? false
         let handoffUrl = reply["handoff_url"] as? String
@@ -408,6 +431,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                     previewSections: previewSections
                 )
                 : nil
+            completion?()
         }
         return summary
     }
@@ -533,7 +557,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 UserDefaults.standard.removeObject(forKey: Self.pendingJobDefaultsKey)
                 WKInterfaceDevice.current().play(jobStatus == "completed" ? .success : .failure)
             }
-            self.applySummarizeReply(reply, jobId: jobId)
+            self.applySummarizeReply(reply, jobId: jobId) {
+                self.processQueue()
+            }
             self.fetchJobs()
         }, errorHandler: { error in
             // Gecici baglanti hatasi olabilir; ama ust uste tekrarliyorsa
@@ -596,6 +622,10 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     }
 
     func sendAudioCommand(audioBase64: String) {
+        sendAudioCommand(audioBase64: audioBase64, queuedCommandID: nil)
+    }
+
+    private func sendAudioCommand(audioBase64: String, queuedCommandID: String?) {
         let request = WatchCommandRequest(
             audioData: audioBase64,
             format: "m4a",
@@ -625,10 +655,18 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             return
         }
 
-        if !WCSession.default.isReachable { 
-            self.queueCommand(audioBase64: audioBase64) 
-            return 
-        } 
+        if !WCSession.default.isReachable {
+            if let queuedCommandID {
+                DispatchQueue.main.async {
+                    self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: false)
+                }
+            } else {
+                queueCommand(audioBase64: audioBase64)
+            }
+            return
+        }
+
+        let attemptGate = SendAttemptGate()
 
         // Start extended session to keep watch awake during transfer
         self.startExtendedSession()
@@ -653,9 +691,17 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                       self.sendGeneration == generation,
                       self.isProcessing,
                       self.pollingJobId == nil else { return }
+                guard attemptGate.claim() else { return }
                 self.isProcessing = false
-                self.queueCommand(audioBase64: audioBase64)
-                self.responseText = NSLocalizedString("No reply from iPhone; command queued. Open Ceviz on iPhone and try again.", comment: "")
+                if let queuedCommandID {
+                    self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: false)
+                    self.responseText = NSLocalizedString("No reply from iPhone; command kept in queue. Open Ceviz on iPhone and try again.", comment: "")
+                } else {
+                    self.queueCommand(
+                        audioBase64: audioBase64,
+                        responseText: NSLocalizedString("No reply from iPhone; command queued. Open Ceviz on iPhone and try again.", comment: "")
+                    )
+                }
             }
         }
 
@@ -666,14 +712,28 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             
             guard let response = try? JSONDecoder().decode(WatchCommandResponse.self, from: replyData) else {
                 DispatchQueue.main.async {
+                    guard attemptGate.claim() else { return }
                     self.responseText = "Invalid Response"
                     self.handoffState = .idle
                     self.handoffPreview = nil
+                    if let queuedCommandID {
+                        self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: false)
+                    } else {
+                        self.queueCommand(audioBase64: audioBase64)
+                    }
                 }
                 return
             }
 
             DispatchQueue.main.async {
+                // A valid backend response is the delivery acknowledgement. If
+                // the 30-second UI timeout fired first, removing the persisted
+                // copy here still prevents a later duplicate execution.
+                self.acknowledgeQueuedCommand(
+                    commandID: queuedCommandID,
+                    matchingAudioData: audioBase64
+                )
+                guard attemptGate.claim() else { return }
                 self.responseText = response.summaryText
                 if response.status != "processing" {
                     self.lastResultAt = Date()
@@ -709,25 +769,41 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 } else {
                     self.isProcessing = false
                 }
+                if queuedCommandID != nil {
+                    self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: true)
+                }
             }
         }, errorHandler: { error in
             // Stop extended session on error
             self.stopExtendedSession()
             
             DispatchQueue.main.async {
+                guard attemptGate.claim() else { return }
                 self.sendGeneration += 1
                 self.isProcessing = false
                 self.handoffJobId = nil
                 self.handoffState = .idle
                 self.handoffPreview = nil
-                self.responseText = "Error: \(error.localizedDescription)"
-                // Re-queue on failure if it was a connectivity error
-                self.queueCommand(audioBase64: audioBase64)
+                if let queuedCommandID {
+                    self.responseText = String(
+                        format: NSLocalizedString("Command remains queued: %@", comment: ""),
+                        error.localizedDescription
+                    )
+                    self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: false)
+                } else {
+                    self.queueCommand(
+                        audioBase64: audioBase64,
+                        responseText: String(
+                            format: NSLocalizedString("Command queued after connection error: %@", comment: ""),
+                            error.localizedDescription
+                        )
+                    )
+                }
             }
         })
     }
     
-    private func queueCommand(audioBase64: String) { 
+    private func queueCommand(audioBase64: String, responseText: String? = nil) {
         // Ensure session is stopped if we fallback to queue
         self.stopExtendedSession()
         
@@ -737,51 +813,80 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             timestamp: Date(), 
             retryCount: 0 
         ) 
-        DispatchQueue.main.async { 
+        DispatchQueue.main.async {
+            self.pruneExpiredPendingCommands()
             // Avoid duplicates in queue
             if !self.pendingCommands.contains(where: { $0.audioData == audioBase64 }) {
-                self.pendingCommands.append(newCommand) 
+                self.pendingCommands.append(newCommand)
+                self.persistPendingCommands()
             }
-            self.responseText = "Offline. Command queued." 
-            WKInterfaceDevice.current().play(.retry) 
-        } 
-    } 
+            self.responseText = responseText ?? NSLocalizedString("Offline. Command queued.", comment: "")
+            WKInterfaceDevice.current().play(.retry)
+        }
+    }
 
-    func processQueue() { 
-        guard WCSession.default.isReachable, !pendingCommands.isEmpty,
+    private func restorePendingCommands() {
+        guard let data = UserDefaults.standard.data(forKey: Self.pendingCommandsDefaultsKey),
+              let decoded = try? JSONDecoder().decode([QueuedCommand].self, from: data) else {
+            return
+        }
+        let cutoff = Date().addingTimeInterval(-Self.pendingCommandMaxAge)
+        pendingCommands = decoded.filter { $0.timestamp >= cutoff }
+        persistPendingCommands()
+    }
+
+    private func persistPendingCommands() {
+        guard !pendingCommands.isEmpty else {
+            UserDefaults.standard.removeObject(forKey: Self.pendingCommandsDefaultsKey)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(pendingCommands) else { return }
+        UserDefaults.standard.set(data, forKey: Self.pendingCommandsDefaultsKey)
+    }
+
+    private func pruneExpiredPendingCommands() {
+        let cutoff = Date().addingTimeInterval(-Self.pendingCommandMaxAge)
+        let previousCount = pendingCommands.count
+        pendingCommands.removeAll { $0.timestamp < cutoff }
+        if pendingCommands.count != previousCount {
+            persistPendingCommands()
+        }
+    }
+
+    private func acknowledgeQueuedCommand(commandID: String?, matchingAudioData audioBase64: String) {
+        let previousCount = pendingCommands.count
+        pendingCommands.removeAll { command in
+            if let commandID, command.id == commandID { return true }
+            return command.audioData == audioBase64
+        }
+        if pendingCommands.count != previousCount {
+            persistPendingCommands()
+        }
+    }
+
+    private func finishQueueAttempt(commandID: String, acknowledged: Bool) {
+        if !acknowledged,
+           let index = pendingCommands.firstIndex(where: { $0.id == commandID }) {
+            pendingCommands[index].retryCount += 1
+            persistPendingCommands()
+        }
+        isDrainingCommandQueue = false
+        if acknowledged {
+            processQueue()
+        }
+    }
+
+    func processQueue() {
+        pruneExpiredPendingCommands()
+        guard WCSession.default.isReachable,
+              let command = pendingCommands.first,
+              !isProcessing,
+              pollingJobId == nil,
               !isDrainingCommandQueue else { return }
         isDrainingCommandQueue = true
-        
-        let commandsToProcess = pendingCommands 
-        DispatchQueue.main.async { 
-            self.pendingCommands = [] 
-            self.responseText = "Processing queued commands..." 
-        } 
-        
-        // Process sequentially to avoid session flooding
-        func sendNext(index: Int) {
-            guard index < commandsToProcess.count else {
-                DispatchQueue.main.async {
-                    self.isDrainingCommandQueue = false
-                    self.fetchJobs()
-                }
-                return
-            }
-            
-            var command = commandsToProcess[index]
-            command.retryCount += 1
-            
-            // Note: Since sendAudioCommand is async, we'd ideally wait for completion.
-            // For now, we'll trigger them with a small delay to respect the radio.
-            self.sendAudioCommand(audioBase64: command.audioData)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                sendNext(index: index + 1)
-            }
-        }
-        
-        sendNext(index: 0)
-    } 
+        responseText = NSLocalizedString("Processing queued commands...", comment: "")
+        sendAudioCommand(audioBase64: command.audioData, queuedCommandID: command.id)
+    }
 
     func updateJobStatus(jobId: String, newStatus: String) {
         // Geçici olarak job durumunu güncelle (optimistic update)

@@ -41,6 +41,11 @@
 "Cannot receive result: %@" = "Cannot receive result: %@";
 "✕ Recording too long to send (%dKB). Speak briefly and try again." = "✕ Recording too long to send (%dKB). Speak briefly and try again.";
 "No reply from iPhone; command queued. Open Ceviz on iPhone and try again." = "No reply from iPhone; command queued. Open Ceviz on iPhone and try again.";
+"No reply from iPhone; command kept in queue. Open Ceviz on iPhone and try again." = "No reply from iPhone; command kept in queue. Open Ceviz on iPhone and try again.";
+"Command remains queued: %@" = "Command remains queued: %@";
+"Command queued after connection error: %@" = "Command queued after connection error: %@";
+"Offline. Command queued." = "Offline. Command queued.";
+"Processing queued commands..." = "Processing queued commands...";
 "[DONE]" = "[DONE]";
 "[FAILED]" = "[FAILED]";
 "[RUNNING]" = "[RUNNING]";

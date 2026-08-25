@@ -41,6 +41,11 @@
 "Cannot receive result: %@" = "Sonuç aktarılamıyor: %@";
 "✕ Recording too long to send (%dKB). Speak briefly and try again." = "✕ Kayıt gönderilemedi: çok uzun (%dKB). Daha kısa konuşup tekrar dene.";
 "No reply from iPhone; command queued. Open Ceviz on iPhone and try again." = "Telefondan yanıt alınamadı; komut kuyruğa alındı. iPhone'da Ceviz'i açıp saatte tekrar dene.";
+"No reply from iPhone; command kept in queue. Open Ceviz on iPhone and try again." = "Telefondan yanıt alınamadı; komut kuyrukta tutuluyor. iPhone'da Ceviz'i açıp saatte tekrar dene.";
+"Command remains queued: %@" = "Komut kuyrukta tutuluyor: %@";
+"Command queued after connection error: %@" = "Bağlantı hatasından sonra komut kuyruğa alındı: %@";
+"Offline. Command queued." = "Çevrimdışı. Komut kuyruğa alındı.";
+"Processing queued commands..." = "Kuyruktaki komut işleniyor...";
 "[DONE]" = "[TAMAM]";
 "[FAILED]" = "[HATA]";
 "[RUNNING]" = "[ÇALIŞIYOR]";

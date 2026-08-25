@@ -769,7 +769,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 } else {
                     self.isProcessing = false
                 }
-                if queuedCommandID != nil {
+                if let queuedCommandID {
                     self.finishQueueAttempt(commandID: queuedCommandID, acknowledged: true)
                 }
             }

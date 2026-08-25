@@ -1,23 +1,24 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **23 Ağustos 2026**
+Son güncelleme: **25 Ağustos 2026**
 
 ## Güncel sürüm
 
 - Sürüm: **Ceviz 2026.6.5 Beta 2**
-- TestFlight build: **1787435232**
+- TestFlight build: **1787684689**
 - Dış TestFlight grubu: **Beta**
 - Public link: <https://testflight.apple.com/join/nEdn2Np2>
-- App Store Connect durumu: **VALID / BETA_APPROVED**
+- App Store Connect durumu: **VALID / IN_BETA_TESTING**
 - Build ve upload doğrulaması:
-  <https://github.com/MertBasar0/openclaw/actions/runs/32600537529>
+  <https://github.com/MertBasar0/ceviz/actions/runs/32887415177>
 - Dış grup dağıtım doğrulaması:
-  <https://github.com/MertBasar0/openclaw/actions/runs/32605320929>
+  <https://github.com/MertBasar0/ceviz/actions/runs/32887913998>
 - GitHub prerelease:
   <https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.2>
 
 Build yalnızca App Store Connect'e yüklenmiş değildir; dış `Beta` grubuna
-atanmış ve public TestFlight linkinden erişilebilir olduğu doğrulanmıştır.
+atanmış, internal ve external durumu `IN_BETA_TESTING` olarak okunmuş ve public
+TestFlight linkinden erişilebilir olduğu doğrulanmıştır.
 
 ## Bağımsız repo geçişi
 
@@ -51,11 +52,21 @@ başarıyla tamamlandı:
 - Workflow: <https://github.com/MertBasar0/ceviz/actions/runs/32657599799>
 
 Bu build repo/secret/signing migration doğrulaması içindir; kullanıcıya dönük
-kod değişikliği içermediğinden public external gruba eklenmedi. Public Beta 2
-build `1787435232` dış testerlar için aktif kalmaktadır.
+kod değişikliği içermediğinden public external gruba eklenmedi. Güncel public
+Beta 2 build'i `1787684689` olmuştur.
 
 ## Tamamlananlar
 
+- Apple Watch komut kuyruğu `UserDefaults` üzerinde kalıcı hale getirildi.
+  Komutlar tek tek gönderiliyor, yalnızca geçerli backend yanıtıyla teslim
+  onayı alındığında kuyruktan siliniyor ve geçici hata/timeout durumunda yeniden
+  denemek üzere korunuyor. Geç gelen onaylar da kalıcı kopyayı temizleyerek çift
+  çalıştırmayı engelliyor; 15 dakikadan eski sesli komutlar sürpriz biçimde
+  çalıştırılmıyor.
+- Kuyruk düzeltmesi backend ve contract testlerinde **34/34** geçti; gerçek
+  Xcode watchOS/iOS Release arşivi, imzalama, IPA üretimi ve TestFlight upload
+  macOS CI'da doğrulandı. Build `1787684689`, public `Beta` grubuna atanarak
+  internal ve external `IN_BETA_TESTING` durumuna getirildi.
 - Apple Watch'taki terminal bildiriminin sonucuna dokunulduğunda ana ekranın
   “sonuç hazırlanıyor” durumunda kalması düzeltildi. Bildirimin taşıdığı
   yetkili terminal sonucu artık bekleyen poll kaydı temizlenmiş olsa bile

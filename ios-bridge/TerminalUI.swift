@@ -115,14 +115,14 @@ struct CVZCommandInput: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Rectangle().fill(CVZ.line).frame(height: 1)
-            Text(needsInput ? "FIX COMMAND" : "FOLLOW UP")
+            Text(needsInput ? "YOUR NEXT STEP" : "FOLLOW UP")
                 .font(CVZ.mono(10, .semibold))
                 .tracking(1.4)
                 .foregroundColor(needsInput ? CVZ.accent : CVZ.textDim)
                 .padding(.top, 10)
 
             if needsInput {
-                Text("If the voice command was misheard, type the correct one here.")
+                Text("Review what is needed above, then add the missing detail or correct your request here.")
                     .font(.system(size: 12))
                     .foregroundColor(CVZ.textDim)
                     .fixedSize(horizontal: false, vertical: true)
@@ -353,7 +353,7 @@ struct CVZActionsView: View {
                     throw URLError(.badServerResponse)
                 }
                 await MainActor.run {
-                    onFeedback(NSLocalizedString("✓ Suggestion started as a job — it will appear in RECENT JOBS", comment: ""))
+                    onFeedback(NSLocalizedString("Request received — check RECENT JOBS for its result.", comment: ""))
                 }
             } catch {
                 await MainActor.run {
@@ -397,9 +397,10 @@ struct CVZActionsView: View {
                     if let error = payload["error"] as? String, !error.isEmpty {
                         onFeedback("✕ \(error)")
                     } else if let summary = payload["summary"] as? String, !summary.isEmpty {
-                        onFeedback("✓ \(summary)")
+                        // HTTP success acknowledges the request, not the job's desired outcome.
+                        onFeedback(summary)
                     } else {
-                        onFeedback("✓ \(action.label)")
+                        onFeedback(NSLocalizedString("Request received — refresh the report for its result.", comment: "action receipt"))
                     }
                 }
             } catch {

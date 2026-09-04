@@ -66,7 +66,7 @@ async function send(request, env) {
   const authority = record.environment === "sandbox" ? "https://api.sandbox.push.apple.com" : "https://api.push.apple.com";
   const payload = {
     aps: {
-      alert: { title: String(body.title || "Ceviz"), body: String(body.message || "Görev tamamlandı.") },
+      alert: { title: String(body.title || "Ceviz"), body: String(body.message || "Ceviz update.") },
       sound: "ceviz-complete.caf",
       "thread-id": "ceviz-jobs",
       "content-available": 1,
@@ -74,6 +74,7 @@ async function send(request, env) {
     job_id: String(body.jobId || ""),
     deep_link: String(body.deepLink || ""),
     job_status: String(body.status || ""),
+    outcome: ["done", "blocked", "needs_input", "unknown"].includes(body.outcome) ? body.outcome : "unknown",
     watch_summary: String(body.watchSummary || body.message || ""),
     requires_phone_handoff: Boolean(body.requiresPhoneHandoff),
   };

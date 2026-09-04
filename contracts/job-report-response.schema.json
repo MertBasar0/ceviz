@@ -55,7 +55,9 @@
           ]
         },
         "outcome": {
-          "type": "string"
+          "type": "string",
+          "enum": ["done", "blocked", "needs_input", "unknown"],
+          "description": "Agent-reported task outcome, separate from execution status; missing or unrecognized metadata is unknown, not verified success."
         }
       },
       "required": [
@@ -189,7 +191,8 @@
         "running",
         "completed",
         "failed",
-        "queued"
+        "queued",
+        "missing"
       ]
     },
     "report_title": {
@@ -242,7 +245,8 @@
       "$ref": "#/$defs/reportMeta"
     },
     "outcome": {
-      "type": "string"
+      "type": "string",
+      "enum": ["done", "blocked", "needs_input", "unknown"]
     },
     "conversation_id": {
       "type": "string"

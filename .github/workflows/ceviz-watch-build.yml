@@ -33,10 +33,18 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Run notification relay boundary tests
+        run: node --test tests/js/push-relay.test.mjs
+
       - name: Validate installer and Doctor scripts
         run: |
           bash -n deploy/install.sh
           bash -n deploy/doctor.sh
+
+      - name: Validate signing lane without credentials
+        run: |
+          ruby -c fastlane/Fastfile
+          ruby tests/fastlane_signing_test.rb
 
       - name: Select Xcode
         run: |
@@ -55,13 +63,51 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Run Swift job state regression tests
+        run: |
+          set -euo pipefail
+          mkdir -p build/tests
+          swiftc job-state/CVZJobState.swift ios-bridge/Models.swift tests/swift/JobStateTests.swift -o build/tests/job-state-tests
+          build/tests/job-state-tests
+          swiftc job-state/CVZJobState.swift apple-watch/Models.swift apple-watch/WatchResultTracking.swift tests/swift/WatchResultTests.swift -o build/tests/watch-result-tests
+          build/tests/watch-result-tests
+
       - name: Install Fastlane
         run: gem install fastlane --no-document
 
       - name: Generate Xcode project
         run: |
+          set -euo pipefail
           xcodegen generate
-          xcodebuild -list -project CevizWatch.xcodeproj || true
+          xcodebuild -list -project CevizWatch.xcodeproj
+
+      - name: Validate unsigned iPhone, Watch, and complication build
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild \
+            -project CevizWatch.xcodeproj \
+            -scheme CevizBridge \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/validation \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee build/validation-build.log
+          WIDGET_PATH='build/validation/Build/Products/Release-iphonesimulator/CevizBridge.app/Watch/CevizWatchApp.app/PlugIns/CevizWatchWidget.appex'
+          test -x "$WIDGET_PATH/CevizWatchWidget"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = 'com.apple.widgetkit-extension'
+
+      - name: Capture real Watch launch before signing
+        run: python3 tests/watch_launch_smoke.py
+
+      - name: Upload Watch launch proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceviz-watch-launch-smoke
+          path: build/watch-launch-smoke/
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Import signing certificate
         env:

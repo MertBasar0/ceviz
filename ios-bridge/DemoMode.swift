@@ -82,6 +82,7 @@ enum DemoMode {
               "conversation_id": "\(conv)",
               "name": "\(name)",
               "status": "\(status)",
+              "outcome": "\(outcome)",
               "elapsed_seconds": \(elapsed),
               "summary_text": "\(summary)",
               "requires_phone_handoff": true,
@@ -140,7 +141,7 @@ enum DemoMode {
         \(job(id: "job-demo-03", conv: "demo-chain-b", name: prName, status: "completed", elapsed: 74,
               summary: prSummary, report: prReport, severity: "low",
               category: "pr_review", outcome: "done", actions: prActions)),
-        \(job(id: "job-demo-04", conv: "demo-chain-c", name: incidentName, status: "running", elapsed: 38,
+        \(job(id: "job-demo-04", conv: "demo-chain-c", name: incidentName, status: "completed", elapsed: 38,
               summary: incidentSummary, report: incidentReport, severity: "high",
               category: "incident", outcome: "needs_input", actions: incidentActions))
         ]}
@@ -162,6 +163,7 @@ enum DemoMode {
             "job_id": j.id,
             "conversation_id": j.conversationId ?? "",
             "status": j.status,
+            "outcome": j.outcome ?? "unknown",
             "report_title": j.name,
             "report_content": j.phoneReport,
             "watch_summary": j.summaryText,
@@ -190,6 +192,7 @@ enum DemoMode {
         var reply: [String: Any] = [
             "summary": j.summaryText,
             "status": j.status,
+            "outcome": j.outcome ?? "unknown",
             "requires_phone_handoff": j.requiresPhoneHandoff,
             "transcript": j.transcript,
             "phone_report": j.phoneReport,

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from job_outcome import normalize_job_outcome
+
 
 @dataclass
 class TaskResult:
@@ -164,7 +166,7 @@ class OpenClawClient:
             ),
             phone_report=self._build_phone_report(clean_text, locale),
             next_action=structured["next_action"] or self._extract_next_action(clean_text),
-            outcome=structured.get("outcome"),
+            outcome=normalize_job_outcome("completed", structured.get("outcome")),
             next_action_actor=structured.get("next_action_actor"),
         )
 

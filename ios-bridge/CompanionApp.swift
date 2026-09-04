@@ -389,7 +389,7 @@ struct HomeView: View {
                                                 .multilineTextAlignment(.leading)
                                         }
                                         Spacer()
-                                        CVZStatusChip(status: job.status)
+                                        CVZStatusChip(state: job.presentationState)
                                     }
                                     .padding(10)
                                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(CVZ.line, lineWidth: 1))
@@ -697,6 +697,7 @@ struct JobReportResponse: Codable {
     let jobId: String
     var conversationId: String?
     let status: String
+    var outcome: String? = nil
     let reportTitle: String
     let reportContent: String
     let reportSections: [ReportBodySectionPayload]?
@@ -708,11 +709,16 @@ struct JobReportResponse: Codable {
     let nextAction: String?
     let nextActions: [NextActionPayload]?
     let reportMeta: ReportMeta?
+
+    var presentationState: CVZJobState {
+        CVZJobState.resolve(status: status, outcome: outcome ?? reportMeta?.outcome)
+    }
     
     enum CodingKeys: String, CodingKey {
         case jobId = "job_id"
         case conversationId = "conversation_id"
         case status
+        case outcome
         case reportTitle = "report_title"
         case reportContent = "report_content"
         case reportSections = "report_sections"
@@ -1010,10 +1016,6 @@ struct ReportMetaHeaderCard: View {
         report.reportMeta?.title ?? report.reportTitle
     }
 
-    private var statusText: String? {
-        report.reportMeta?.status ?? report.status
-    }
-
     private var severityText: String? {
         report.reportMeta?.severity
     }
@@ -1029,9 +1031,7 @@ struct ReportMetaHeaderCard: View {
                 .fontWeight(.bold)
 
             HStack(spacing: 8) {
-                if let statusText {
-                    metaChip(statusText.capitalized, systemImage: "circle.fill")
-                }
+                CVZStatusChip(state: report.presentationState)
                 if let severityText {
                     metaChip("Severity: \(severityText.capitalized)", systemImage: "exclamationmark.shield")
                 }
@@ -1249,6 +1249,10 @@ struct JobDetailView: View {
     @State private var isLoading: Bool = true
     @State private var errorMessage: String?
     @State private var report: JobReportResponse?
+    @State private var reportRequestInFlight = false
+    @Environment(\.scenePhase) private var reportScenePhase
+
+    private let reportRefreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
     private var activeContinuation: ContinuationContext? {
         guard let lastContinuation = router.lastContinuation else { return nil }
@@ -1323,17 +1327,22 @@ struct JobDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     sourceStrip
 
-                    if isLoading {
+                    if isLoading && report == nil {
                         ProgressView()
                             .tint(CVZ.accent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 48)
-                    } else if let error = errorMessage {
-                        Text("✕ HATA: \(error)")
+                    } else if let error = errorMessage, report == nil {
+                        Text(String(format: NSLocalizedString("Could not refresh: %@", comment: "report error"), error))
                             .font(CVZ.mono(12))
                             .foregroundColor(CVZ.err)
                             .padding(.vertical, 24)
                     } else if let report = report {
+                        if let error = errorMessage {
+                            Text(String(format: NSLocalizedString("Last received result — could not refresh: %@", comment: "stale report warning"), error))
+                                .font(.caption).foregroundColor(CVZ.warn)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         titleBlock(report)
 
                         ChainNavigator(
@@ -1343,7 +1352,11 @@ struct JobDetailView: View {
                         )
 
                         if let watchSummary = bridgeSummaryText {
-                            CVZSectionView(eyebrow: "WATCH SUMMARY", content: watchSummary, emphasized: true)
+                            CVZSectionView(
+                                eyebrow: NSLocalizedString(report.presentationState.isReportedResult ? "AGENT-REPORTED RESULT" : "WATCH SUMMARY", comment: "summary source"),
+                                content: watchSummary,
+                                emphasized: true
+                            )
                         }
 
                         ForEach(reportBodySections) { section in
@@ -1358,8 +1371,7 @@ struct JobDetailView: View {
 
                         CVZCommandInput(
                             jobId: jobId,
-                            needsInput: (report.reportMeta?.outcome == "needs_input"
-                                         || report.reportMeta?.outcome == "blocked"),
+                            needsInput: report.presentationState.needsAttention,
                             router: router
                         ) { message in
                             showToast(message)
@@ -1386,6 +1398,15 @@ struct JobDetailView: View {
         }
         .onAppear {
             fetchReport()
+        }
+        .onChange(of: reportScenePhase) { phase in
+            if phase == .active { fetchReport() }
+        }
+        .onReceive(reportRefreshTimer) { _ in
+            if reportScenePhase == .active,
+               report?.presentationState == .running || report?.presentationState == .queued {
+                fetchReport()
+            }
         }
     }
 
@@ -1414,18 +1435,7 @@ struct JobDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                // Kosu durumu ile SONUC durumu ayri: is yapilamadiysa
-                // [TAMAM] yerine gercegi soyleyen turuncu cip goster.
-                if let outcome = report.reportMeta?.outcome, outcome == "blocked" || outcome == "needs_input" {
-                    Text(outcome == "needs_input" ? NSLocalizedString("[NEEDS INPUT]", comment: "") : NSLocalizedString("[BLOCKED]", comment: ""))
-                        .font(CVZ.mono(10.5, .semibold))
-                        .foregroundColor(CVZ.warn)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(CVZ.warnBg, in: RoundedRectangle(cornerRadius: 4))
-                } else {
-                    CVZStatusChip(status: report.reportMeta?.status ?? report.status, size: 10.5)
-                }
+                CVZStatusChip(state: report.presentationState, size: 10.5)
                 if let severity = report.reportMeta?.severity, !severity.isEmpty {
                     CVZMetaChip(text: "SEV:\(localizedSeverity(severity))")
                 }
@@ -1567,31 +1577,38 @@ struct JobDetailView: View {
     }
     
     private func fetchReport() {
+        guard !reportRequestInFlight else { return }
         if DemoMode.isActive {
             report = DemoMode.report(for: jobId)
             errorMessage = report == nil ? NSLocalizedString("Not available in demo mode", comment: "") : nil
             isLoading = false
             return
         }
+        reportRequestInFlight = true
         let reportRequest = BackendConfig.request("/api/v1/jobs/\(jobId)/report")
 
         URLSession.shared.dataTask(with: reportRequest) { data, response, error in
             DispatchQueue.main.async {
+                self.reportRequestInFlight = false
                 self.isLoading = false
                 if let error = error {
                     self.errorMessage = error.localizedDescription
                     return
                 }
                 
-                guard let data = data else {
-                    self.errorMessage = "No data received"
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode), let data else {
+                    self.errorMessage = URLError(.badServerResponse).localizedDescription
                     return
                 }
                 
                 do {
                     let decoder = JSONDecoder()
                     self.report = try decoder.decode(JobReportResponse.self, from: data)
-                    if let report = self.report, self.activeContinuation?.details == nil {
+                    self.errorMessage = nil
+                    if let report = self.report,
+                       self.router.currentRoute == .jobReport(id: self.jobId),
+                       self.activeContinuation?.details == nil {
                         let source = self.activeContinuation?.source ?? .watch
                         let url = URL(string: report.deepLink ?? "ceviz://job/\(self.jobId)")!
                         _ = self.router.open(

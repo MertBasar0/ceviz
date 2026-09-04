@@ -303,7 +303,7 @@ class EndpointContractTests(unittest.TestCase):
         self.assertEqual(payload["transcript"], "")
         self.assertEqual(payload["phone_report"], "")
         self.assertIsNotNone(payload["report_meta"])
-        self.assertEqual(payload["report_meta"]["status"], "failed")
+        self.assertEqual(payload["report_meta"]["status"], "missing")
         self.assertEqual([section["id"] for section in payload["preview_sections"]], [
             "category",
             "watch-summary",
@@ -358,6 +358,7 @@ class EndpointContractTests(unittest.TestCase):
             command=["openclaw", "agent"],
             started_at=123.0,
         )
+        fake_invocation.process.poll.return_value = None
         audio = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
 
         with mock.patch.object(
@@ -372,6 +373,9 @@ class EndpointContractTests(unittest.TestCase):
             first_status, first = self._post_json(
                 "/api/v1/watch/command", {"audio_data": audio, "format": "aac"}
             )
+            main.jobs_db[first["job_id"]].update(
+                status="completed", outcome="needs_input", watch_summary="Which repository?"
+            )
             second_status, second = self._post_json(
                 "/api/v1/watch/command", {"audio_data": audio, "format": "aac"}
             )
@@ -381,6 +385,112 @@ class EndpointContractTests(unittest.TestCase):
         self.assertEqual(first["job_id"], second["job_id"])
         self.assertEqual(transcribe.call_count, 1)
         self.assertEqual(invoke.call_count, 1)
+        self.assertEqual(second["status"], "completed")
+        self.assertEqual(second["outcome"], "needs_input")
+        self.assertEqual(second["report_meta"]["outcome"], "needs_input")
+
+    def test_terminal_outcome_is_consistent_across_http_surfaces_and_restart(self) -> None:
+        for outcome in ("done", "blocked", "needs_input", None, "invalid"):
+            with self.subTest(outcome=outcome):
+                job = main.jobs_db["job-102"]
+                job["outcome"] = outcome
+                main.save_jobs()
+                main.jobs_db.clear()
+                main.load_jobs()
+                expected = outcome if outcome in {"done", "blocked", "needs_input"} else "unknown"
+                _, active = self._get_json("/api/v1/jobs/active")
+                _, report = self._get_json("/api/v1/jobs/job-102/report")
+                _, summary = self._post("/api/v1/jobs/job-102/summarize")
+                _, shortcut = self._get_json("/api/v1/shortcuts/jobs/job-102")
+                entry = next(item for item in active["jobs"] if item["id"] == "job-102")
+                for surface in (entry, report, summary, shortcut):
+                    self.assertEqual(surface["status"], "completed")
+                    self.assertEqual(surface.get("outcome"), expected)
+                    if "report_meta" in surface:
+                        self.assertEqual(surface["report_meta"]["outcome"], expected)
+
+    def test_setup_failure_returns_terminal_watch_response(self) -> None:
+        with mock.patch.object(
+            main.stt_client, "transcribe_watch_payload",
+            return_value=TranscriptionResult(transcript="check build", source="test", error=""),
+        ), mock.patch.object(
+            main.openclaw_client, "invoke_watch_command",
+            side_effect=main.OpenClawUnavailable("OpenClaw is not installed."),
+        ):
+            _, payload = self._post_json(
+                "/api/v1/watch/command", {"audio_data": "c2V0dXAtZmFpbHVyZQ==", "format": "aac"}
+            )
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["outcome"], "blocked")
+
+    def test_missing_report_does_not_fabricate_completed_job(self) -> None:
+        _, report = self._get_json("/api/v1/jobs/job-missing/report")
+        _, summary = self._post("/api/v1/jobs/job-missing/summarize")
+        for surface in (report, summary):
+            self.assertEqual(surface["status"], "missing")
+            self.assertEqual(surface["report_meta"]["status"], "missing")
+            self.assertEqual(surface.get("outcome"), "unknown")
+
+    def test_execution_failure_replaces_processing_copy_on_all_result_surfaces(self) -> None:
+        for return_code in (1, 0):
+            with self.subTest(return_code=return_code):
+                job = main.jobs_db["job-101"]
+                process = mock.Mock()
+                process.poll.return_value = return_code
+                job.update(status="running", watch_summary="Processing.", phone_report="Started.",
+                           invocation={"process": process, "log_path": "unused.log"})
+                with mock.patch.object(main.openclaw_client, "extract_result", side_effect=ValueError("invalid result")), \
+                     mock.patch.object(main.openclaw_client, "read_log_tail", return_value="CLI error details"):
+                    _, summary = self._post("/api/v1/jobs/job-101/summarize")
+                self.assertEqual(summary["status"], "failed")
+                self.assertEqual(summary["outcome"], "unknown")
+                self.assertNotEqual(summary["summary"], "Processing.")
+                self.assertIn("CLI error details", summary["phone_report"])
+                self.assertEqual(job["watch_summary"], summary["summary"])
+                persisted = json.loads(main.JOBS_STATE_PATH.read_text(encoding="utf-8"))["jobs"]
+                restored = next(item for item in persisted if item["id"] == "job-101")
+                self.assertEqual(restored["outcome"], "unknown")
+                self.assertEqual(restored["watch_summary"], summary["summary"])
+
+    def test_stop_persists_unconfirmed_result_instead_of_processing_copy(self) -> None:
+        process = mock.Mock()
+        process.poll.return_value = None
+        job = main.jobs_db["job-101"]
+        job["invocation"] = {"process": process, "log_path": "unused.log"}
+        _, response = self._post("/api/v1/jobs/job-101/cancel")
+        self.assertEqual(response["status"], "cancelled")
+        process.terminate.assert_called_once()
+        _, summary = self._post("/api/v1/jobs/job-101/summarize")
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["outcome"], "unknown")
+        self.assertIn("Cancellation in OpenClaw is not confirmed", summary["summary"])
+        main.jobs_db.clear()
+        main.load_jobs()
+        self.assertEqual(main.jobs_db["job-101"]["watch_summary"], summary["summary"])
+
+    def test_finished_result_is_published_before_terminal_observers_run(self) -> None:
+        job = main.jobs_db["job-101"]
+        process = mock.Mock()
+        process.poll.return_value = 0
+        log_path = Path(self.state_tmp.name) / "result.log"
+        log_path.write_text(json.dumps({"result": {"payloads": [{"text": (
+            '<watch_ceviz_phone_report>Which repository?</watch_ceviz_phone_report>'
+            '<watch_ceviz_meta>{"outcome":"needs_input","watch_summary":"Which repository?",'
+            '"requires_phone_handoff":true}</watch_ceviz_meta>'
+        )}]}}), encoding="utf-8")
+        job["invocation"] = {"process": process, "log_path": str(log_path), "started_at": main.time.time()}
+        def observe_before_result(*args, **kwargs):
+            self.assertEqual(job["status"], "running")
+            return []
+        with mock.patch.object(main.openclaw_client, "collect_background_activity", side_effect=observe_before_result):
+            _, summary = self._post("/api/v1/jobs/job-101/summarize")
+        self.assertEqual(summary["status"], "completed")
+        self.assertEqual(summary["outcome"], "needs_input")
+        self.assertEqual(summary["summary"], "Which repository?")
+        main.jobs_db.clear()
+        main.load_jobs()
+        self.assertEqual(main.jobs_db["job-101"]["outcome"], "needs_input")
+
     def test_shortcut_command_accepts_text_and_returns_pollable_shape(self) -> None:
         fake_invocation = SimpleNamespace(
             process=mock.Mock(),
@@ -481,12 +591,12 @@ class EndpointContractTests(unittest.TestCase):
 
             restored = main.jobs_db["job-interrupted"]
             self.assertEqual(restored["status"], "failed")
-            self.assertEqual(restored["outcome"], "blocked")
+            self.assertEqual(restored["outcome"], "unknown")
             self.assertNotIn("invocation", restored)
 
             persisted = json.loads(state_path.read_text(encoding="utf-8"))["jobs"][0]
             self.assertEqual(persisted["status"], "failed")
-            self.assertEqual(persisted["outcome"], "blocked")
+            self.assertEqual(persisted["outcome"], "unknown")
             self.assertNotIn("invocation", persisted)
 
     def test_shortcut_command_rejects_empty_text(self) -> None:

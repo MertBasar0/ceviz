@@ -27,6 +27,7 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: ios-bridge
+      - path: job-state
     settings:
       base:
         # Gercek Info.plist kullaniliyor: CFBundleURLTypes ve
@@ -52,6 +53,7 @@ targets:
     deploymentTarget: "9.0"
     sources:
       - path: apple-watch
+      - path: job-state
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
@@ -62,6 +64,28 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.mertbasar.cevizwatch.watchkitapp
         PRODUCT_NAME: CevizWatchApp
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "4"
+        CODE_SIGNING_ALLOWED: "YES"
+    dependencies:
+      - target: CevizWatchWidget
+        embed: true
+
+  CevizWatchWidget:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "9.0"
+    sources:
+      - path: apple-watch-widget
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: apple-watch-widget/Info.plist
+        CURRENT_PROJECT_VERSION: $(APP_PROJECT_VERSION)
+        MARKETING_VERSION: $(APP_MARKETING_VERSION)
+        PRODUCT_BUNDLE_IDENTIFIER: com.mertbasar.cevizwatch.watchkitapp.widget
+        PRODUCT_NAME: CevizWatchWidget
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
         TARGETED_DEVICE_FAMILY: "4"
         CODE_SIGNING_ALLOWED: "YES"
 

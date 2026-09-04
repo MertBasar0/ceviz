@@ -28,7 +28,8 @@ STATE_DIR = Path(os.environ.get("WATCH_CEVIZ_STATE_DIR", str(Path.home() / ".ope
 JOBS_STATE_PATH = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 50
 
-from openclaw_client import OpenClawClient, OpenClawUnavailable
+from openclaw_client import OpenClawClient, OpenClawUnavailable, TaskResult
+from job_outcome import normalize_job_outcome
 from push_notifier import PushNotifier
 from stt import WatchSTT
 
@@ -73,8 +74,10 @@ USER_COPY = {
         "section_next": "Suggested next action",
         "section_activity": "Subagents & tools",
         "activity_eyebrow": "AGENTS",
-        "backend_restart_report": "The backend restarted before this job's result could be recovered. Send the command again.",
-        "backend_restart_summary": "The backend restarted before the job completed.",
+        "backend_restart_report": "Ceviz restarted before it could recover the result. The OpenClaw job may still have run. Check its state before sending the command again.",
+        "backend_restart_summary": "Ceviz restarted; the job's result is unconfirmed. Check before retrying.",
+        "result_unconfirmed": "The result could not be confirmed. Check on iPhone before retrying.",
+        "check_before_retry": "Check the job in OpenClaw before sending it again to avoid repeating an action.",
         "openclaw_started": "OpenClaw started processing the command.",
         "openclaw_started_no_transcript": "OpenClaw started, but no transcript was produced. The iPhone report will show the error and a retry suggestion.",
         "openclaw_waiting": "OpenClaw started processing; waiting for the result.",
@@ -83,7 +86,7 @@ USER_COPY = {
         "unknown_category": "Unknown",
         "detail_missing": "No details were found.",
         "task_missing": "Job not found.",
-        "job_cancelled": "The job was cancelled by the user.",
+        "job_cancelled": "Ceviz stopped tracking this call. Cancellation in OpenClaw is not confirmed; check the job before sending it again.",
         "shortcut_missing": "Command text is empty. Send dictated or typed text to the backend from the Shortcut.",
     },
     "tr": {
@@ -121,8 +124,10 @@ USER_COPY = {
         "section_next": "Önerilen sonraki adım",
         "section_activity": "Alt ajanlar & araçlar",
         "activity_eyebrow": "AJANLAR",
-        "backend_restart_report": "Backend yeniden başlatıldığı için bu işin sonucu alınamadı. Komutu tekrar gönderebilirsin.",
-        "backend_restart_summary": "Backend yeniden başlatıldı; iş sonuçlanmadan kesildi.",
+        "backend_restart_report": "Ceviz yeniden başlatıldığı için sonuç alınamadı. OpenClaw işi çalıştırmış olabilir. Komutu tekrar göndermeden önce durumunu kontrol et.",
+        "backend_restart_summary": "Ceviz yeniden başlatıldı; sonuç doğrulanamadı. Yeniden denemeden önce kontrol et.",
+        "result_unconfirmed": "Sonuç doğrulanamadı. Yeniden denemeden önce iPhone'da kontrol et.",
+        "check_before_retry": "Aynı işlemi tekrarlamamak için komutu yeniden göndermeden önce OpenClaw'da işin durumunu kontrol et.",
         "openclaw_started": "OpenClaw çağrısı başlatıldı.",
         "openclaw_started_no_transcript": "OpenClaw çağrısı başlatıldı ancak transkript üretilemedi. Telefonda hata notu ve yeniden deneme önerisi gösterilecek.",
         "openclaw_waiting": "OpenClaw çağrısı başlatıldı, sonuç bekleniyor.",
@@ -131,7 +136,7 @@ USER_COPY = {
         "unknown_category": "Bilinmeyen",
         "detail_missing": "Detay bulunamadı.",
         "task_missing": "Görev bulunamadı.",
-        "job_cancelled": "Görev kullanıcı tarafından iptal edildi.",
+        "job_cancelled": "Ceviz bu çağrıyı takip etmeyi durdurdu. OpenClaw'da iptal edildiği doğrulanamadı; komutu tekrar göndermeden önce kontrol et.",
         "shortcut_missing": "Komut metni boş. Kısayolda dikte veya metin alanını backend'e gönder.",
     },
 }
@@ -345,8 +350,14 @@ def classify_handoff_reason(job: dict) -> str | None:
     confidence = job.get("confidence")
     low_confidence = bool(job.get("low_confidence"))
 
-    if status == "failed":
+    outcome = normalize_job_outcome(status, job.get("outcome"))
+    if status == "missing":
+        return "job_missing"
+    if status == "failed" or outcome == "blocked":
         return "failure_diagnosis"
+
+    if outcome == "needs_input":
+        return "needs_clarification"
 
     if stt_error or (status in {"running", "processing"} and not transcript):
         return "needs_clarification"
@@ -414,9 +425,9 @@ def build_job_watch_summary(job: dict) -> str:
         ))
     if status == "failed":
         stt_error = (job.get("stt_error") or "").strip()
-        if stt_error:
-            return trim_watch_text(user_copy(job, "command_unclear", error=stt_error))
-        return trim_watch_text(job.get("watch_summary") or user_copy(job, "job_failed"))
+        return trim_watch_text(job.get("watch_summary") or (
+            user_copy(job, "command_unclear", error=stt_error) if stt_error else user_copy(job, "job_failed")
+        ))
     return trim_watch_text(job.get("watch_summary") or job.get("canned_result") or user_copy(job, "result_ready"))
 
 
@@ -433,6 +444,7 @@ REPORT_META_FIELDS = (
     "retry_count",
     "failure_code",
     "failure_message",
+    "outcome",
 )
 
 SECTION_FIELDS = (
@@ -459,9 +471,10 @@ def build_handoff_deep_link(job_id: str | None) -> str | None:
 
 def derive_job_severity(job: dict) -> str:
     status = (job.get("status") or "").strip().lower()
-    if status == "failed":
+    outcome = normalize_job_outcome(status, job.get("outcome"))
+    if status == "failed" or outcome == "blocked":
         return "high"
-    if status == "running":
+    if status in {"running", "processing", "queued"} or outcome == "needs_input":
         return "medium"
     return "low"
 
@@ -586,6 +599,7 @@ def build_report_meta(job: dict) -> dict:
         "retry_count": job.get("retry_count") or 0,
         "failure_code": job.get("failure_code") or None,
         "failure_message": job.get("failure_message") or None,
+        "outcome": normalize_job_outcome(job.get("status"), job.get("outcome")),
     }
     return {field: meta[field] for field in REPORT_META_FIELDS}
 
@@ -602,11 +616,8 @@ def build_section(*, section_id: str, title: str, eyebrow: str, icon: str, conte
 
 
 def build_structured_report_fields(job: dict) -> dict:
-    meta = build_report_meta(job)
-    if job.get("outcome"):
-        meta["outcome"] = job["outcome"]
     return {
-        "report_meta": meta,
+        "report_meta": build_report_meta(job),
         "preview_sections": build_preview_sections(job),
     }
 
@@ -828,8 +839,6 @@ def sync_job_status(job: dict) -> None:
 def _sync_job_status_impl(job: dict, now: float) -> None:
     invocation = job.get("invocation")
     if not invocation or job["status"] not in {"running", "processing"}:
-        if job["status"] == "running" and job["elapsed_seconds"] >= 10 and "invocation" not in job:
-            job["status"] = "completed"
         return
 
     process = invocation["process"]
@@ -841,49 +850,60 @@ def _sync_job_status_impl(job: dict, now: float) -> None:
     if return_code == 0:
         try:
             result = openclaw_client.extract_result(invocation["log_path"], locale=job.get("locale", ""))
-            job["status"] = "completed"
-            job["category"] = result.category
-            job["canned_result"] = result.canned_result
-            job["watch_summary"] = result.watch_summary
-            job["requires_phone_handoff"] = result.requires_phone_handoff
-            job["phone_report"] = result.phone_report
-            job["next_action"] = result.next_action
-            job["outcome"] = result.outcome
-            job["next_action_actor"] = result.next_action_actor
             try:
                 job["background_activity"] = openclaw_client.collect_background_activity(
                     invocation["started_at"], invocation["log_path"], locale=job.get("locale", "")
                 )
             except Exception:
                 job["background_activity"] = []
+            apply_task_result(job, result)
         except Exception as exc:
             logging.exception("Failed to parse OpenClaw result for job %s", job["id"])
-            job["status"] = "failed"
-            job["category"] = "OpenClaw Error" if locale_code(job) == "en" else "OpenClaw Hatası"
             if locale_code(job) == "en":
-                job["canned_result"] = (
-                    "OpenClaw completed the command, but its response could not be parsed.\n\n"
+                detail = (
+                    "The OpenClaw call ended, but its response could not be parsed.\n\n"
                     f"Error: {exc}\n\nLog excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
                 )
             else:
-                job["canned_result"] = (
+                detail = (
                     "OpenClaw çağrısı tamamlandı ama yanıt çözümlenemedi.\n\n"
                     f"Hata: {exc}\n\nLog özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
                 )
+            mark_result_unconfirmed(job, detail)
         return
 
-    job["status"] = "failed"
-    job["category"] = "OpenClaw Error" if locale_code(job) == "en" else "OpenClaw Hatası"
     if locale_code(job) == "en":
-        job["canned_result"] = (
-            f"The OpenClaw command failed with exit code {return_code}.\n\n"
+        detail = (
+            f"The OpenClaw call exited with code {return_code}. Its task outcome is unconfirmed.\n\n"
             f"Log excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
         )
     else:
-        job["canned_result"] = (
-            f"OpenClaw komutu {return_code} koduyla başarısız oldu.\n\n"
+        detail = (
+            f"OpenClaw çağrısı {return_code} koduyla sonlandı. Görev sonucu doğrulanamadı.\n\n"
             f"Log özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
         )
+    mark_result_unconfirmed(job, detail)
+
+
+def apply_task_result(job: dict, result: TaskResult) -> None:
+    # Publish the terminal lifecycle with its report, never before it: the push
+    # monitor and request handler can observe the same job concurrently.
+    job.update(
+        category=result.category, canned_result=result.canned_result,
+        watch_summary=result.watch_summary, requires_phone_handoff=result.requires_phone_handoff,
+        phone_report=result.phone_report, next_action=result.next_action,
+        outcome=normalize_job_outcome("completed", result.outcome),
+        next_action_actor=result.next_action_actor, status="completed",
+    )
+
+
+def mark_result_unconfirmed(job: dict, detail: str, summary: str | None = None) -> None:
+    job.update(
+        canned_result=detail, phone_report=detail,
+        watch_summary=summary or user_copy(job, "result_unconfirmed"),
+        requires_phone_handoff=True, next_action=user_copy(job, "check_before_retry"),
+        next_action_actor="user", outcome="unknown", status="failed",
+    )
 
 
 def _serializable_job(job: dict) -> dict:
@@ -938,21 +958,12 @@ def load_jobs() -> None:
                 except Exception:
                     result = None
             if result is not None:
-                job["status"] = "completed"
-                job["category"] = result.category
-                job["canned_result"] = result.canned_result
-                job["watch_summary"] = result.watch_summary
-                job["requires_phone_handoff"] = result.requires_phone_handoff
-                job["phone_report"] = result.phone_report
-                job["next_action"] = result.next_action
-                job["outcome"] = result.outcome
-                job["next_action_actor"] = result.next_action_actor
+                apply_task_result(job, result)
                 recovered += 1
             else:
-                job["status"] = "failed"
-                job["canned_result"] = user_copy(job, "backend_restart_report")
-                job["watch_summary"] = user_copy(job, "backend_restart_summary")
-                job["outcome"] = "blocked"
+                mark_result_unconfirmed(
+                    job, user_copy(job, "backend_restart_report"), user_copy(job, "backend_restart_summary")
+                )
         # Yeniden baslatma sonrasi canli process yok.
         job.pop("invocation", None)
         jobs_db[job["id"]] = job
@@ -1094,7 +1105,8 @@ def build_watch_command_response(job: dict) -> dict:
     structured_fields = build_structured_report_fields(job)
     requires_phone_handoff = derive_job_handoff(job)
     resp_payload = {
-        "status": "processing",
+        "status": job["status"] if job["status"] in {"completed", "failed"} else "processing",
+        "outcome": structured_fields["report_meta"]["outcome"],
         "transcript": (job.get("transcript") or "").strip(),
         "summary_text": build_job_watch_summary(job),
         "tts_audio_data": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=",
@@ -1119,6 +1131,7 @@ def build_shortcut_response(job: dict) -> dict:
     job_id = job["id"]
     return {
         "status": job.get("status", "unknown"),
+        "outcome": normalize_job_outcome(job.get("status"), job.get("outcome")),
         "done": job.get("status") in {"completed", "failed"},
         "job_id": job_id,
         "transcript": (job.get("transcript") or "").strip(),
@@ -1256,6 +1269,7 @@ Content-Type: application/json
                     "conversation_id": job.get("conversation_id") or "",
                     "name": job["name"],
                     "status": job["status"],
+                    "outcome": structured_fields["report_meta"]["outcome"],
                     "elapsed_seconds": job["elapsed_seconds"],
                     "summary_text": build_job_watch_summary(job),
                     "requires_phone_handoff": derive_job_handoff(job),
@@ -1292,7 +1306,7 @@ Content-Type: application/json
                     "id": job_id,
                     "name": "Unknown Task",
                     "locale": "en",
-                    "status": "completed",
+                    "status": "missing",
                     "created_at": now - 30,
                     "elapsed_seconds": 30,
                     "category": user_copy("en", "unknown_category"),
@@ -1315,6 +1329,7 @@ Content-Type: application/json
                 "job_id": job_id,
                 "conversation_id": job.get("conversation_id") or "",
                 "status": job["status"],
+                "outcome": structured_fields["report_meta"]["outcome"],
                 "report_title": report_title,
                 "report_content": report_content,
                 "report_sections": build_report_sections(job),
@@ -1402,8 +1417,8 @@ Content-Type: application/json
                 invocation = job.get("invocation")
                 if invocation and invocation["process"].poll() is None:
                     invocation["process"].terminate()
-                    job["status"] = "failed"
-                    job["canned_result"] = user_copy(job, "job_cancelled")
+                    mark_result_unconfirmed(job, user_copy(job, "job_cancelled"), user_copy(job, "job_cancelled"))
+                    save_jobs()
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1438,12 +1453,13 @@ Content-Type: application/json
                 "summary": summary,
                 "requires_phone_handoff": requires_phone_handoff,
                 "status": job_status,
+                "outcome": normalize_job_outcome(job_status, job.get("outcome") if job else None),
                 "transcript": (job.get("transcript") or "").strip() if job else "",
                 "phone_report": (job.get("phone_report") or "") if job else "",
                 "handoff_reason": handoff_reason,
                 "next_actions": next_actions,
                 "report_meta": report_meta if job else build_report_meta({
-                    "status": "failed",
+                    "status": "missing",
                     "locale": "en",
                     "category": user_copy("en", "default_category"),
                     "watch_summary": summary,
@@ -1451,7 +1467,7 @@ Content-Type: application/json
                     "name": "Unknown Task"
                 }),
                 "preview_sections": preview_sections if job else build_preview_sections({
-                    "status": "failed",
+                    "status": "missing",
                     "locale": "en",
                     "category": user_copy("en", "default_category"),
                     "watch_summary": summary,
@@ -1558,6 +1574,7 @@ Content-Type: application/json
             )
             if duplicate_job is not None:
                 logging.warning("Duplicate watch audio suppressed; returning %s", duplicate_job["id"])
+                sync_job_status(duplicate_job)
                 resp_payload = build_watch_command_response(duplicate_job)
             else:
                 stt_result = stt_client.transcribe_watch_payload(payload)

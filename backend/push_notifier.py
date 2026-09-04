@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from job_outcome import normalize_job_outcome
+
 
 class PushNotifier:
     def __init__(self) -> None:
@@ -120,25 +122,30 @@ class PushNotifier:
 
         locale = str(job.get("locale") or "").replace("_", "-").split("-")[0].lower()
         turkish = locale == "tr"
+        outcome = normalize_job_outcome(job.get("status"), job.get("outcome"))
+        title = {
+            "done": ("Görev tamamlandı", "Job completed"),
+            "needs_input": ("Bilginiz gerekiyor", "Needs your input"),
+            "blocked": ("Görev engellendi", "Job blocked"),
+            "unknown": ("Sonuç hazır", "Result ready"),
+            "failed": ("Görev tamamlanamadı", "Job failed"),
+        }["failed" if job["status"] == "failed" else outcome][0 if turkish else 1]
         summary = str(
             job.get("watch_summary")
             or job.get("canned_result")
-            or ("Görev tamamlandı." if turkish else "Job completed.")
+            or f"{title}."
         )
         if len(summary) > 180:
             summary = summary[:177].rstrip() + "\u2026"
         base_payload = {
             "jobId": job["id"],
-            "title": (
-                ("Ceviz · Görev tamamlandı" if turkish else "Ceviz · Job completed")
-                if job.get("status") == "completed"
-                else ("Ceviz · Görev tamamlanamadı" if turkish else "Ceviz · Job failed")
-            ),
+            "title": f"Ceviz · {title}",
             "message": summary,
             "deepLink": f"ceviz://job/{job['id']}",
             "status": job.get("status", ""),
+            "outcome": outcome,
             "watchSummary": summary,
-            "requiresPhoneHandoff": bool(job.get("requires_phone_handoff")),
+            "requiresPhoneHandoff": bool(job.get("requires_phone_handoff")) or outcome in {"blocked", "needs_input"},
         }
 
         apns_ids: list[str] = []

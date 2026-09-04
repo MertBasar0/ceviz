@@ -63,6 +63,25 @@
 "[FAILED]" = "[HATA]";
 "[RUNNING]" = "[ÇALIŞIYOR]";
 "[QUEUED]" = "[SIRADA]";
+"[RESULT READY]" = "[SONUÇ HAZIR]";
+"[UNKNOWN]" = "[BİLİNMİYOR]";
+"Queued" = "Sırada";
+"Working" = "Çalışıyor";
+"Completed" = "Tamamlandı";
+"Blocked" = "İlerleyemedi";
+"Needs your input" = "Bilginiz gerekiyor";
+"Failed" = "Hata oluştu";
+"Result ready" = "Sonuç hazır";
+"Status unavailable" = "Durum alınamadı";
+"Ceviz report ready" = "Ceviz raporu hazır";
+"Continue on iPhone" = "iPhone'da devam et";
+"YOUR NEXT STEP" = "SIRADAKİ ADIMINIZ";
+"Review what is needed above, then add the missing detail or correct your request here." = "Yukarıda ne gerektiğini inceleyin; eksik bilgiyi ekleyin veya isteğinizi burada düzeltin.";
+"Request received — refresh the report for its result." = "İstek alındı — sonucu görmek için raporu yenileyin.";
+"Could not refresh: %@" = "Yenilenemedi: %@";
+"AGENT-REPORTED RESULT" = "AJANIN BİLDİRDİĞİ SONUÇ";
+"Last received result — could not refresh: %@" = "Son alınan sonuç — yenilenemedi: %@";
+"Request received — check RECENT JOBS for its result." = "İstek alındı — sonucunu SON İŞLER'den kontrol edin.";
 "CHAIN" = "ZİNCİR";
 
 /* demo mode */

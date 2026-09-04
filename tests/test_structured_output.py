@@ -14,7 +14,9 @@ from openclaw_client import OpenClawClient, OpenClawUnavailable  # noqa: E402
 
 class OpenClawClientStructuredOutputTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = OpenClawClient(runtime_dir=tempfile.mkdtemp())
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.client = OpenClawClient(runtime_dir=self.tmp.name)
 
     def _write_log(self, text: str) -> str:
         payload = {
@@ -24,14 +26,14 @@ class OpenClawClientStructuredOutputTests(unittest.TestCase):
                 ]
             }
         }
-        handle = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+        handle = tempfile.NamedTemporaryFile("w", dir=self.tmp.name, delete=False, encoding="utf-8")
         json.dump(payload, handle, ensure_ascii=False)
         handle.close()
         return handle.name
 
     def test_invoke_uses_extended_gateway_timeout(self) -> None:
         client = OpenClawClient(
-            runtime_dir=tempfile.mkdtemp(),
+            runtime_dir=self.tmp.name,
             command_timeout_seconds=3600,
         )
         fake_process = mock.Mock()
@@ -98,9 +100,27 @@ Takvim etkinliğini telefonda açıp katılımcıları kontrol et.
         self.assertEqual(result.next_action, "Takvim etkinliğini telefonda açıp katılımcıları kontrol et.")
         self.assertTrue(result.requires_phone_handoff)
         self.assertIn("Takvim notu hazır", result.watch_summary)
+        self.assertEqual(result.outcome, "unknown")
+
+    def test_unrecognized_outcome_is_not_inferred_from_success_text(self) -> None:
+        for outcome in ("done", "blocked", "needs_input", "unknown", "completed", 1, None):
+            with self.subTest(outcome=outcome):
+                text = (
+                    "<watch_ceviz_phone_report>All done.</watch_ceviz_phone_report>"
+                    f"<watch_ceviz_meta>{json.dumps({'outcome': outcome})}</watch_ceviz_meta>"
+                )
+                result = self.client.extract_result(self._write_log(text))
+                expected = outcome if outcome in {"done", "blocked", "needs_input"} else "unknown"
+                self.assertEqual(result.outcome, expected)
 
 
 class ReportBuilderTests(unittest.TestCase):
+    def test_active_lifecycle_takes_precedence_over_stale_terminal_outcome(self) -> None:
+        for status in ("running", "queued", "processing"):
+            meta = main.build_report_meta({"status": status, "outcome": "done", "transcript": "check"})
+            self.assertEqual(meta["status"], status)
+            self.assertEqual(meta.get("outcome"), "unknown")
+
     def test_build_report_meta_normalizes_core_fields(self) -> None:
         job = {
             "locale": "tr-TR",

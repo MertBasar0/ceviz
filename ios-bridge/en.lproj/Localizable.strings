@@ -63,6 +63,25 @@
 "[FAILED]" = "[FAILED]";
 "[RUNNING]" = "[RUNNING]";
 "[QUEUED]" = "[QUEUED]";
+"[RESULT READY]" = "[RESULT READY]";
+"[UNKNOWN]" = "[UNKNOWN]";
+"Queued" = "Queued";
+"Working" = "Working";
+"Completed" = "Completed";
+"Blocked" = "Blocked";
+"Needs your input" = "Needs your input";
+"Failed" = "Failed";
+"Result ready" = "Result ready";
+"Status unavailable" = "Status unavailable";
+"Ceviz report ready" = "Ceviz report ready";
+"Continue on iPhone" = "Continue on iPhone";
+"YOUR NEXT STEP" = "YOUR NEXT STEP";
+"Review what is needed above, then add the missing detail or correct your request here." = "Review what is needed above, then add the missing detail or correct your request here.";
+"Request received — refresh the report for its result." = "Request received — refresh the report for its result.";
+"Could not refresh: %@" = "Could not refresh: %@";
+"AGENT-REPORTED RESULT" = "AGENT-REPORTED RESULT";
+"Last received result — could not refresh: %@" = "Last received result — could not refresh: %@";
+"Request received — check RECENT JOBS for its result." = "Request received — check RECENT JOBS for its result.";
 "CHAIN" = "CHAIN";
 
 /* demo mode */

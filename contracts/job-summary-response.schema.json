@@ -55,7 +55,9 @@
           ]
         },
         "outcome": {
-          "type": "string"
+          "type": "string",
+          "enum": ["done", "blocked", "needs_input", "unknown"],
+          "description": "Agent-reported task outcome, separate from execution status; missing or unrecognized metadata is unknown, not verified success."
         }
       },
       "required": [
@@ -148,6 +150,10 @@
     },
     "status": {
       "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["done", "blocked", "needs_input", "unknown"]
     },
     "transcript": {
       "type": "string"

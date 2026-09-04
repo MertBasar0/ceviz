@@ -20,6 +20,17 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.mertbasar.cevizwatch.watchkitapp.capture</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>ceviz-watch</string>
+      </array>
+    </dict>
+  </array>
   <key>NSMicrophoneUsageDescription</key>
   <string>Ceviz uses the microphone only to record voice commands you start.</string>
   <key>NSAppTransportSecurity</key>

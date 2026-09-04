@@ -1,12 +1,14 @@
 default_platform(:ios)
 
-# CevizWatch: iOS bridge + gomulu watch app (2 hedef)
-BUNDLE_IDS = [
-  "com.mertbasar.cevizwatch",
-  "com.mertbasar.cevizwatch.watchkitapp"
-].freeze
+# Every embedded executable needs its own installed provisioning profile.
+SIGNING_TARGETS = {
+  "CevizBridge" => "com.mertbasar.cevizwatch",
+  "CevizWatchApp" => "com.mertbasar.cevizwatch.watchkitapp",
+  "CevizWatchWidget" => "com.mertbasar.cevizwatch.watchkitapp.widget"
+}.freeze
 
-WATCH_BUNDLE_ID = "com.mertbasar.cevizwatch.watchkitapp".freeze
+WATCH_BUNDLE_ID = SIGNING_TARGETS.fetch("CevizWatchApp")
+WIDGET_BUNDLE_ID = SIGNING_TARGETS.fetch("CevizWatchWidget")
 
 def asc_key
   app_store_connect_api_key(
@@ -32,13 +34,27 @@ def ensure_watch_push_capability
   end
 end
 
+def ensure_widget_bundle_id
+  return if Spaceship::ConnectAPI::BundleId.find(WIDGET_BUNDLE_ID)
+
+  widget = Spaceship::ConnectAPI::BundleId.create(
+    identifier: WIDGET_BUNDLE_ID,
+    name: "Ceviz Watch Voice Widget",
+    platform: "IOS"
+  )
+  UI.user_error!("Could not register Ceviz Watch widget bundle ID") unless widget&.identifier == WIDGET_BUNDLE_ID
+  UI.success("Registered Ceviz Watch widget bundle ID")
+end
+
 # Her hedef icin distribution provisioning profili olustur/getir (cloud signing DEGIL)
-def provision(api_key)
+def provision(api_key, method)
   profiles = {}
-  BUNDLE_IDS.each do |bid|
+  SIGNING_TARGETS.each_value do |bid|
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: bid,
+      development: method == "development",
+      adhoc: method == "ad-hoc",
       force: bid == WATCH_BUNDLE_ID,
       output_path: "build/profiles"
     )
@@ -48,49 +64,27 @@ def provision(api_key)
   profiles
 end
 
-def archive_xcargs(build_number)
-  [
-    "-allowProvisioningUpdates",
-    "-authenticationKeyPath", ENV["ASC_KEY_PATH"],
-    "-authenticationKeyID", ENV["ASC_KEY_ID"],
-    "-authenticationKeyIssuerID", ENV["ASC_ISSUER_ID"],
-    "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']}",
-    "CURRENT_PROJECT_VERSION=#{build_number}"
-  ].join(" ")
-end
-
-# CI her kosuda gecici keychain'e yeni bir "Created via API" dev sertifikasi
-# uretir (private key runner ile yok olur); birikince Apple sertifika limitine
-# takilip build "choose a certificate to revoke" ile duser. Build oncesi bu
-# cop sertifikalari temizle. DISTRIBUTION ve gercek (IOS_DEVELOPMENT)
-# sertifikalara asla dokunma.
-def prune_disposable_dev_certs
-  Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
-    key_id: ENV["ASC_KEY_ID"],
-    issuer_id: ENV["ASC_ISSUER_ID"],
-    filepath: File.expand_path(ENV["ASC_KEY_PATH"])
-  )
-  prunable = Spaceship::ConnectAPI::Certificate.all.select do |c|
-    type = (c.certificate_type.to_s rescue "")
-    name = (c.display_name.to_s rescue "")
-    type.include?("DEVELOPMENT") && !type.include?("IOS_DEVELOPMENT") && name == "Created via API"
+def configure_manual_signing(profiles, method)
+  # The imported identity signs the archive and export. Automatic archive signing
+  # created throwaway development certificates; never create or revoke them here.
+  SIGNING_TARGETS.each do |target, bid|
+    update_code_signing_settings(
+      path: "CevizWatch.xcodeproj",
+      targets: [target],
+      build_configurations: ["Release"],
+      use_automatic_signing: false,
+      team_id: ENV.fetch("TEAM_ID"),
+      code_sign_identity: method == "development" ? "Apple Development" : "Apple Distribution",
+      profile_name: profiles.fetch(bid)
+    )
   end
-  prunable.each do |c|
-    begin
-      c.delete!
-      UI.success("Revoked disposable dev cert #{c.id}")
-    rescue => e
-      UI.important("revoke #{c.id} failed: #{e.class} #{e.message}")
-    end
-  end
-rescue => e
-  UI.important("cert prune skipped: #{e.class} #{e.message}")
 end
 
 def build_ceviz(api_key, method)
-  prune_disposable_dev_certs
   ensure_watch_push_capability
-  profiles = provision(api_key)
+  ensure_widget_bundle_id
+  profiles = provision(api_key, method)
+  configure_manual_signing(profiles, method)
   build_number = Time.now.to_i.to_s # benzersiz, artan build numarasi
   UI.message("Build number: #{build_number}")
   build_app(
@@ -101,7 +95,7 @@ def build_ceviz(api_key, method)
     clean: true,
     skip_package_dependencies_resolution: true,
     skip_profile_detection: true,
-    xcargs: archive_xcargs(build_number),
+    xcargs: "CURRENT_PROJECT_VERSION=#{build_number}",
     output_directory: "build/ipa",
     output_name: "CevizWatch.ipa",
     export_options: {

@@ -185,6 +185,29 @@ class PushNotifierTests(unittest.TestCase):
         self.assertEqual(handles, {"phone-handle", "watch-handle"})
         self.assertEqual(job["push_notification_apns_id"], "phone-apns,watch-apns")
 
+    def test_notification_preserves_lifecycle_and_distinguishes_attention_from_success(self) -> None:
+        self.notifier._store({
+            "relay_handle": "relay-handle", "send_grant": "send-grant", "registered_at": 10,
+        })
+        for locale, titles in (
+            ("en-US", ("Job completed", "Needs your input", "Job blocked", "Result ready", "Job failed")),
+            ("tr-TR", ("Görev tamamlandı", "Bilginiz gerekiyor", "Görev engellendi", "Sonuç hazır", "Görev tamamlanamadı")),
+        ):
+            for (status, outcome), title in zip(
+                (("completed", "done"), ("completed", "needs_input"), ("completed", "blocked"),
+                 ("completed", None), ("failed", None)), titles,
+            ):
+                with self.subTest(locale=locale, status=status, outcome=outcome):
+                    job = {"id": "job-outcome", "status": status, "outcome": outcome,
+                           "created_at": 20, "locale": locale}
+                    with mock.patch.object(self.notifier, "_post", return_value={"ok": True}) as post:
+                        self.assertTrue(self.notifier.notify_terminal_job(job))
+                    payload = post.call_args.args[1]
+                    self.assertEqual(payload["status"], status)
+                    self.assertEqual(payload.get("outcome"), outcome or ("blocked" if status == "failed" else "unknown"))
+                    self.assertEqual(payload["title"], f"Ceviz · {title}")
+                    self.assertEqual(payload["message"], f"{title}.")
+
 
 if __name__ == "__main__":
     unittest.main()

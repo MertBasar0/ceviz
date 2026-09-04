@@ -18,6 +18,7 @@ struct WatchCommandRequest: Codable {
 }
 
 struct ReportMeta: Codable, Equatable {
+    var outcome: String? = nil
     let title: String?
     let status: String?
     let severity: String?
@@ -32,6 +33,7 @@ struct ReportMeta: Codable, Equatable {
     let failureMessage: String?
 
     enum CodingKeys: String, CodingKey {
+        case outcome
         case title
         case status
         case severity
@@ -56,6 +58,7 @@ struct NextActionPayload: Codable, Equatable, Identifiable {
 
 // Mirrors watch-command-response.schema.json
 struct WatchCommandResponse: Codable {
+    var outcome: String? = nil
     let status: String
     let transcript: String
     let summaryText: String
@@ -73,6 +76,7 @@ struct WatchCommandResponse: Codable {
     let nextActions: [NextActionPayload]?
 
     enum CodingKeys: String, CodingKey {
+        case outcome
         case status
         case transcript
         case summaryText = "summary_text"
@@ -227,6 +231,7 @@ struct HandoffPreview: Equatable {
 }
 
 struct ActiveJob: Codable, Identifiable {
+    var outcome: String? = nil
     let id: String
     let name: String
     var status: String
@@ -242,6 +247,7 @@ struct ActiveJob: Codable, Identifiable {
     let nextActions: [NextActionPayload]?
 
     enum CodingKeys: String, CodingKey {
+        case outcome
         case id
         case name
         case status
@@ -255,6 +261,10 @@ struct ActiveJob: Codable, Identifiable {
         case reportSections = "report_sections"
         case previewSections = "preview_sections"
         case nextActions = "next_actions"
+    }
+
+    var presentationState: CVZJobState {
+        CVZJobState.resolve(status: status, outcome: outcome ?? reportMeta?.outcome)
     }
 
     var continuationPreview: HandoffPreview? {

@@ -22,46 +22,37 @@ enum CVZ {
         .system(size: size, weight: weight, design: .monospaced)
     }
 
-    static func statusColor(_ status: String) -> Color {
-        switch status {
-        case "completed": return ok
-        case "failed": return err
-        case "running", "queued", "processing": return warn
-        default: return textDim
+    static func statusColor(_ state: CVZJobState) -> Color {
+        switch state {
+        case .completed: return ok
+        case .failed: return err
+        case .running, .queued, .blocked, .needsInput: return warn
+        case .resultReady, .unknown: return textDim
         }
     }
 
-    static func statusBg(_ status: String) -> Color {
-        switch status {
-        case "completed": return okBg
-        case "failed": return errBg
-        case "running", "queued", "processing": return warnBg
-        default: return Color.white.opacity(0.06)
-        }
-    }
-
-    static func statusTag(_ status: String) -> String {
-        switch status {
-        case "completed": return NSLocalizedString("[DONE]", comment: "job status tag")
-        case "failed": return NSLocalizedString("[FAILED]", comment: "job status tag")
-        case "running": return NSLocalizedString("[RUNNING]", comment: "job status tag")
-        case "queued": return NSLocalizedString("[QUEUED]", comment: "job status tag")
-        default: return "[\(status.uppercased())]"
+    static func statusBg(_ state: CVZJobState) -> Color {
+        switch state {
+        case .completed: return okBg
+        case .failed: return errBg
+        case .running, .queued, .blocked, .needsInput: return warnBg
+        case .resultReady, .unknown: return Color.white.opacity(0.06)
         }
     }
 }
 
 // Durum cipi: [TAMAM] / [HATA] / [ÇALIŞIYOR]
 struct CVZStatusChip: View {
-    let status: String
+    let state: CVZJobState
     var size: CGFloat = 8.5
 
     var body: some View {
-        Text(CVZ.statusTag(status))
+        Label(NSLocalizedString(state.statusTagKey, comment: "job state"), systemImage: state.symbolName)
             .font(CVZ.mono(size, .semibold))
-            .foregroundColor(CVZ.statusColor(status))
+            .foregroundColor(CVZ.statusColor(state))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(CVZ.statusBg(status), in: RoundedRectangle(cornerRadius: 4))
+            .background(CVZ.statusBg(state), in: RoundedRectangle(cornerRadius: 4))
+            .accessibilityLabel(NSLocalizedString(state.titleKey, comment: "job state"))
     }
 }

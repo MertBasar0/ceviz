@@ -8,7 +8,7 @@ struct JobsListView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("JOBS")
-                        .font(CVZ.mono(9.5, .semibold))
+                        .font(.caption.weight(.semibold))
                         .tracking(1)
                         .foregroundColor(CVZ.accent)
                     Spacer()
@@ -17,7 +17,7 @@ struct JobsListView: View {
 
                 if sessionManager.activeJobs.isEmpty {
                     Text("No active jobs")
-                        .font(CVZ.mono(10.5))
+                        .font(.caption)
                         .foregroundColor(CVZ.textDim)
                         .padding(.top, 12)
                 } else {
@@ -42,16 +42,16 @@ struct JobsListView: View {
             Rectangle().fill(CVZ.lineSoft).frame(height: 1)
 
             Text(job.name)
-                .font(CVZ.mono(11, .semibold))
+                .font(.headline)
                 .foregroundColor(CVZ.text)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
             HStack {
-                CVZStatusChip(status: job.status)
+                CVZStatusChip(state: job.presentationState)
                 Spacer()
                 Text(String(format: "%02d:%02d", job.elapsedSeconds / 60, job.elapsedSeconds % 60))
-                    .font(CVZ.mono(9))
+                    .font(.caption2).monospacedDigit()
                     .foregroundColor(CVZ.textDim)
             }
         }

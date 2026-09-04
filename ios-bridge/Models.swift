@@ -58,6 +58,7 @@ struct NextActionPayload: Codable, Equatable, Identifiable {
 // Mirrors watch-command-response.schema.json
 struct WatchCommandResponse: Codable {
     let status: String
+    var outcome: String? = nil
     let transcript: String
     let summaryText: String
     let ttsAudioData: String?
@@ -75,6 +76,7 @@ struct WatchCommandResponse: Codable {
 
     enum CodingKeys: String, CodingKey {
         case status
+        case outcome
         case transcript
         case summaryText = "summary_text"
         case ttsAudioData = "tts_audio_data"
@@ -96,6 +98,7 @@ struct JobSummaryResponse: Codable {
     let summary: String
     let requiresPhoneHandoff: Bool
     let status: String
+    var outcome: String? = nil
     let transcript: String
     let phoneReport: String
     let handoffUrl: String?
@@ -110,6 +113,7 @@ struct JobSummaryResponse: Codable {
         case summary
         case requiresPhoneHandoff = "requires_phone_handoff"
         case status
+        case outcome
         case transcript
         case phoneReport = "phone_report"
         case handoffUrl = "handoff_url"
@@ -138,6 +142,7 @@ struct ActiveJob: Codable, Identifiable {
     var conversationId: String?
     let name: String
     var status: String
+    var outcome: String? = nil
     let elapsedSeconds: Int
     let summaryText: String
     let requiresPhoneHandoff: Bool
@@ -149,11 +154,16 @@ struct ActiveJob: Codable, Identifiable {
     let previewSections: [PreviewSectionPayload]?
     let nextActions: [NextActionPayload]?
 
+    var presentationState: CVZJobState {
+        CVZJobState.resolve(status: status, outcome: outcome ?? reportMeta?.outcome)
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case conversationId = "conversation_id"
         case name
         case status
+        case outcome
         case elapsedSeconds = "elapsed_seconds"
         case summaryText = "summary_text"
         case requiresPhoneHandoff = "requires_phone_handoff"

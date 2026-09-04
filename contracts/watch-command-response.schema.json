@@ -57,7 +57,9 @@
           ]
         },
         "outcome": {
-          "type": "string"
+          "type": "string",
+          "enum": ["done", "blocked", "needs_input", "unknown"],
+          "description": "Agent-reported task outcome, separate from execution status; missing or unrecognized metadata is unknown, not verified success."
         }
       },
       "required": [
@@ -147,9 +149,15 @@
       "enum": [
         "success",
         "error",
-        "processing"
+        "processing",
+        "completed",
+        "failed"
       ],
-      "description": "The processing status of the command."
+      "description": "Execution lifecycle: processing while active; completed or failed for a terminal job, including deduplicated delivery. Task success is described by outcome, not completed."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["done", "blocked", "needs_input", "unknown"]
     },
     "transcript": {
       "type": "string",

@@ -228,7 +228,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             jobId: jobId,
             requiresPhoneHandoff: true,
             deepLinkValue: url.absoluteString,
-            title: "Ceviz report ready",
+            title: NSLocalizedString("Ceviz report ready", comment: "notification title"),
             summaryText: "Open the report requested from your Apple Watch.",
             handoffReason: nil,
             nextAction: nil,
@@ -386,7 +386,8 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
                         previewSections: decodedResponse.previewSections
                     )
                 }
-                self.scheduleHandoffNotificationIfNeeded(for: decodedResponse)
+                // APNs owns automatic terminal alerts, including an idempotent
+                // command replay that returns an already completed result.
             }
 
             self.logger.info("Successfully received backend response, forwarding to Watch")
@@ -464,7 +465,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             return false
         }
 
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "action": "terminal_job_result",
             "job_id": jobId,
             "status": status,
@@ -472,6 +473,9 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             "deep_link": userInfo["deep_link"] as? String ?? "",
             "requires_phone_handoff": userInfo["requires_phone_handoff"] as? Bool ?? false,
         ]
+        if let outcome = userInfo["outcome"] as? String {
+            payload["outcome"] = outcome
+        }
         let session = WCSession.default
         if session.activationState != .activated {
             session.activate()
@@ -499,36 +503,6 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
                 self.logger.info("Notification authorization result: \(granted)")
             }
         }
-    }
-
-    private func scheduleHandoffNotificationIfNeeded(for response: WatchCommandResponse) {
-        guard let jobId = response.jobId, !jobId.isEmpty else { return }
-        // Ilk bildirim gerektiginde izni iste (notDetermined ise sorar,
-        // degilse hicbir sey yapmaz).
-        configureNotificationAuthorization()
-        scheduleHandoffNotificationIfNeeded(
-            jobId: jobId,
-            requiresPhoneHandoff: response.requiresPhoneHandoff,
-            deepLinkValue: response.deepLink ?? response.handoffUrl,
-            title: response.reportMeta?.title,
-            summaryText: response.reportMeta?.watchSummary ?? response.summaryText,
-            handoffReason: response.reportMeta?.handoffReason ?? response.handoffReason,
-            nextAction: response.reportMeta?.nextAction,
-            signatureSeed: response.status
-        )
-    }
-
-    private func scheduleHandoffNotificationIfNeeded(for response: JobSummaryResponse, jobId: String) {
-        scheduleHandoffNotificationIfNeeded(
-            jobId: jobId,
-            requiresPhoneHandoff: response.requiresPhoneHandoff,
-            deepLinkValue: response.deepLink ?? response.handoffUrl,
-            title: response.reportMeta?.title,
-            summaryText: response.reportMeta?.watchSummary ?? response.summary,
-            handoffReason: response.reportMeta?.handoffReason ?? response.handoffReason,
-            nextAction: response.reportMeta?.nextAction,
-            signatureSeed: response.status
-        )
     }
 
     private func scheduleHandoffNotificationIfNeeded(
@@ -566,7 +540,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             }
 
             let content = UNMutableNotificationContent()
-            content.title = title ?? "Continue on iPhone"
+            content.title = title ?? NSLocalizedString("Continue on iPhone", comment: "notification title")
             content.body = self.notificationBody(summaryText: summaryText, handoffReason: handoffReason)
             content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "ceviz-complete.caf"))
             content.userInfo = [

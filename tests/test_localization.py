@@ -21,7 +21,7 @@ class AppleLocalizationTests(unittest.TestCase):
         return set(STRING_KEY.findall(path.read_text(encoding="utf-8")))
 
     def test_english_and_turkish_string_catalogs_have_matching_keys(self) -> None:
-        for target in ("apple-watch", "ios-bridge"):
+        for target in ("apple-watch", "ios-bridge", "apple-watch-widget"):
             with self.subTest(target=target):
                 english = self._keys(ROOT / target / "en.lproj" / "Localizable.strings")
                 turkish = self._keys(ROOT / target / "tr.lproj" / "Localizable.strings")

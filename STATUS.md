@@ -1,6 +1,23 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **4 Eylül 2026**
+Son güncelleme: **5 Eylül 2026**
+
+## Hazırlanan paket — Beta 4
+
+Kullanıcı, güvenilir bilek akışı geliştirmelerini ve testlerden sonra commit,
+TestFlight upload, dış Beta grubuna dağıtım, widget kimliği/imzalama profilini
+onayladı. Yerel Ceviz ve bildirim servislerinin güncellenmesi de onaylandı;
+OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
+
+- Ortak iş-sonuç anlamı, Watch sonuç kartı, kadran düğmesi ve daha güvenli
+  teslim/bekleyen sonuç akışı uygulandı; aday doğrulamaları devam ediyor.
+- Sürüm notları ve fiziksel kabul listesi:
+  [Beta 4 aday notları](docs/release-notes-2026.6.5-beta.4.md).
+- Bu bölüm yeni build'in yayımlandığı anlamına gelmez. Aşağıdaki Beta 3,
+  yeni dağıtım API ile doğrulanana kadar geçerli yayımlanmış sürümdür.
+- Sonraki dilim: açık devam bağlamı, kişisel kısa yollar ve uygulama içi Doctor.
+- Mevcut iş dosyası eşzamanlı yazma ve cihaz bazlı bildirim yeniden denemesi
+  ayrıca ele alınmalı; garantili teslimat/uzak işte exactly-once iddiası yok.
 
 ## Güncel sürüm
 

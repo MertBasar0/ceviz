@@ -111,7 +111,7 @@ struct ContentView: View {
                             .font(.caption).tint(CVZ.accent)
                     } else if captureReady || (sessionManager.responseText.isEmpty && sessionManager.resultState == nil) {
                         Text("Ready to listen").font(.headline).foregroundColor(CVZ.text)
-                        Text("Tap the mic, then speak for up to 15 seconds.")
+                        Text("Up to 15 seconds")
                             .font(.caption).foregroundColor(CVZ.textSub)
                     } else {
                         resultCard

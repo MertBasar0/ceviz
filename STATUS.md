@@ -11,6 +11,39 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
 
 - Ortak iş-sonuç anlamı, Watch sonuç kartı, kadran düğmesi ve daha güvenli
   teslim/bekleyen sonuç akışı uygulandı; aday doğrulamaları devam ediyor.
+- Uygulama kaynak commit'i: `311ae907b2be15081ef094389f4d5f3a08045682`.
+- Yerel Python **49/49** ve gerçek relay handler **3/3** kontrolleri geçti.
+  Apple ortamında aynı testler, Ruby imzalama sınırı testi, iki Swift regresyon
+  programı ve iPhone + Watch + gömülü WidgetKit eklentisinin imzasız Release
+  derlemesi geçti. İmzalı arşiv/yükleme henüz doğrulanmadı.
+- İlk Apple doğrulama çalışması (imza/yükleme başlamadı):
+  <https://github.com/MertBasar0/ceviz/actions/runs/33929890858>.
+  Gerçek Watch açılışı başarılı; dışarıdan `simctl openurl` çağrısı
+  `LSApplicationWorkspaceErrorDomain 115` ile başarısız. Kadran gezinmesi
+  doğrulanmış sayılmadı. Watch URL kaydına `Editor` rolü eklendi; SDK ile eşleşen
+  simülatör seçimi ve ek tanı kontrolü hazır. Ek 9 kontrolle yerel Python toplamı
+  **58/58** geçti. Bu değişikliklerden sonraki Apple doğrulaması henüz bekleniyor.
+- iPhone İngilizce demo ekran kontrolü **5/5 görsel incelendi**:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33929929029>.
+  `[NEEDS INPUT]` liste/raporda tutarlı, diğer raporlarda `[DONE]`; bu kanıt
+  örnek veriyle düzen/durum sunumunu kapsar, gerçek görev teslimini değil.
+- Bildirim relay'i güncellendi: canlı sürüm
+  `5b72fe99-6bad-4df8-84f1-56cbf60c3153` (%100), `/healthz` HTTP 200.
+  Yayımlanan kaynak SHA256:
+  `26030c112c65f734690539c69147272654ec078b6301d8752637d43089130ca5`.
+  Wrangler `4.129.0`; testler ve dry-run geçti, mevcut KV/sırlar korundu.
+  Bu kayıt kaynak hash'i + canlı sürüm kimliği kanıtıdır; uzak derlenmiş
+  bundle ile byte eşitliği veya gerçek cihaz APNs teslim testi değildir.
+- Yerel `watch-ceviz-backend.service` aynı kaynak commit'indeki 10 kod/contract
+  dosyasıyla güncellendi. Başarılı geçişin stop → API hazır üst sınırı **0,654 sn**.
+  HTTP sağlık/auth API **200**, yetkisiz API **401**; 50 geçmiş işin ID/durumları
+  (44 completed, 6 failed) ve `jobs.json` byte içeriği değişmedi; aktif iş yoktu.
+  Ayarlar, servis yapılandırması, anahtarlar ve Python ortamı korundu.
+  Liste/rapor/report_meta outcome eşleşmesi okuma istekleriyle doğrulandı.
+  İlk denemedeki yanlış kontrol adresi kod-only rollback'e yol açtı; kontrol
+  adresi düzeltildi, veri geri yükleme/sıfırlama yapılmadı.
+  OpenClaw yapılandırması veya servisi değiştirilmedi; yalnız mevcut gateway
+  systemd durumunun aynı kaldığı ölçüldü, gateway çalışma sağlığı iddiası yok.
 - Sürüm notları ve fiziksel kabul listesi:
   [Beta 4 aday notları](docs/release-notes-2026.6.5-beta.4.md).
 - Bu bölüm yeni build'in yayımlandığı anlamına gelmez. Aşağıdaki Beta 3,

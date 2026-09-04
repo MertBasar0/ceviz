@@ -37,6 +37,10 @@ class WatchSTT:
         code = locale.replace("_", "-").split("-")[0].lower()
         return code or None
 
+    @classmethod
+    def _error(cls, payload: dict[str, Any], english: str, turkish: str) -> str:
+        return turkish if cls.language_from_payload(payload) == "tr" else english
+
     def transcribe_watch_payload(self, payload: dict[str, Any]) -> TranscriptionResult:
         provided_transcript = (payload.get("transcript") or "").strip()
         if provided_transcript:
@@ -44,15 +48,24 @@ class WatchSTT:
 
         audio_b64 = (payload.get("audio_data") or "").strip()
         if not audio_b64:
-            return TranscriptionResult(transcript="", source="none", error="audio_data boş")
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(payload, "audio_data is empty", "audio_data boş"),
+            )
 
         try:
             audio_bytes = base64.b64decode(audio_b64, validate=True)
         except Exception:
-            return TranscriptionResult(transcript="", source="none", error="audio_data base64 olarak çözülemedi")
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(payload, "audio_data is not valid base64", "audio_data base64 olarak çözülemedi"),
+            )
 
         if not audio_bytes:
-            return TranscriptionResult(transcript="", source="none", error="çözülen ses verisi boş")
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(payload, "decoded audio data is empty", "çözülen ses verisi boş"),
+            )
 
         # 1) Lokal Whisper (key'siz, gizli) — engine auto/local
         if self.engine in {"auto", "local"}:
@@ -70,17 +83,31 @@ class WatchSTT:
                     if text:
                         return TranscriptionResult(transcript=text, source=f"local-whisper:{local_whisper.active_device()}")
                     if self.engine == "local":
-                        return TranscriptionResult(transcript="", source="none", error="local whisper boş metin döndürdü")
+                        return TranscriptionResult(
+                            transcript="", source="none",
+                            error=self._error(payload, "local Whisper returned an empty transcript", "local whisper boş metin döndürdü"),
+                        )
                 except Exception as exc:
                     if self.engine == "local":
-                        return TranscriptionResult(transcript="", source="none", error=f"local whisper hatası: {exc}")
+                        prefix = self._error(payload, "local Whisper error", "local whisper hatası")
+                        return TranscriptionResult(transcript="", source="none", error=f"{prefix}: {exc}")
                     # auto: OpenAI'ye dus
             elif self.engine == "local":
-                return TranscriptionResult(transcript="", source="none", error="faster-whisper kurulu değil")
+                return TranscriptionResult(
+                    transcript="", source="none",
+                    error=self._error(payload, "faster-whisper is not installed", "faster-whisper kurulu değil"),
+                )
 
         # 2) OpenAI fallback (engine auto/openai) — anahtar gerekir
         if not self.api_key:
-            return TranscriptionResult(transcript="", source="none", error="STT yok: lokal whisper transkript üretemedi ve OPENAI_API_KEY tanımlı değil")
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(
+                    payload,
+                    "Speech recognition is unavailable: local Whisper produced no transcript and OPENAI_API_KEY is not set",
+                    "STT yok: lokal whisper transkript üretemedi ve OPENAI_API_KEY tanımlı değil",
+                ),
+            )
 
         try:
             transcript = self._transcribe_with_openai(audio_bytes, payload.get("format", "m4a"))
@@ -88,13 +115,18 @@ class WatchSTT:
             details = exc.read().decode("utf-8", errors="replace")
             return TranscriptionResult(transcript="", source="none", error=f"STT HTTP {exc.code}: {details}")
         except urllib.error.URLError as exc:
-            return TranscriptionResult(transcript="", source="none", error=f"STT ağ hatası: {exc}")
+            prefix = self._error(payload, "STT network error", "STT ağ hatası")
+            return TranscriptionResult(transcript="", source="none", error=f"{prefix}: {exc}")
         except Exception as exc:
-            return TranscriptionResult(transcript="", source="none", error=f"STT hatası: {exc}")
+            prefix = self._error(payload, "STT error", "STT hatası")
+            return TranscriptionResult(transcript="", source="none", error=f"{prefix}: {exc}")
 
         transcript = transcript.strip()
         if not transcript:
-            return TranscriptionResult(transcript="", source="none", error="STT boş metin döndürdü")
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(payload, "STT returned an empty transcript", "STT boş metin döndürdü"),
+            )
 
         return TranscriptionResult(transcript=transcript, source="openai")
 

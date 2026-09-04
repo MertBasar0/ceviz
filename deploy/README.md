@@ -17,6 +17,20 @@ Script şunları yapar:
 Telefonda: **Ceviz → Ayarlar (dişli) → QR İLE EŞLEŞ** → scriptin bastığı QR'ı okut → **BAĞLANTIYI TEST ET** → **KAYDET**.
 Token telefonda Keychain'de saklanır; uygulama silinip yeniden kurulsa bile kalır.
 
+## Ceviz Doctor
+
+Kurulumdan sonra veya bağlantı sorunu yaşadığında repo kökünde çalıştır:
+
+```bash
+bash deploy/doctor.sh
+```
+
+Doctor; OpenClaw ve Python erişimini, sanal ortam bağımlılıklarını, token
+dosyasını ve izinlerini, servis durumunu, kimlik doğrulamalı yerel backend
+isteğini ve Tailscale bağlantısını salt okunur biçimde kontrol eder. Destek için
+çıktıyı paylaşabilirsin: token değerini, APNs token'ını veya komut içeriğini
+yazdırmaz.
+
 ### Bağlantı modu
 
 - `WATCH_CEVIZ_NETWORK_MODE=tailscale`: önerilen; farklı ağlardan özel tailnet erişimi.

@@ -1,0 +1,2 @@
+"NSMicrophoneUsageDescription" = "Ceviz uses the microphone only to record voice commands you start.";
+"NSCameraUsageDescription" = "Ceviz uses the camera only to scan your backend pairing QR code.";

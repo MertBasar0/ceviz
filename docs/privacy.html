@@ -14,7 +14,7 @@
     <meta property="og:title" content="Ceviz — Privacy Policy">
     <meta
         property="og:description"
-        content="Ceviz collects no personal data. Your commands go to a backend you run on your own machine."
+        content="Ceviz has no hosted command backend or analytics. A minimal relay forwards completion notifications to Apple Push Notification service."
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://basarlabs.com.tr/ceviz/privacy/">
@@ -109,14 +109,14 @@
 
         <section data-lang-section="en">
             <h1>Ceviz — Privacy Policy</h1>
-            <p class="updated">Last updated: 2 August 2026</p>
+            <p class="updated">Last updated: 4 September 2026</p>
 
             <div class="summary">
-                <p><strong>Ceviz collects no personal data.</strong> We operate no servers that receive your content. Your voice commands and results travel between your own devices and a backend you run on your own machine.</p>
+                <p><strong>Ceviz has no hosted command-processing backend and contains no analytics or advertising SDKs.</strong> Voice commands, transcripts and full reports are processed by the backend you run on your own machine. A minimal hosted relay forwards completion notifications to Apple Push Notification service (APNs), as described below.</p>
             </div>
 
             <h2>What the app sends, and where</h2>
-            <p>When you record a voice command on your Apple Watch, the audio is passed to your paired iPhone and forwarded to the backend you configured — a server you run on your own machine, reachable only over your own private network. Your voice recordings, transcripts, job results and reports stay between your devices and that machine. They are never sent to Basar Labs.</p>
+            <p>When you record a voice command on your Apple Watch, the audio is passed to your paired iPhone and forwarded to the backend you configured — a server you run on your own machine, reachable only over your own private network. Voice recordings, transcripts and full reports are not sent to Basar Labs. To deliver a background completion notification, the backend sends a notification title, concise result summary, job identifier, job status, deep link and handoff flag through the Ceviz relay to APNs. Notification summaries can contain information derived from your command.</p>
 
             <h2>Speech recognition</h2>
             <p>By default, speech is transcribed locally on your own machine. A third-party speech service is used only if you explicitly configure one with your own API key. That choice, and any data it involves, is yours to make and control.</p>
@@ -128,6 +128,9 @@
             </ul>
             <p>Neither value is transmitted anywhere except to the backend you configured.</p>
 
+            <h2>Completion notifications</h2>
+            <p>The notification relay stores the APNs device token, bundle identifier, random installation identifier and a hash of the relay send grant for up to 180 days, after which the registration expires automatically. It does not receive the voice recording, full transcript, full report or backend pairing token. Notification payloads are forwarded to APNs and are not end-to-end encrypted by Ceviz. Advanced users can configure a compatible self-hosted relay. To request early deletion of a hosted relay registration, use the contact address below.</p>
+
             <h2>Permissions</h2>
             <ul>
                 <li><strong>Microphone</strong> — used only to record voice commands that you start.</li>
@@ -135,7 +138,7 @@
             </ul>
 
             <h2>Analytics and tracking</h2>
-            <p>The app contains no analytics, advertising, or tracking SDKs. We do not profile you and we do not share data with third parties, because we do not receive any.</p>
+            <p>The app contains no analytics, advertising, or tracking SDKs. Ceviz does not use command or notification data for profiling or advertising. Apple and the relay infrastructure process notification delivery data as required to provide push notifications.</p>
 
             <h2>Demo Mode</h2>
             <p>With no backend configured, the app runs in Demo Mode: it shows built-in sample data and makes no network requests for content.</p>
@@ -152,14 +155,14 @@
 
         <section data-lang-section="tr" hidden>
             <h1>Ceviz — Gizlilik Politikası</h1>
-            <p class="updated">Son güncelleme: 2 Ağustos 2026</p>
+            <p class="updated">Son güncelleme: 4 Eylül 2026</p>
 
             <div class="summary">
-                <p><strong>Ceviz kişisel veri toplamaz.</strong> İçeriğinizi alan herhangi bir sunucu işletmiyoruz. Sesli komutlarınız ve sonuçlar, kendi cihazlarınızla kendi makinenizde çalıştırdığınız sunucu arasında kalır.</p>
+                <p><strong>Ceviz, barındırılan bir komut işleme backend'i çalıştırmaz ve analitik veya reklam SDK'sı içermez.</strong> Sesli komutlar, transkriptler ve tam raporlar kendi makinenizde çalıştırdığınız backend tarafından işlenir. Aşağıda açıklandığı gibi, arka plan tamamlanma bildirimlerini Apple Anında İlet Bildirim servisine (APNs) aktaran küçük bir relay bulunur.</p>
             </div>
 
             <h2>Uygulama ne gönderir, nereye</h2>
-            <p>Apple Watch'ta bir sesli komut kaydettiğinizde ses, eşli iPhone'unuza aktarılır ve yapılandırdığınız sunucuya iletilir — bu sunucu kendi makinenizde çalışır ve yalnızca kendi özel ağınızdan erişilebilir. Ses kayıtlarınız, transkriptleriniz, iş sonuçlarınız ve raporlarınız cihazlarınızla o makine arasında kalır. Basar Labs'a hiçbir zaman gönderilmez.</p>
+            <p>Apple Watch'ta bir sesli komut kaydettiğinizde ses, eşli iPhone'unuza aktarılır ve yapılandırdığınız sunucuya iletilir — bu sunucu kendi makinenizde çalışır ve yalnızca kendi özel ağınızdan erişilebilir. Ses kayıtları, transkriptler ve tam raporlar Basar Labs'a gönderilmez. Arka planda tamamlanma bildirimi iletmek için backend; bildirim başlığını, kısa sonuç özetini, iş kimliğini, iş durumunu, deep link'i ve telefona devir bilgisini Ceviz relay'i üzerinden APNs'e gönderir. Bildirim özeti komutunuzdan türetilen bilgiler içerebilir.</p>
 
             <h2>Konuşma tanıma</h2>
             <p>Varsayılan olarak konuşma kendi makinenizde çözülür. Üçüncü taraf bir konuşma servisi yalnızca kendi API anahtarınızla açıkça yapılandırırsanız kullanılır. Bu tercih ve kapsadığı veriler tamamen sizin kontrolünüzdedir.</p>
@@ -171,6 +174,9 @@
             </ul>
             <p>İkisi de yapılandırdığınız sunucu dışında hiçbir yere iletilmez.</p>
 
+            <h2>Tamamlanma bildirimleri</h2>
+            <p>Bildirim relay'i APNs cihaz token'ını, bundle kimliğini, rastgele kurulum kimliğini ve relay gönderim yetkisinin hash'ini en fazla 180 gün saklar; bu sürenin sonunda kayıt otomatik olarak silinir. Ses kaydını, tam transkripti, tam raporu veya backend eşleşme token'ını almaz. Bildirim payload'ları APNs'e iletilir ve Ceviz tarafından uçtan uca şifrelenmez. İleri düzey kullanıcılar uyumlu bir relay'i kendileri barındırabilir. Barındırılan relay kaydının daha erken silinmesini istemek için aşağıdaki iletişim adresini kullanın.</p>
+
             <h2>İzinler</h2>
             <ul>
                 <li><strong>Mikrofon</strong> — yalnızca sizin başlattığınız sesli komutları kaydetmek için kullanılır.</li>
@@ -178,7 +184,7 @@
             </ul>
 
             <h2>Analitik ve izleme</h2>
-            <p>Uygulamada analitik, reklam veya izleme SDK'sı yoktur. Sizi profillemiyoruz ve üçüncü taraflarla veri paylaşmıyoruz; çünkü hiçbir veri almıyoruz.</p>
+            <p>Uygulamada analitik, reklam veya izleme SDK'sı yoktur. Ceviz komut ya da bildirim verisini profilleme veya reklam amacıyla kullanmaz. Apple ve relay altyapısı, push bildirimini sunmak için gerekli bildirim teslim verisini işler.</p>
 
             <h2>Demo Modu</h2>
             <p>Yapılandırılmış bir sunucu yokken uygulama Demo Modu'nda çalışır: yerleşik örnek veriyi gösterir ve içerik için ağ isteği yapmaz.</p>

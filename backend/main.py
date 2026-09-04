@@ -37,6 +37,116 @@ stt_client = WatchSTT()
 push_notifier = PushNotifier()
 
 
+USER_COPY = {
+    "en": {
+        "command_received": "Command received: {transcript}. Processing.",
+        "transcript_received": "Transcript received: {transcript}. Processing.",
+        "speech_unclear": "Audio received, but the command was unclear. Details and a retry suggestion are available on iPhone.",
+        "audio_processing": "Audio received. Processing the command.",
+        "job_running": "{name} is processing.",
+        "job_running_elapsed": "{summary} ({seconds}s)",
+        "command_unclear": "Command unclear: {error}",
+        "job_failed": "The job could not be completed. Details are available on iPhone.",
+        "result_ready": "Result ready.",
+        "handoff_needs_clarification": "The command is unclear. Details and a retry option are available on iPhone.",
+        "handoff_failure_diagnosis": "The issue needs more detail. Logs and the next step are available on iPhone.",
+        "handoff_approval_required": "Approval is required. Continue safely on iPhone.",
+        "handoff_too_many_actions": "There are several actions to choose from. Continue on iPhone.",
+        "handoff_low_confidence": "Confidence is low. Details and guidance are available on iPhone.",
+        "handoff_logs_and_code": "This result contains code or logs. Open it on iPhone to review.",
+        "handoff_action_required": "Continue on iPhone to approve or choose the next action.",
+        "handoff_long_detail": "The result is detailed. It is easier to review on iPhone.",
+        "handoff_job_missing": "The job was not found. Try again on iPhone.",
+        "handoff_default": "The details are clearer on iPhone.",
+        "default_task": "Task",
+        "default_category": "OpenClaw Assistant",
+        "running_analysis": "This job is currently running on OpenClaw. Elapsed: {seconds} seconds. Tap Refresh for the latest status.",
+        "running_next": "Wait briefly and refresh this screen, then review the updated report on iPhone.",
+        "failed_analysis": "The job could not be completed and no details are available.",
+        "failed_next": "Review the error details, then retry from your Watch or send a clearer command.",
+        "completed_analysis": "No result data is available.",
+        "completed_next_with_summary": "Use the Watch summary for the quick result and continue from the detailed analysis below if needed.",
+        "completed_next": "Continue from the detailed result below.",
+        "section_category": "Category",
+        "section_watch_summary": "Watch summary",
+        "section_analysis": "Expanded analysis",
+        "section_next": "Suggested next action",
+        "section_activity": "Subagents & tools",
+        "activity_eyebrow": "AGENTS",
+        "backend_restart_report": "The backend restarted before this job's result could be recovered. Send the command again.",
+        "backend_restart_summary": "The backend restarted before the job completed.",
+        "openclaw_started": "OpenClaw started processing the command.",
+        "openclaw_started_no_transcript": "OpenClaw started, but no transcript was produced. The iPhone report will show the error and a retry suggestion.",
+        "openclaw_waiting": "OpenClaw started processing; waiting for the result.",
+        "command_name": "Command",
+        "install_category": "Setup",
+        "unknown_category": "Unknown",
+        "detail_missing": "No details were found.",
+        "task_missing": "Job not found.",
+        "job_cancelled": "The job was cancelled by the user.",
+        "shortcut_missing": "Command text is empty. Send dictated or typed text to the backend from the Shortcut.",
+    },
+    "tr": {
+        "command_received": "Komut alındı: {transcript}. İşleniyor.",
+        "transcript_received": "Transkript alındı: {transcript}. İşleniyor.",
+        "speech_unclear": "Ses alındı ama komut netleşmedi. Telefonda ayrıntı ve yeniden deneme önerisi var.",
+        "audio_processing": "Ses alındı. Komut işleniyor.",
+        "job_running": "{name} işleniyor.",
+        "job_running_elapsed": "{summary} ({seconds} sn)",
+        "command_unclear": "Komut netleşmedi: {error}",
+        "job_failed": "Görev tamamlanamadı. Telefonda ayrıntı var.",
+        "result_ready": "Sonuç hazır.",
+        "handoff_needs_clarification": "Komut net değil. Telefonda ayrıntı ve yeniden deneme var.",
+        "handoff_failure_diagnosis": "Sorun ayrıntılı görünüyor. Loglar ve sonraki adım telefonda.",
+        "handoff_approval_required": "Onay gerekiyor. Telefonda devam etmek daha güvenli.",
+        "handoff_too_many_actions": "Birden fazla aksiyon var. Telefonda seçim yapmak daha güvenli.",
+        "handoff_low_confidence": "Yanıt güveni düşük. Telefonda ayrıntı ve yönlendirme var.",
+        "handoff_logs_and_code": "Kod veya log var. Telefonda açıp inceleyelim.",
+        "handoff_action_required": "Devam etmek için telefonda onay veya seçim gerekiyor.",
+        "handoff_long_detail": "Detay uzun. Telefonda daha rahat inceleyebilirsin.",
+        "handoff_job_missing": "Görev bulunamadı. Telefonda tekrar deneyebilirsin.",
+        "handoff_default": "Detay telefonda daha net.",
+        "default_task": "Görev",
+        "default_category": "OpenClaw Asistan",
+        "running_analysis": "Görev şu anda OpenClaw üzerinde işleniyor. Geçen süre: {seconds} saniye. Yenile ile güncel durumu çekebilirsin.",
+        "running_next": "Biraz bekleyip bu ekranı yenile, ardından güncellenen raporu telefonda incele.",
+        "failed_analysis": "Görev tamamlanamadı, ayrıntı bulunamadı.",
+        "failed_next": "Hata detayını kontrol et, sonra saatten yeniden dene veya komutu daha net söyleyip tekrar gönder.",
+        "completed_analysis": "Sonuç verisi bulunamadı.",
+        "completed_next_with_summary": "Saat özetini hızlı sonuç olarak kullan, gerekiyorsa aşağıdaki ayrıntılı analize göre telefonda devam et.",
+        "completed_next": "Aşağıdaki ayrıntılı sonuca göre telefonda devam et.",
+        "section_category": "Kategori",
+        "section_watch_summary": "Saat özeti",
+        "section_analysis": "Ayrıntılı analiz",
+        "section_next": "Önerilen sonraki adım",
+        "section_activity": "Alt ajanlar & araçlar",
+        "activity_eyebrow": "AJANLAR",
+        "backend_restart_report": "Backend yeniden başlatıldığı için bu işin sonucu alınamadı. Komutu tekrar gönderebilirsin.",
+        "backend_restart_summary": "Backend yeniden başlatıldı; iş sonuçlanmadan kesildi.",
+        "openclaw_started": "OpenClaw çağrısı başlatıldı.",
+        "openclaw_started_no_transcript": "OpenClaw çağrısı başlatıldı ancak transkript üretilemedi. Telefonda hata notu ve yeniden deneme önerisi gösterilecek.",
+        "openclaw_waiting": "OpenClaw çağrısı başlatıldı, sonuç bekleniyor.",
+        "command_name": "Komut",
+        "install_category": "Kurulum",
+        "unknown_category": "Bilinmeyen",
+        "detail_missing": "Detay bulunamadı.",
+        "task_missing": "Görev bulunamadı.",
+        "job_cancelled": "Görev kullanıcı tarafından iptal edildi.",
+        "shortcut_missing": "Komut metni boş. Kısayolda dikte veya metin alanını backend'e gönder.",
+    },
+}
+
+
+def locale_code(value: dict | str | None) -> str:
+    locale = value.get("locale") if isinstance(value, dict) else value
+    code = str(locale or "").strip().replace("_", "-").split("-")[0].lower()
+    return code if code in USER_COPY else "en"
+
+
+def user_copy(value: dict | str | None, key: str, **values) -> str:
+    return USER_COPY[locale_code(value)][key].format(**values)
+
+
 def load_contract(name: str) -> dict:
     with (CONTRACTS_DIR / name).open("r") as f:
         return json.load(f)
@@ -268,20 +378,25 @@ def classify_handoff_reason(job: dict) -> str | None:
     return None
 
 
-def build_processing_summary(stt_source: str, transcript: str, stt_error: str | None = None) -> str:
+def build_processing_summary(
+    stt_source: str,
+    transcript: str,
+    stt_error: str | None = None,
+    locale: str = "",
+) -> str:
     transcript = (transcript or "").strip()
     stt_error = (stt_error or "").strip()
 
     if transcript:
         transcript_preview = trim_watch_text(f'"{transcript}"', max_len=96)
         if stt_source == "openai":
-            return trim_watch_text(f"Komut alındı: {transcript_preview}. İşleniyor.")
-        return trim_watch_text(f"Transkript alındı: {transcript_preview}. İşleniyor.")
+            return trim_watch_text(user_copy(locale, "command_received", transcript=transcript_preview))
+        return trim_watch_text(user_copy(locale, "transcript_received", transcript=transcript_preview))
 
     if stt_error:
-        return trim_watch_text("Ses alındı ama komut netleşmedi. Telefonda ayrıntı ve yeniden deneme önerisi var.")
+        return trim_watch_text(user_copy(locale, "speech_unclear"))
 
-    return "Ses alındı. Komut işleniyor."
+    return user_copy(locale, "audio_processing")
 
 
 def derive_job_handoff(job: dict) -> bool:
@@ -291,14 +406,18 @@ def derive_job_handoff(job: dict) -> bool:
 def build_job_watch_summary(job: dict) -> str:
     status = job.get("status")
     if status == "running":
-        base = job.get("watch_summary") or f"{job.get('name', 'Görev')} işleniyor."
-        return trim_watch_text(f"{base} ({job.get('elapsed_seconds', 0)} sn)")
+        base = job.get("watch_summary") or user_copy(
+            job, "job_running", name=job.get("name") or user_copy(job, "default_task")
+        )
+        return trim_watch_text(user_copy(
+            job, "job_running_elapsed", summary=base, seconds=job.get("elapsed_seconds", 0)
+        ))
     if status == "failed":
         stt_error = (job.get("stt_error") or "").strip()
         if stt_error:
-            return trim_watch_text(f"Komut netleşmedi: {stt_error}")
-        return trim_watch_text(job.get("watch_summary") or "Görev tamamlanamadı. Telefonda ayrıntı var.")
-    return trim_watch_text(job.get("watch_summary") or job.get("canned_result") or "Sonuç hazır.")
+            return trim_watch_text(user_copy(job, "command_unclear", error=stt_error))
+        return trim_watch_text(job.get("watch_summary") or user_copy(job, "job_failed"))
+    return trim_watch_text(job.get("watch_summary") or job.get("canned_result") or user_copy(job, "result_ready"))
 
 
 REPORT_META_FIELDS = (
@@ -356,25 +475,18 @@ def build_handoff_copy(job: dict) -> str | None:
     if not reason:
         return None
 
-    if reason == "needs_clarification":
-        return "Komut net değil. Telefonda ayrıntı ve yeniden deneme var."
-    if reason == "failure_diagnosis":
-        return "Sorun ayrıntılı görünüyor. Loglar ve sonraki adım telefonda."
-    if reason == "approval_required":
-        return "Onay gerekiyor. Telefonda devam etmek daha güvenli."
-    if reason == "too_many_actions":
-        return "Birden fazla aksiyon var. Telefonda seçim yapmak daha güvenli."
-    if reason == "low_confidence":
-        return "Yanıt güveni düşük. Telefonda ayrıntı ve yönlendirme var."
-    if reason == "logs_and_code":
-        return "Kod veya log var. Telefonda açıp inceleyelim."
-    if reason == "action_required":
-        return "Devam etmek için telefonda onay veya seçim gerekiyor."
-    if reason == "long_detail":
-        return "Detay uzun. Telefonda daha rahat inceleyebilirsin."
-    if reason == "job_missing":
-        return "Görev bulunamadı. Telefonda tekrar deneyebilirsin."
-    return "Detay telefonda daha net."
+    key = {
+        "needs_clarification": "handoff_needs_clarification",
+        "failure_diagnosis": "handoff_failure_diagnosis",
+        "approval_required": "handoff_approval_required",
+        "too_many_actions": "handoff_too_many_actions",
+        "low_confidence": "handoff_low_confidence",
+        "logs_and_code": "handoff_logs_and_code",
+        "action_required": "handoff_action_required",
+        "long_detail": "handoff_long_detail",
+        "job_missing": "handoff_job_missing",
+    }.get(reason, "handoff_default")
+    return user_copy(job, key)
 
 
 NO_OP_NEXT_ACTION_MARKERS = (
@@ -465,7 +577,7 @@ def build_report_meta(job: dict) -> dict:
         "title": (job.get("name") or "OpenClaw Task").strip(),
         "status": (job.get("status") or "unknown").strip(),
         "severity": derive_job_severity(job),
-        "category": (job.get("category") or "OpenClaw Asistan").strip(),
+        "category": (job.get("category") or user_copy(job, "default_category")).strip(),
         "watch_summary": build_job_watch_summary(job),
         "requires_phone_handoff": derive_job_handoff(job),
         "handoff_reason": build_handoff_reason(job),
@@ -505,25 +617,22 @@ def build_common_sections(job: dict) -> list[dict[str, str]]:
     detail = (job.get("phone_report") or job.get("canned_result") or "").strip()
 
     if job["status"] == "running":
-        analysis_content = (
-            "Görev şu anda OpenClaw üzerinde işleniyor. "
-            f"Geçen süre: {job['elapsed_seconds']} saniye. Yenile ile güncel durumu çekebilirsin."
-        )
-        next_action_content = "Biraz bekleyip bu ekranı yenile, ardından güncellenen raporu telefonda incele."
+        analysis_content = user_copy(job, "running_analysis", seconds=job["elapsed_seconds"])
+        next_action_content = user_copy(job, "running_next")
     elif job["status"] == "failed":
-        analysis_content = detail or "Görev tamamlanamadı, ayrıntı bulunamadı."
+        analysis_content = detail or user_copy(job, "failed_analysis")
         next_action_content = (
             job.get("next_action")
-            or "Hata detayını kontrol et, sonra saatten yeniden dene veya komutu daha net söyleyip tekrar gönder."
+            or user_copy(job, "failed_next")
         )
     else:
-        analysis_content = detail or "Sonuç verisi bulunamadı."
+        analysis_content = detail or user_copy(job, "completed_analysis")
         next_action_content = (
             job.get("next_action")
             or (
-                "Saat özetini hızlı sonuç olarak kullan, gerekiyorsa aşağıdaki ayrıntılı analize göre telefonda devam et."
+                user_copy(job, "completed_next_with_summary")
                 if watch_summary
-                else "Aşağıdaki ayrıntılı sonuca göre telefonda devam et."
+                else user_copy(job, "completed_next")
             )
         )
 
@@ -533,7 +642,7 @@ def build_common_sections(job: dict) -> list[dict[str, str]]:
     if category:
         sections.append(build_section(
             section_id="category",
-            title="Category",
+            title=user_copy(job, "section_category"),
             eyebrow="META",
             icon="tag",
             content=category,
@@ -542,7 +651,7 @@ def build_common_sections(job: dict) -> list[dict[str, str]]:
     if watch_summary:
         sections.append(build_section(
             section_id="watch-summary",
-            title="Watch summary",
+            title=user_copy(job, "section_watch_summary"),
             eyebrow="WATCH",
             icon="applewatch",
             content=watch_summary,
@@ -550,7 +659,7 @@ def build_common_sections(job: dict) -> list[dict[str, str]]:
 
     sections.append(build_section(
         section_id="expanded-analysis",
-        title="Expanded analysis",
+        title=user_copy(job, "section_analysis"),
         eyebrow="IPHONE DETAIL",
         icon="text.alignleft",
         content=analysis_content,
@@ -558,7 +667,7 @@ def build_common_sections(job: dict) -> list[dict[str, str]]:
 
     sections.append(build_section(
         section_id="suggested-next-action",
-        title="Suggested next action",
+        title=user_copy(job, "section_next"),
         eyebrow="NEXT",
         icon="arrow.forward.circle",
         content=next_action_content,
@@ -577,8 +686,8 @@ def build_report_sections(job: dict) -> list[dict[str, str]]:
     if activity:
         sections.append(build_section(
             section_id="background-activity",
-            title="Alt Ajanlar & Araçlar",
-            eyebrow="AJANLAR",
+            title=user_copy(job, "section_activity"),
+            eyebrow=user_copy(job, "activity_eyebrow"),
             icon="person.3",
             content="\n".join(activity),
         ))
@@ -731,7 +840,7 @@ def _sync_job_status_impl(job: dict, now: float) -> None:
 
     if return_code == 0:
         try:
-            result = openclaw_client.extract_result(invocation["log_path"])
+            result = openclaw_client.extract_result(invocation["log_path"], locale=job.get("locale", ""))
             job["status"] = "completed"
             job["category"] = result.category
             job["canned_result"] = result.canned_result
@@ -743,27 +852,38 @@ def _sync_job_status_impl(job: dict, now: float) -> None:
             job["next_action_actor"] = result.next_action_actor
             try:
                 job["background_activity"] = openclaw_client.collect_background_activity(
-                    invocation["started_at"], invocation["log_path"]
+                    invocation["started_at"], invocation["log_path"], locale=job.get("locale", "")
                 )
             except Exception:
                 job["background_activity"] = []
         except Exception as exc:
             logging.exception("Failed to parse OpenClaw result for job %s", job["id"])
             job["status"] = "failed"
-            job["category"] = "OpenClaw Hatası"
-            job["canned_result"] = (
-                "OpenClaw çağrısı tamamlandı ama yanıt çözümlenemedi.\n\n"
-                f"Hata: {exc}\n\n"
-                f"Log özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-            )
+            job["category"] = "OpenClaw Error" if locale_code(job) == "en" else "OpenClaw Hatası"
+            if locale_code(job) == "en":
+                job["canned_result"] = (
+                    "OpenClaw completed the command, but its response could not be parsed.\n\n"
+                    f"Error: {exc}\n\nLog excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
+                )
+            else:
+                job["canned_result"] = (
+                    "OpenClaw çağrısı tamamlandı ama yanıt çözümlenemedi.\n\n"
+                    f"Hata: {exc}\n\nLog özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
+                )
         return
 
     job["status"] = "failed"
-    job["category"] = "OpenClaw Hatası"
-    job["canned_result"] = (
-        f"OpenClaw komutu {return_code} koduyla başarısız oldu.\n\n"
-        f"Log özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-    )
+    job["category"] = "OpenClaw Error" if locale_code(job) == "en" else "OpenClaw Hatası"
+    if locale_code(job) == "en":
+        job["canned_result"] = (
+            f"The OpenClaw command failed with exit code {return_code}.\n\n"
+            f"Log excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
+        )
+    else:
+        job["canned_result"] = (
+            f"OpenClaw komutu {return_code} koduyla başarısız oldu.\n\n"
+            f"Log özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
+        )
 
 
 def _serializable_job(job: dict) -> dict:
@@ -814,7 +934,7 @@ def load_jobs() -> None:
             result = None
             if log_path and Path(log_path).exists():
                 try:
-                    result = openclaw_client.extract_result(log_path)
+                    result = openclaw_client.extract_result(log_path, locale=job.get("locale", ""))
                 except Exception:
                     result = None
             if result is not None:
@@ -830,11 +950,8 @@ def load_jobs() -> None:
                 recovered += 1
             else:
                 job["status"] = "failed"
-                job["canned_result"] = (
-                    "Backend yeniden başlatıldığı için bu işin sonucu alınamadı. "
-                    "Komutu tekrar gönderebilirsin."
-                )
-                job["watch_summary"] = "Backend yeniden başlatıldı; iş sonuçlanmadan kesildi."
+                job["canned_result"] = user_copy(job, "backend_restart_report")
+                job["watch_summary"] = user_copy(job, "backend_restart_summary")
                 job["outcome"] = "blocked"
         # Yeniden baslatma sonrasi canli process yok.
         job.pop("invocation", None)
@@ -916,11 +1033,11 @@ def create_openclaw_job(
             "id": new_job_id,
             "conversation_id": conversation_id,
             "locale": locale,
-            "name": effective_transcript or "Komut",
+            "name": effective_transcript or user_copy(locale, "command_name"),
             "status": "failed",
             "created_at": time.time(),
             "elapsed_seconds": 0,
-            "category": "kurulum",
+            "category": user_copy(locale, "install_category"),
             "canned_result": str(exc),
             "watch_summary": trim_watch_text(str(exc), 160),
             "requires_phone_handoff": True,
@@ -936,11 +1053,11 @@ def create_openclaw_job(
         save_jobs()
         return failed_job
     initial_requires_phone_handoff = not bool(effective_transcript)
-    summary_text = build_processing_summary(source, effective_transcript, stt_error)
+    summary_text = build_processing_summary(source, effective_transcript, stt_error, locale)
     phone_report = (
-        "OpenClaw çağrısı başlatıldı."
+        user_copy(locale, "openclaw_started")
         if effective_transcript
-        else "OpenClaw çağrısı başlatıldı ancak transkript üretilemedi. Telefonda hata notu ve yeniden deneme önerisi gösterilecek."
+        else user_copy(locale, "openclaw_started_no_transcript")
     )
 
     job = {
@@ -951,8 +1068,8 @@ def create_openclaw_job(
         "status": "running",
         "created_at": time.time(),
         "elapsed_seconds": 0,
-        "category": "OpenClaw Asistan",
-        "canned_result": "OpenClaw çağrısı başlatıldı, sonuç bekleniyor.",
+        "category": user_copy(locale, "default_category"),
+        "canned_result": user_copy(locale, "openclaw_waiting"),
         "watch_summary": summary_text,
         "requires_phone_handoff": initial_requires_phone_handoff,
         "phone_report": phone_report,
@@ -1100,7 +1217,7 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(b"""<!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1115,13 +1232,13 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <h1>Watch Ceviz Shortcuts backend</h1>
-  <p class="ok">Backend calisiyor.</p>
-  <p>Bu sayfa sadece durum ve kurulum icin. Shortcut komutlari tarayicidan GET ile degil, POST istegiyle gonderilir.</p>
+  <p class="ok">The backend is running.</p>
+  <p>This page is for status and setup only. Shortcut commands are sent as POST requests, not browser GET requests.</p>
   <h2>Shortcut URL</h2>
   <pre>POST /api/v1/shortcuts/command
 Content-Type: application/json
 
-{"text":"bugunku isleri ozetle","wait_seconds":25}</pre>
+{"text":"summarize today's jobs","wait_seconds":25,"locale":"en-US"}</pre>
   <h2>Poll URL</h2>
   <pre>GET /api/v1/shortcuts/jobs/&lt;job_id&gt;</pre>
   <h2>Health</h2>
@@ -1174,14 +1291,15 @@ Content-Type: application/json
                 job = {
                     "id": job_id,
                     "name": "Unknown Task",
+                    "locale": "en",
                     "status": "completed",
                     "created_at": now - 30,
                     "elapsed_seconds": 30,
-                    "category": "Bilinmeyen",
-                    "canned_result": "Detay bulunamadı.",
-                    "watch_summary": "Görev bulunamadı.",
+                    "category": user_copy("en", "unknown_category"),
+                    "canned_result": user_copy("en", "detail_missing"),
+                    "watch_summary": user_copy("en", "task_missing"),
                     "requires_phone_handoff": True,
-                    "phone_report": "Detay bulunamadı.",
+                    "phone_report": user_copy("en", "detail_missing"),
                     "transcript": "",
                     "stt_source": "unknown",
                     "stt_error": "",
@@ -1232,7 +1350,7 @@ Content-Type: application/json
                 self.wfile.write(json.dumps({
                     "error": "Job not found",
                     "job_id": job_id,
-                    "shortcut_text": f"Job {job_id} bulunamadı.",
+                    "shortcut_text": f"Job {job_id} was not found.",
                 }).encode("utf-8"))
                 return
 
@@ -1285,7 +1403,7 @@ Content-Type: application/json
                 if invocation and invocation["process"].poll() is None:
                     invocation["process"].terminate()
                     job["status"] = "failed"
-                    job["canned_result"] = "Görev kullanıcı tarafından iptal edildi."
+                    job["canned_result"] = user_copy(job, "job_cancelled")
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1296,7 +1414,7 @@ Content-Type: application/json
             job_id = path.split("/")[4]
             job = jobs_db.get(job_id)
             if not job:
-                summary = f"Job {job_id} bulunamadı."
+                summary = f"Job {job_id} was not found."
                 requires_phone_handoff = True
                 handoff_url = None
                 deep_link = None
@@ -1326,14 +1444,16 @@ Content-Type: application/json
                 "next_actions": next_actions,
                 "report_meta": report_meta if job else build_report_meta({
                     "status": "failed",
-                    "category": "OpenClaw Asistan",
+                    "locale": "en",
+                    "category": user_copy("en", "default_category"),
                     "watch_summary": summary,
                     "phone_report": summary,
                     "name": "Unknown Task"
                 }),
                 "preview_sections": preview_sections if job else build_preview_sections({
                     "status": "failed",
-                    "category": "OpenClaw Asistan",
+                    "locale": "en",
+                    "category": user_copy("en", "default_category"),
                     "watch_summary": summary,
                     "phone_report": summary,
                 }),
@@ -1374,12 +1494,13 @@ Content-Type: application/json
 
             transcript, client_timestamp = parse_shortcut_text(payload)
             if not transcript:
+                request_locale = str(payload.get("locale") or "") if isinstance(payload, dict) else ""
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     "error": "Missing shortcut text",
-                    "shortcut_text": "Komut metni boş. Kısayolda dikte veya metin alanını backend'e gönder.",
+                    "shortcut_text": user_copy(request_locale, "shortcut_missing"),
                 }).encode("utf-8"))
                 return
 

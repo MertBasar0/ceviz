@@ -2,9 +2,14 @@
 
 [![Ceviz Watch App Build](https://github.com/MertBasar0/ceviz/actions/workflows/ceviz-watch-build.yml/badge.svg)](https://github.com/MertBasar0/ceviz/actions/workflows/ceviz-watch-build.yml)
 
-Ceviz is an Apple Watch and iPhone control surface for OpenClaw. Speak a short
-command on your watch, run the job through the OpenClaw installation on your own
-machine, read the summary on your wrist, and open the full report on iPhone.
+Ceviz is the local-first, Watch-first voice command and task-completion layer
+for OpenClaw. Speak a short command on your watch, run the job through the
+OpenClaw installation on your own machine, read the summary on your wrist, and
+open the full report on iPhone only when you need the detail.
+
+Ceviz is deliberately focused on this wrist-first workflow; it is not a
+replacement for the full OpenClaw mobile client. See [STRATEGY.md](STRATEGY.md)
+for the product principles and near-term roadmap.
 
 ## Open beta
 
@@ -15,6 +20,12 @@ machine, read the summary on your wrist, and open the full report on iPhone.
 You need an iPhone, an Apple Watch, and OpenClaw running on a machine you
 control. Ceviz operates no hosted command backend; the app connects to the
 backend you install on your own machine over your private network.
+
+Background completion notifications use a minimal hosted relay to reach Apple
+Push Notification service. The relay receives the notification title, concise
+summary, and routing identifiers—not voice audio, the full transcript/report,
+or the backend token. Read the complete [security and data-flow
+model](docs/security-model.md) before pairing a production OpenClaw setup.
 
 ## Requirements
 
@@ -48,6 +59,17 @@ The installer:
 
 The first voice command may take a few minutes while the local Whisper model is
 downloaded. Later commands reuse the downloaded model.
+
+After installation—or whenever pairing or delivery fails—run the read-only
+diagnostic report:
+
+```bash
+bash deploy/doctor.sh
+```
+
+It checks the OpenClaw CLI, Python environment, local Whisper dependencies,
+token permissions, backend service, authenticated local endpoint, and Tailscale
+status without printing credentials or command contents.
 
 ## Choose a connection
 

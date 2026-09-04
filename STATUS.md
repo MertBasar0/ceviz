@@ -1,6 +1,6 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **25 Ağustos 2026**
+Son güncelleme: **4 Eylül 2026**
 
 ## Güncel sürüm
 
@@ -105,23 +105,82 @@ Beta 2 build'i `1787684689` olmuştur.
 
 ## Açık beta için kabul edilen doğrulama riski
 
-Bağımsız bir dış kullanıcının dokümantasyonu hiç yardım almadan tamamladığı
-onboarding testi **gerçekte yapılmış sayılmıyor**. Elde uygun cihaz ve test
-kullanıcısı olmadığı için bu, sürümü durduran bir kapı olmaktan çıkarıldı.
-İzole temiz ortamda aynı cihaz üzerinde yapılan teknik onboarding, açık betaya
-çıkmak için proxy doğrulama olarak kabul edildi. İlk gerçek dış kullanıcı akışı
-lansman sonrası izlenecek, sorun çıkarsa hızlı düzeltme yapılacak.
+İlk gerçek dış kullanıcı Ceviz'i kurup yerel Whisper transkripsiyonu ve Watch
+yanıtı dahil gerçek akışa ulaştı. Böylece dış kurulumun çalışabildiği artık
+gerçek kullanıcıyla doğrulandı. Ancak kullanıcının dokümantasyonu baştan sona
+hiç yardım almadan nasıl izlediği gözlemlenmediği için süre ve sürtünme noktaları
+henüz ölçülmüş sayılmıyor. Bir sonraki onboarding bu dört noktada izlenecek:
+kurulum, eşleşme, ilk komut ve ilk tamamlanan sonuç.
 
 Benzer şekilde macOS ve bare Linux yolları gerçek donanımda doğrulanmadı.
 Bunlar “geçti” olarak raporlanmıyor; açık beta geri bildirimiyle kapatılacak
 bilinen kapsam boşluklarıdır. WSL2 şu an en güçlü doğrulanmış kurulum yoludur.
 
+## İlk dış kullanıcı geri bildirimi
+
+OpenClaw Discord `showcase` paylaşımından sonra ilk dış kullanıcı uygulamayı
+denedi. Yerel Whisper transkripsiyonu, yanıtların Watch'a dönmesi ve görsel
+tasarım olumlu bulundu. Dört ürün sinyali kaydedildi:
+
+- Saat kadranından erişilecek ek bir düğme/komplikasyon isteniyor.
+- Ayrı backend kurulumu güven ve bakım riski gibi algılanıyor.
+- İngilizce kullanım sırasında Türkçe metin sızıntıları görülüyor.
+- Resmî OpenClaw iOS/Watch uygulamasıyla ürün sınırının daha açık anlatılması
+  gerekiyor.
+
+Bu geri bildirim sonucunda Ceviz'in konumu netleştirildi: Ceviz genel amaçlı
+bir OpenClaw mobil istemcisi değil, **local-first ve Watch-first sesli görev ve
+sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
+[`STRATEGY.md`](STRATEGY.md) içinde tutuluyor.
+
+## Beta 3 çalışma durumu
+
+- Strateji manifesti ve resmî OpenClaw mobil istemcisinden ayrışan ürün sınırı
+  yazıldı.
+- İngilizce cihazlarda raporu yanlışlıkla Türkçeye zorlayan backend talimatı,
+  Türkçe fallback metinleri, push başlıkları ve sabit izin açıklamaları
+  locale-aware hale getirildi.
+- İngilizce/Türkçe katalog anahtar eşitliği ve temel backend fallback'leri için
+  otomatik testler eklendi. Yerel backend/contract/localization paketi
+  **40/40** geçti.
+- Secretsız, salt okunur `bash deploy/doctor.sh` tanılaması eklendi; kurulum ve
+  CI akışına bağlandı. Bash sözdizimi doğrulandı.
+- Ayrı backend'in gerekçesi, yetki sınırı, kaldırma adımları ve gerçek veri
+  akışı `docs/security-model.md` içinde açıklandı.
+- Gizlilik incelemesinde tamamlanma başlığı ve kısa Watch özetinin varsayılan
+  Cloudflare relay üzerinden APNs'e geçtiği doğrulandı. Önceki “hiçbir sunucu
+  içerik almaz” ifadesi doğru değildi; repo ve ürün sitesi metinleri gerçek
+  akışı açıklayacak biçimde düzeltildi. Değişiklikler henüz canlıya
+  yayımlanmadı.
+
+Beta 3 henüz build edilmedi veya TestFlight'a yüklenmedi. Önce macOS CI build
+doğrulaması ve güncellenen gizlilik sayfasının yayını tamamlanacak.
+
 ## Sıradaki işler
 
-1. Discord, X ve LinkedIn için açık beta duyurularını yayımla.
-2. Public TestFlight linki, ilk dış kurulumlar ve bildirim-sonuç akışı için
-   geri bildirimleri izle.
-3. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
+### Beta 3 — güven ve onboarding
+
+1. İngilizce arayüzde kalan Türkçe metinleri ve backend fallback çıktılarını
+   temizle; iki dilin anahtar eşitliğini otomatik testle koru.
+2. OpenClaw, yerel Whisper, servis, kimlik doğrulama, ağ ve eşleşme
+   gereksinimlerini secretsız raporlayan `Ceviz Doctor` komutunu ekle.
+3. Backend'in neden gerekli olduğunu, veri akışını, yetki sınırını ve tamamen
+   kaldırma adımlarını kurulum sayfası ile README'de açıkça anlat.
+4. Bu üç değişikliği test edip Beta 3 TestFlight build'i olarak yayımla ve ilk
+   dış kullanıcıdan yeniden doğrulama iste.
+
+### Beta 4 adayı — bilekten en hızlı erişim
+
+5. Doğrudan ses yakalama ekranını açan Watch komplikasyonu/widget'ı geliştir.
+6. Farklı Watch boyutunda ve bağımsız kurulumda ilk komut akışını doğrula.
+
+### Büyüme ve kapsam doğrulaması
+
+7. Public TestFlight linkinde kurulum, eşleşme, ilk komut ve ilk tamamlanan
+   sonuç noktalarını ayrı ayrı izle.
+8. X hesabı olmadığı için kısa vadede OpenClaw Discord, ilgili geliştirici
+   toplulukları ve kişisel LinkedIn üzerinden odaklı duyuru yap.
+9. Uygun donanım erişilebilir olduğunda macOS ve bare Linux kurulumlarını ayrıca
    doğrula; sonuçları bu dosyaya ekle.
 
 ## Güvenlik ve yerel artefaktlar

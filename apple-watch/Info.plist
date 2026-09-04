@@ -21,7 +21,7 @@
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Ceviz, sesli komutlarını kaydetmek için mikrofonu kullanır.</string>
+  <string>Ceviz uses the microphone only to record voice commands you start.</string>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsArbitraryLoads</key>

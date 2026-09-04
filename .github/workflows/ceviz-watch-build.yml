@@ -33,6 +33,11 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Validate installer and Doctor scripts
+        run: |
+          bash -n deploy/install.sh
+          bash -n deploy/doctor.sh
+
       - name: Select Xcode
         run: |
           set -euo pipefail

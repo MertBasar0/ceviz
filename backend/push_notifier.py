@@ -118,12 +118,22 @@ class PushNotifier:
         if not registration or not devices or job.get("created_at", 0) < eligible_since:
             return False
 
-        summary = str(job.get("watch_summary") or job.get("canned_result") or "G\u00f6rev tamamland\u0131.")
+        locale = str(job.get("locale") or "").replace("_", "-").split("-")[0].lower()
+        turkish = locale == "tr"
+        summary = str(
+            job.get("watch_summary")
+            or job.get("canned_result")
+            or ("Görev tamamlandı." if turkish else "Job completed.")
+        )
         if len(summary) > 180:
             summary = summary[:177].rstrip() + "\u2026"
         base_payload = {
             "jobId": job["id"],
-            "title": "Ceviz \u00b7 G\u00f6rev tamamland\u0131" if job.get("status") == "completed" else "Ceviz \u00b7 G\u00f6rev tamamlanamad\u0131",
+            "title": (
+                ("Ceviz · Görev tamamlandı" if turkish else "Ceviz · Job completed")
+                if job.get("status") == "completed"
+                else ("Ceviz · Görev tamamlanamadı" if turkish else "Ceviz · Job failed")
+            ),
             "message": summary,
             "deepLink": f"ceviz://job/{job['id']}",
             "status": job.get("status", ""),

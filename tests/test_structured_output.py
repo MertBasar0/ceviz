@@ -73,7 +73,7 @@ PR #42 için merge akışına geç.
 </watch_ceviz_meta>
         """.strip()
 
-        result = self.client.extract_result(self._write_log(text))
+        result = self.client.extract_result(self._write_log(text), locale="tr-TR")
 
         self.assertEqual(result.category, "Yazılım / Kod")
         self.assertEqual(result.watch_summary, "PR #42 hazır, telefonda son kontrol yap.")
@@ -91,7 +91,7 @@ Toplantı başlığı net ama katılımcılar belirsiz.
 Takvim etkinliğini telefonda açıp katılımcıları kontrol et.
         """.strip()
 
-        result = self.client.extract_result(self._write_log(text))
+        result = self.client.extract_result(self._write_log(text), locale="tr-TR")
 
         self.assertEqual(result.category, "Takvim / Program")
         self.assertIn("Takvim notu hazır.", result.phone_report)
@@ -103,6 +103,7 @@ Takvim etkinliğini telefonda açıp katılımcıları kontrol et.
 class ReportBuilderTests(unittest.TestCase):
     def test_build_report_meta_normalizes_core_fields(self) -> None:
         job = {
+            "locale": "tr-TR",
             "name": "Code Review",
             "status": "completed",
             "category": "Yazılım / Kod",
@@ -127,6 +128,7 @@ class ReportBuilderTests(unittest.TestCase):
 
     def test_build_report_sections_excludes_category_and_uses_completed_fallbacks(self) -> None:
         job = {
+            "locale": "tr-TR",
             "name": "Code Review",
             "status": "completed",
             "elapsed_seconds": 42,
@@ -149,6 +151,7 @@ class ReportBuilderTests(unittest.TestCase):
 
     def test_build_report_sections_failed_job_uses_failure_fallbacks(self) -> None:
         job = {
+            "locale": "tr-TR",
             "name": "Outlook Triage",
             "status": "failed",
             "elapsed_seconds": 17,

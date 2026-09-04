@@ -121,9 +121,9 @@ class OpenClawClient:
         except FileNotFoundError as exc:
             log_file.close()
             raise OpenClawUnavailable(
-                "OpenClaw CLI bulunamadı ('openclaw' PATH'te değil). "
-                "Watch Ceviz backend'i OpenClaw'ın kurulu olduğu makinede çalışmalı; "
-                "servis dosyasındaki PATH değişkeninin openclaw'ı içerdiğinden emin ol."
+                "OpenClaw CLI was not found on PATH. The Ceviz backend must run "
+                "on the machine where OpenClaw is installed, and the service PATH "
+                "must include the OpenClaw executable."
             ) from exc
         log_file.close()
         return InvocationHandle(
@@ -134,7 +134,7 @@ class OpenClawClient:
             prompt=prompt,
         )
 
-    def extract_result(self, log_path: str) -> TaskResult:
+    def extract_result(self, log_path: str, locale: str = "") -> TaskResult:
         raw_output = Path(log_path).read_text(encoding="utf-8")
         parsed = json.loads(raw_output)
         payloads = parsed.get("result", {}).get("payloads", [])
@@ -144,21 +144,25 @@ class OpenClawClient:
             if payload.get("text")
         ).strip()
         if not response_text:
-            response_text = "OpenClaw çağrısı tamamlandı ama metin yanıtı dönmedi."
+            response_text = (
+                "OpenClaw çağrısı tamamlandı ama metin yanıtı dönmedi."
+                if self._locale_code(locale) == "tr"
+                else "OpenClaw completed the command but returned no text response."
+            )
 
         structured = self._extract_structured_payload(response_text)
         clean_text = structured["phone_report"] or response_text
 
         return TaskResult(
-            category=structured["category"] or self._categorize_text(clean_text),
+            category=structured["category"] or self._categorize_text(clean_text, locale),
             canned_result=clean_text,
-            watch_summary=structured["watch_summary"] or self._build_watch_summary(clean_text),
+            watch_summary=structured["watch_summary"] or self._build_watch_summary(clean_text, locale=locale),
             requires_phone_handoff=(
                 structured["requires_phone_handoff"]
                 if structured["requires_phone_handoff"] is not None
                 else self._requires_phone_handoff(clean_text)
             ),
-            phone_report=self._build_phone_report(clean_text),
+            phone_report=self._build_phone_report(clean_text, locale),
             next_action=structured["next_action"] or self._extract_next_action(clean_text),
             outcome=structured.get("outcome"),
             next_action_actor=structured.get("next_action_actor"),
@@ -248,7 +252,7 @@ class OpenClawClient:
 
         return lines
 
-    def collect_background_activity(self, started_at: float, log_path: str) -> list[str]:
+    def collect_background_activity(self, started_at: float, log_path: str, locale: str = "") -> list[str]:
         """Is sirasinda arkada ne oldu: kullanilan araclar + alt ajanlar.
 
         Rapora "ALT AJANLAR & ARACLAR" bolumu olarak girer. Veri iki
@@ -264,8 +268,12 @@ class OpenClawClient:
             if tools:
                 calls = summary.get("calls", 0)
                 failures = summary.get("failures", 0)
-                fail_note = f", {failures} hata" if failures else ""
-                lines.append(f"Araçlar: {', '.join(tools)} ({calls} çağrı{fail_note})")
+                if self._locale_code(locale) == "tr":
+                    fail_note = f", {failures} hata" if failures else ""
+                    lines.append(f"Araçlar: {', '.join(tools)} ({calls} çağrı{fail_note})")
+                else:
+                    fail_note = f", {failures} failed" if failures else ""
+                    lines.append(f"Tools: {', '.join(tools)} ({calls} calls{fail_note})")
         except Exception:
             pass
 
@@ -290,7 +298,8 @@ class OpenClawClient:
                 if not isinstance(updated, (int, float)) or updated < window_start_ms:
                     continue
                 title = info.get("displayName") or info.get("title") or info.get("label") or key.split(":")[-1]
-                lines.append(f"Alt ajan/oturum: {str(title)[:90]}")
+                prefix = "Alt ajan/oturum" if self._locale_code(locale) == "tr" else "Subagent/session"
+                lines.append(f"{prefix}: {str(title)[:90]}")
         except Exception:
             pass
 
@@ -316,9 +325,13 @@ class OpenClawClient:
         "pt": ("Português", "IMPORTANTE: escreva toda a resposta em português."),
     }
 
+    @staticmethod
+    def _locale_code(locale: str) -> str:
+        return str(locale or "").strip().replace("_", "-").split("-")[0].lower() or "en"
+
     def _language_block(self, payload: dict[str, Any]) -> str:
         locale = str(payload.get("locale") or "").strip()
-        code = locale.replace("_", "-").split("-")[0].lower() if locale else "tr"
+        code = self._locale_code(locale)
         name, emphatic = self.LANGUAGE_DIRECTIVES.get(
             code, (locale or code, f"IMPORTANT: Write your entire answer in the user's language ({locale or code}).")
         )
@@ -383,7 +396,7 @@ class OpenClawClient:
             "'önceki rapora işlendi' gibi bağlama atıf yapan opak ifadeler kullanma. "
             "Yanıtı iki blok halinde üret ve marker metinlerini aynen koru.\n"
             f"1) İlk blok tam olarak {self.REPORT_START} ile başlayıp {self.REPORT_END} ile bitsin. "
-            "Bu blokta telefonda gösterilecek doğal Türkçe rapor olsun. Raporda şu sırayı kullan: "
+            "Bu blokta telefonda gösterilecek raporu yukarıdaki ÇIKTI DİLİ talimatına göre yaz. Raporda şu sırayı kullan: "
             "1. Kısa durum, 2. Ne anlaşıldı / sınırlama, 3. Önerilen sonraki adım.\n"
             f"2) İkinci blok tam olarak {self.META_START} ile başlayıp {self.META_END} ile bitsin. "
             "Bu blokta tek satır geçerli JSON nesnesi ver. Şema: "
@@ -466,21 +479,26 @@ class OpenClawClient:
                 return False
         return None
 
-    def _categorize_text(self, text: str) -> str:
+    def _categorize_text(self, text: str, locale: str = "") -> str:
         text_lower = text.lower()
+        english = self._locale_code(locale) != "tr"
         if any(word in text_lower for word in ["mail", "e-posta", "posta"]):
-            return "E-posta İşlemleri"
+            return "Email" if english else "E-posta İşlemleri"
         if any(word in text_lower for word in ["takvim", "calendar", "meeting", "toplantı"]):
-            return "Takvim / Program"
+            return "Calendar / Schedule" if english else "Takvim / Program"
         if any(word in text_lower for word in ["kod", "git", "pull request", "pr", "review"]):
-            return "Yazılım / Kod"
-        return "OpenClaw Asistan"
+            return "Software / Code" if english else "Yazılım / Kod"
+        return "OpenClaw Assistant" if english else "OpenClaw Asistan"
 
-    def _build_watch_summary(self, text: str, max_len: int = 200) -> str:
+    def _build_watch_summary(self, text: str, max_len: int = 200, locale: str = "") -> str:
         normalized = " ".join(part.strip() for part in text.splitlines() if part.strip())
         normalized = re.sub(r"\b[123]\s*[\.)]\s*", "", normalized).strip()
         if not normalized:
-            return "Sonuç üretildi ama özet metni boş döndü."
+            return (
+                "Sonuç üretildi ama özet metni boş döndü."
+                if self._locale_code(locale) == "tr"
+                else "The result was produced, but its summary was empty."
+            )
 
         preferred_chunks = []
         for separator in [". ", "\n", "; "]:
@@ -510,8 +528,12 @@ class OpenClawClient:
         has_dense_guidance = any(keyword in text_lower for keyword in ["adım", "next", "sonraki adım", "checklist", "liste"]) and len(stripped) > 180
         return has_code_like_content or has_list_like_content or has_many_lines or is_long or has_dense_guidance
 
-    def _build_phone_report(self, text: str) -> str:
-        return text.strip() or "OpenClaw çağrısı tamamlandı ama ayrıntılı rapor boş döndü."
+    def _build_phone_report(self, text: str, locale: str = "") -> str:
+        return text.strip() or (
+            "OpenClaw çağrısı tamamlandı ama ayrıntılı rapor boş döndü."
+            if self._locale_code(locale) == "tr"
+            else "OpenClaw completed the command, but the detailed report was empty."
+        )
 
     def _extract_next_action(self, text: str) -> str | None:
         stripped = text.strip()

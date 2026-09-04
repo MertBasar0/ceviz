@@ -207,3 +207,4 @@ print("  Token         :", token)
 print("  Pairing URI   :", uri)
 PYEOF
 echo "======================================================================"
+echo "  Tanilama icin: bash deploy/doctor.sh"

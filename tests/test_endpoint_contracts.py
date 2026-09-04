@@ -210,6 +210,7 @@ class EndpointContractTests(unittest.TestCase):
     def test_summarize_response_adds_handoff_url_for_running_job_with_phone_handoff(self) -> None:
         main.jobs_db["job-summary-handoff"] = {
             "id": "job-summary-handoff",
+            "locale": "tr-TR",
             "name": "Noisy Voice Command",
             "status": "running",
             "created_at": main.time.time(),
@@ -296,7 +297,7 @@ class EndpointContractTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(main.validate_payload(payload, main.load_contract("job-summary-response.schema.json")), [])
         self.assertEqual(payload["status"], "missing")
-        self.assertEqual(payload["summary"], "Job job-missing bulunamadı.")
+        self.assertEqual(payload["summary"], "Job job-missing was not found.")
         self.assertTrue(payload["requires_phone_handoff"])
         self.assertNotIn("handoff_url", payload)
         self.assertEqual(payload["transcript"], "")

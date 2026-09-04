@@ -47,9 +47,9 @@
   </dict>
 
   <key>NSMicrophoneUsageDescription</key>
-  <string>Ceviz, sesli komutlarını kaydetmek için mikrofonu kullanır.</string>
+  <string>Ceviz uses the microphone only to record voice commands you start.</string>
   <key>NSCameraUsageDescription</key>
-  <string>Ceviz, backend eşleşme QR kodunu okumak için kamerayı kullanır.</string>
+  <string>Ceviz uses the camera only to scan your backend pairing QR code.</string>
 
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>

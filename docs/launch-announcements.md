@@ -53,10 +53,12 @@ edilmiş risk olarak kaydedildi.
 > tools ran, and the next action worth taking. Follow-ups stay in the same
 > conversation, so "now do it for staging" just works.
 >
-> Everything stays on your side: the backend runs next to your OpenClaw install,
+> Command processing stays on your side: the backend runs next to your OpenClaw install,
 > reachable only over your own private network (Tailscale works well), and speech
 > is transcribed locally with Whisper by default — no cloud STT unless you
-> configure one yourself.
+> configure one yourself. A minimal relay forwards the concise completion
+> notification to APNs; it never receives voice audio, the full transcript or
+> report, or your backend token.
 >
 > **Open beta on TestFlight:** https://testflight.apple.com/join/nEdn2Np2
 > **What it is / how it works:** https://basarlabs.com.tr/ceviz/
@@ -89,8 +91,10 @@ edilmiş risk olarak kaydedildi.
 > after a backend interruption, and every screen. Beta 2 was also verified on a
 > physical iPhone + Apple Watch: the notification arrived without opening Ceviz,
 > tapping it opened the completed result, and Home reflected the terminal state.
-> Independent onboarding and the macOS/bare-Linux paths still need real-world
-> feedback, so if something breaks, tell me and I'll turn it around quickly.
+> One external tester has now reached the real local-Whisper and Watch-response
+> flow. A fully observed, timed onboarding and the macOS/bare-Linux paths still
+> need broader real-world feedback, so if something breaks, tell me and I'll
+> turn it around quickly.
 
 **Notlar:**
 - İlk mesajda ekran görüntüsü/kısa video paylaşmak dönüşümü ciddi artırır:
@@ -106,7 +110,8 @@ edilmiş risk olarak kaydedildi.
 >
 > Press, speak: "is prod healthy?" — the job runs on my own machine, the summary
 > comes back to my wrist, and the full report waits on my phone. Speech is
-> transcribed locally; nothing goes to anyone else's server.
+> transcribed locally. A minimal relay only forwards the completion notification
+> to APNs; audio and full reports stay on my side.
 >
 > Open beta 👇
 > https://testflight.apple.com/join/nEdn2Np2
@@ -128,8 +133,9 @@ edilmiş risk olarak kaydedildi.
 > makinenizde çalışıyor ve konuşma varsayılan olarak yine kendi makinenizde
 > (Whisper ile) yazıya çevriliyor. Farklı ağlardan erişim için Tailscale'i, WSL2
 > ve aynı Wi-Fi senaryosu için Ceviz'in yerel Windows relay'ini ya da kendi güvenli
-> tunnel altyapınızı seçebiliyorsunuz. Hiçbir içerik bizim sunucumuza uğramıyor —
-> çünkü öyle bir sunucu yok.
+> tunnel altyapınızı seçebiliyorsunuz. Komut işleme için bize ait bir backend
+> yok. Yalnızca kısa tamamlanma bildirimi APNs'e ulaşmak için minimal relay'den
+> geçiyor; ses kaydı, tam transkript/rapor ve backend token'ı relay'e gitmiyor.
 >
 > watchOS + iOS uygulaması SwiftUI ile, backend Python; dağıtım tek komutluk bir
 > kurulum scripti, yönlendirmeli bağlantı seçimi ve QR ile eşleşme.
@@ -156,4 +162,5 @@ metnindeki linkleri oraya taşımayı düşünebilirsin (acp-net duyurusunda old
 - [x] Ekran görüntüleri hazır (5 temiz 1320×2868 JPEG; Actions artefaktı)
 - [x] Beta 2 build'i fiziksel iPhone + Apple Watch'ta bildirimden sonuca kadar doğrulandı
 - [x] Beta 2 build'i public external `Beta` grubuna eklendi (`BETA_APPROVED`)
-- [ ] Beta'ya ilk gerçek dış kullanıcı katıldığında kurulum akışını izle (lansman sonrası, non-blocking)
+- [x] İlk gerçek dış kullanıcı yerel Whisper ve Watch yanıtıyla gerçek akışa ulaştı
+- [ ] Sonraki bağımsız onboarding'de kurulum, eşleşme, ilk komut ve ilk sonucu ayrı ayrı ölç

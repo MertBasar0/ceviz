@@ -4,7 +4,7 @@ Bu dosyadaki blokları App Store Connect'e olduğu gibi yapıştırabilirsin.
 İngilizce olanlar birincil (App Review İngilizce okur), Türkçe karşılıkları
 `Türkçe (Turkey)` yerelleştirmesi için.
 
-## Metadata denetimi — 23 Ağustos 2026
+## Metadata denetimi — 4 Eylül 2026
 
 - Public TestFlight daveti canlı ve uygulamayı **CevizWatch** olarak gösteriyor:
   <https://testflight.apple.com/join/nEdn2Np2>
@@ -16,9 +16,9 @@ Bu dosyadaki blokları App Store Connect'e olduğu gibi yapıştırabilirsin.
   doğrulandı: <https://github.com/MertBasar0/openclaw/actions/runs/32542745696>
 - Kaynak metadata'sı: görünen ad **Ceviz**, sürüm **2026.6.5**, iOS **16.0+**,
   watchOS **9.0+**, ana dil İngilizce ve Türkçe yerelleştirme.
-- TestFlight build **1787435232**, dış ve public **Beta** grubuna atanmış;
-  App Store Connect'ten **VALID / BETA_APPROVED** olarak tekrar okunmuştur:
-  <https://github.com/MertBasar0/openclaw/actions/runs/32605320929>
+- TestFlight build **1787684689**, dış ve public **Beta** grubuna atanmış;
+  App Store Connect'ten **VALID / IN_BETA_TESTING** olarak tekrar okunmuştur:
+  <https://github.com/MertBasar0/ceviz/actions/runs/32887913998>
 - App Store Connect'in oturum gerektiren alanları (Beta App Description,
   What to Test, Review Notes ve iletişim) bu depo üzerinden okunamaz; aşağıdaki
   kontrol listesinde yalnızca doğrulanabilen alanlar tamamlandı olarak
@@ -28,8 +28,10 @@ Bu dosyadaki blokları App Store Connect'e olduğu gibi yapıştırabilirsin.
 
 ## 1) App Review Information → Notes
 
-> Ceviz is a control surface for OpenClaw, an AI agent that runs on the user's
-> own computer. The Apple Watch app captures a short voice command, the iPhone
+> Ceviz is the local-first, Watch-first voice command and task-completion layer
+> for OpenClaw, an AI agent that runs on the user's own computer. It is not a
+> replacement for the full OpenClaw mobile client. The Apple Watch app captures
+> a short voice command, the iPhone
 > app forwards it to the user's self-hosted backend over their own private
 > network, and the result comes back as a short wrist summary plus a fuller
 > report on the phone.
@@ -146,14 +148,18 @@ App Store Connect için hazırlanmış karşılığıdır.
 
 > ### Ceviz — Privacy Policy
 >
-> Ceviz does not collect, store, or transmit personal data to us. We operate no
-> servers that receive your content.
+> Ceviz has no hosted command-processing backend and contains no analytics or
+> advertising SDKs. A minimal hosted relay forwards completion notifications
+> to Apple Push Notification service (APNs).
 >
 > **What the app sends, and where.** When you record a voice command on your
 > Apple Watch, the audio is passed to the paired iPhone and forwarded to the
 > backend you configured — a server you run on your own machine, reachable only
 > over your own private network. Your voice recordings, transcripts, job results
-> and reports stay between your devices and your machine.
+> and full reports stay between your devices and your machine. Completion
+> notification titles, concise summaries and routing identifiers pass through
+> the relay to APNs; the relay never receives voice audio, the full transcript,
+> the full report, or the backend pairing token.
 >
 > **Speech recognition.** By default, speech is transcribed locally on your own
 > machine. A third-party speech service is used only if you explicitly configure
@@ -169,6 +175,11 @@ App Store Connect için hazırlanmış karşılığıdır.
 >
 > **Analytics.** The app contains no analytics, advertising, or tracking SDKs.
 >
+> **Completion notifications.** The relay stores an APNs device token, bundle
+> identifier, random installation identifier and a hash of its send grant for
+> up to 180 days. Notification payloads are forwarded in real time and are not
+> end-to-end encrypted by Ceviz.
+>
 > **Demo Mode.** With no backend configured, the app shows built-in sample data
 > and makes no network requests for content.
 >
@@ -178,14 +189,18 @@ App Store Connect için hazırlanmış karşılığıdır.
 
 > ### Ceviz — Gizlilik Politikası
 >
-> Ceviz, kişisel verilerinizi toplamaz, saklamaz ve bize iletmez. İçeriğinizi
-> alan herhangi bir sunucu işletmiyoruz.
+> Ceviz barındırılan bir komut işleme backend'i çalıştırmaz ve analitik veya
+> reklam SDK'sı içermez. Küçük bir relay, tamamlanma bildirimlerini Apple Anında
+> İlet Bildirim servisine (APNs) aktarır.
 >
 > **Uygulama ne gönderir, nereye.** Apple Watch'ta bir sesli komut
 > kaydettiğinizde ses, eşli iPhone'a aktarılır ve yapılandırdığınız sunucuya
 > iletilir — bu sunucu kendi makinenizde çalışır ve yalnızca kendi özel ağınızdan
 > erişilebilir. Ses kayıtlarınız, transkriptleriniz, iş sonuçlarınız ve
-> raporlarınız cihazlarınızla makineniz arasında kalır.
+> tam raporlarınız cihazlarınızla makineniz arasında kalır. Tamamlanma bildirimi
+> başlığı, kısa özet ve yönlendirme kimlikleri relay üzerinden APNs'e geçer;
+> relay ses kaydını, tam transkripti, tam raporu veya backend eşleşme token'ını
+> almaz.
 >
 > **Konuşma tanıma.** Varsayılan olarak konuşma kendi makinenizde çözülür.
 > Üçüncü taraf bir konuşma servisi yalnızca kendi API anahtarınızla açıkça
@@ -201,6 +216,11 @@ App Store Connect için hazırlanmış karşılığıdır.
 >
 > **Analitik.** Uygulamada analitik, reklam veya izleme SDK'sı yoktur.
 >
+> **Tamamlanma bildirimleri.** Relay; APNs cihaz token'ını, bundle kimliğini,
+> rastgele kurulum kimliğini ve gönderim yetkisinin hash'ini en fazla 180 gün
+> saklar. Bildirim payload'ları gerçek zamanlı aktarılır ve Ceviz tarafından
+> uçtan uca şifrelenmez.
+>
 > **Demo Modu.** Yapılandırılmış bir sunucu yokken uygulama yerleşik örnek
 > veriyi gösterir ve içerik için ağ isteği yapmaz.
 >
@@ -208,15 +228,24 @@ App Store Connect için hazırlanmış karşılığıdır.
 
 ---
 
-## 5) App Privacy (App Store Connect anketi) — önerilen cevaplar
+## 5) App Privacy (App Store Connect anketi) — düzeltilmiş cevaplar
 
-- **Data Collection:** "No, we do not collect data from this app."
-  Gerekçe: uygulama veriyi yalnızca kullanıcının kendi sunucusuna iletir;
-  geliştirici olarak hiçbir veri toplamıyoruz ve üçüncü taraf SDK yok.
+- **Data Collection:** "Yes, we collect data from this app."
+- **Identifiers → Device ID:** collected for **App Functionality**, linked to
+  the user's device, and **not used for tracking**.
+- Gerekçe: varsayılan bildirim relay'i APNs cihaz token'ını ve rastgele kurulum
+  kimliğini 180 güne kadar saklıyor. Apple'ın “collect” tanımı gerçek zamanlı
+  isteği tamamlamak için gerekenden daha uzun süre erişilebilen verileri
+  kapsıyor.
+- Bildirim başlığı ve kısa özet relay üzerinden yalnızca APNs'e iletiliyor,
+  relay KV'sine kaydedilmiyor. Mevcut uygulamada bunları ayrıca “Other User
+  Content” olarak kalıcı toplanan veri şeklinde işaretlemek gerekmiyor; ancak
+  veri akışı gizlilik politikasında açıkça belirtiliyor.
+- **Tracking:** No.
 
-Apple ses/kamera izinlerini ayrıca sorabilir; ikisi de kullanıcı tarafından
-başlatılan işlevler için ve cihaz dışına yalnızca kullanıcının kendi sunucusuna
-gider.
+Ses kaydı, tam transkript ve tam rapor Ceviz relay'ine gitmez. Kullanıcı kendi
+OpenAI STT anahtarını yapılandırırsa ses verisinin o hizmete gönderilmesi,
+kullanıcının kendi seçtiği backend yapılandırmasıdır.
 
 ---
 

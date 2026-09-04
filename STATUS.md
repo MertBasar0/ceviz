@@ -4,21 +4,18 @@ Son güncelleme: **4 Eylül 2026**
 
 ## Güncel sürüm
 
-- Sürüm: **Ceviz 2026.6.5 Beta 2**
-- TestFlight build: **1787684689**
+- Sürüm: **Ceviz 2026.6.5 Beta 3**
+- TestFlight build: **1788552567**
 - Dış TestFlight grubu: **Beta**
 - Public link: <https://testflight.apple.com/join/nEdn2Np2>
-- App Store Connect durumu: **VALID / IN_BETA_TESTING**
+- App Store Connect durumu: **yükleme başarılı; Apple işleme ve dış grup
+  doğrulaması sürüyor**
 - Build ve upload doğrulaması:
-  <https://github.com/MertBasar0/ceviz/actions/runs/32887415177>
-- Dış grup dağıtım doğrulaması:
-  <https://github.com/MertBasar0/ceviz/actions/runs/32887913998>
-- GitHub prerelease:
-  <https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.2>
+  <https://github.com/MertBasar0/ceviz/actions/runs/33914678643>
 
-Build yalnızca App Store Connect'e yüklenmiş değildir; dış `Beta` grubuna
-atanmış, internal ve external durumu `IN_BETA_TESTING` olarak okunmuş ve public
-TestFlight linkinden erişilebilir olduğu doğrulanmıştır.
+Beta 3 imzalı iOS/watchOS arşivi üretildi ve App Store Connect'e başarıyla
+ulaştı. Dış `Beta` grubuna atama ve `IN_BETA_TESTING` doğrulaması Apple'ın build
+işlemesi tamamlandıktan sonra ayrı dağıtım çalışmasıyla kaydedilecektir.
 
 ## Bağımsız repo geçişi
 
@@ -150,11 +147,15 @@ sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
 - Gizlilik incelemesinde tamamlanma başlığı ve kısa Watch özetinin varsayılan
   Cloudflare relay üzerinden APNs'e geçtiği doğrulandı. Önceki “hiçbir sunucu
   içerik almaz” ifadesi doğru değildi; repo ve ürün sitesi metinleri gerçek
-  akışı açıklayacak biçimde düzeltildi. Değişiklikler henüz canlıya
-  yayımlanmadı.
+  akışı açıklayacak biçimde düzeltildi. Ürün ve gizlilik sayfaları canlıda
+  doğrulandı:
+  <https://github.com/MertBasar0/basarlabs-site/actions/runs/33914727508>.
+- Beta 3 build `1788552567`, macOS CI'da imzalı iOS/watchOS arşivi olarak
+  üretildi ve TestFlight'a başarıyla yüklendi:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33914678643>.
 
-Beta 3 henüz build edilmedi veya TestFlight'a yüklenmedi. Önce macOS CI build
-doğrulaması ve güncellenen gizlilik sayfasının yayını tamamlanacak.
+Apple'ın build işlemesi, dış `Beta` grubuna atama, GitHub prerelease ve App Store
+gizlilik yanıtlarının kaydı bu yayın adımında tamamlanacaktır.
 
 ## Sıradaki işler
 

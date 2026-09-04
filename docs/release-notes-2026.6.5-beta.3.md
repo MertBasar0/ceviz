@@ -43,8 +43,9 @@ layer for OpenClaw.
 
 - **40/40** backend, contract, push, and localization tests pass locally.
 - Installer and Doctor scripts pass Bash syntax validation.
-- Signed iOS/watchOS archive, TestFlight upload, and physical-device validation
-  are pending for this beta.
+- Signed iOS/watchOS archive and TestFlight upload passed in GitHub Actions.
+  Build `1788552567` was accepted by App Store Connect; external `Beta` group
+  distribution is tracked separately after Apple's processing completes.
 
 ## Links
 

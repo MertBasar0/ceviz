@@ -8,14 +8,17 @@ Son güncelleme: **4 Eylül 2026**
 - TestFlight build: **1788552567**
 - Dış TestFlight grubu: **Beta**
 - Public link: <https://testflight.apple.com/join/nEdn2Np2>
-- App Store Connect durumu: **yükleme başarılı; Apple işleme ve dış grup
-  doğrulaması sürüyor**
+- App Store Connect durumu: **VALID / IN_BETA_TESTING**
 - Build ve upload doğrulaması:
   <https://github.com/MertBasar0/ceviz/actions/runs/33914678643>
+- Dış grup dağıtım doğrulaması:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33915265798>
+- GitHub prerelease:
+  <https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.3>
 
-Beta 3 imzalı iOS/watchOS arşivi üretildi ve App Store Connect'e başarıyla
-ulaştı. Dış `Beta` grubuna atama ve `IN_BETA_TESTING` doğrulaması Apple'ın build
-işlemesi tamamlandıktan sonra ayrı dağıtım çalışmasıyla kaydedilecektir.
+Beta 3 imzalı iOS/watchOS arşivi üretildi, App Store Connect tarafından `VALID`
+olarak işlendi ve public `Beta` grubuna atandı. Internal ve external durumları
+`IN_BETA_TESTING` olarak API üzerinden yeniden okunarak doğrulandı.
 
 ## Bağımsız repo geçişi
 
@@ -154,8 +157,12 @@ sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
   üretildi ve TestFlight'a başarıyla yüklendi:
   <https://github.com/MertBasar0/ceviz/actions/runs/33914678643>.
 
-Apple'ın build işlemesi, dış `Beta` grubuna atama, GitHub prerelease ve App Store
-gizlilik yanıtlarının kaydı bu yayın adımında tamamlanacaktır.
+- Apple'ın build işlemesi tamamlandı; build public dış `Beta` grubuna atanarak
+  internal ve external `IN_BETA_TESTING` durumunda doğrulandı:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33915265798>.
+
+App Store gizlilik yanıtlarının güncellenmesi için App Store Connect web
+oturumu gerekmektedir.
 
 ## Sıradaki işler
 

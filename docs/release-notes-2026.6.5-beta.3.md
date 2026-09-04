@@ -36,7 +36,7 @@ layer for OpenClaw.
   grant for up to 180 days. Notification titles, concise summaries, and routing
   identifiers pass through the relay to APNs and are not end-to-end encrypted
   by Ceviz.
-- The privacy policy and proposed App Store privacy answers now describe this
+- The privacy policy and published App Store privacy answers now describe this
   path accurately.
 
 ## Validation

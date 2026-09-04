@@ -161,8 +161,10 @@ sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
   internal ve external `IN_BETA_TESTING` durumunda doğrulandı:
   <https://github.com/MertBasar0/ceviz/actions/runs/33915265798>.
 
-App Store gizlilik yanıtlarının güncellenmesi için App Store Connect web
-oturumu gerekmektedir.
+- App Store gizlilik beyanı yayımlandı: `Device ID`, `App Functionality`,
+  kullanıcı/cihaz kimliğiyle bağlantılı, takip amacıyla kullanılmıyor. Privacy
+  Policy URL ve User Privacy Choices URL olarak canlı Ceviz gizlilik sayfası
+  kaydedildi.
 
 ## Sıradaki işler
 

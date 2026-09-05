@@ -68,6 +68,30 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   anahtarı da göndermeyen dar düzeltme ve gerçek Fastlane seçenek doğrulaması
   hazır; Apple hesabı veya sertifikalar değiştirilerek aşılmıyor. Yeni gerçek
   seçenek testi Apple ortamında çalıştırılmayı bekliyor.
+- İmzalı cihaz adayı başarıyla üretildi ve yüklendi:
+  **2026.6.5 (1788570416)**, kaynak
+  `523cb988f9e3f9ed3258afbcd46a1609e0055471`.
+  <https://github.com/MertBasar0/ceviz/actions/runs/33934521351>.
+  **68 Python**, **3 relay**, Ruby sınır testi, **gerçek Fastlane seçenek
+  doğrulaması** (üç mod + eski hatayı yeniden üreten negatif kontrol), iki Swift
+  regresyon programı ve native derlemeler geçti. Watch normal açılışı ve yerel
+  imzaları doğrulandı; 40 mm görüntüsü incelendi. Dış URL 115 hatası aday
+  kanıtında başarısız olarak korunuyor; fiziksel WidgetKit dokunuşu yapılmadı.
+  Mevcut iPhone profili kullanıldı, Watch profili yenilendi ve widget profili
+  oluşturuldu. IPA export ve Apple upload **5 Eylül 01:09:33 UTC** başarılı.
+  İndirilen IPA'nın üç gömülü bundle kimliği/sürümü, widget extension point'i
+  ve profil/imza kaynaklarının varlığı kontrol edildi. Bu ZIP incelemesi tek
+  başına kriptografik imza doğrulaması değildir.
+  IPA SHA256: `76138c74cacc330300bdb66b2a96f6e6ee8c139655cb66f1a8f17fd101026cd5`.
+  Apple upload kaydı `f0b61d35-1ff8-4e66-95a6-a297ce2f2d9d`, aynı sürüm/build
+  için **PROCESSING**, hata/uyarı listeleri boş. Normal build listesi henüz
+  kayıt döndürmediğinden indirilebilir iç test erişimi doğrulanmadı.
+  Yeni `buildUploads` endpoint'i dar JWT scope eşleştirmesinde Apple'ın iç
+  `/ac-gateway` yolu nedeniyle 403 verdi. Apple belgelerindeki standart,
+  isteğe bağlı scope'suz 60 saniyelik JWT ile yalnız bu Ceviz build'ine sabit
+  GET isteği yapılarak durum okundu; anahtar rolü/Apple yetkileri değişmedi.
+  Dış dağıtım job'ı atlandı; dağıtım JSON'u yeni build'e çevrilmedi. Fiziksel
+  kontrol öncesi dış Beta dağıtımı yapılmayacak.
 - iPhone İngilizce demo ekran kontrolü **5/5 görsel incelendi**:
   <https://github.com/MertBasar0/ceviz/actions/runs/33929929029>.
   `[NEEDS INPUT]` liste/raporda tutarlı, diğer raporlarda `[DONE]`; bu kanıt

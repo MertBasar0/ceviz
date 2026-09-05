@@ -3,6 +3,11 @@
 Release candidate. Build, external TestFlight availability, and device checks
 must be recorded in `STATUS.md` before this is described as distributed.
 
+Signed candidate **2026.6.5 (1788570416)** has been uploaded to Apple for internal
+device validation. The latest upload audit reports **PROCESSING**, without
+errors or warnings; installable internal access is not yet confirmed. External
+Beta assignment is held until the real Watch-face capture route is checked.
+
 ## What's new
 
 - A Ceviz Voice complication opens the Watch directly into a capture-ready

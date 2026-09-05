@@ -124,19 +124,35 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
 - Yedinci doğrulama: `dbfe9c1abe770f1035595ec28b88f6beff7f5380`,
   <https://github.com/MertBasar0/ceviz/actions/runs/33998346812>.
   Kod testleri, Apple derlemesi ve Watch açılışı geçti; 40 mm normal yazıdaki
-  iki native test de geçti. Büyük yazı ve kalan ekran/süre matrisi sürüyor.
-  Ayarlar harf düğmelerindeki her basamak okunacak; Ceviz metinleri
-  önce/büyük/geri yüklenmiş halde yeni uygulama açılışıyla karşılaştırılacak.
-  Test runner'ın font kategorisi yalnız tanı olarak saklanıyor.
+  iki native test de geçti; beş normal-yazı görüntüsü incelendi.
+  Ayarlar harf düğmeleriyle %100'e ulaşıldı ve Ceviz'in büyük yazı görüntüsü
+  alındı. Bu kez gerçek yerleşim hatası doğrulandı: süre y=73,5…122,5 pt,
+  mikrofon y=116,25…171,75 pt; çevrimdışı satırı y=130,5…152 pt ile mikrofonun
+  altında kalıyor. Native görünürlük kontrolü koşuyu durdurdu; büyük yazı
+  kayıt/silme, 9/15 saniye dosya ölçümü ve 49 mm yine çalışmadı.
+  Geri alma %29 değerine ulaştı; fakat Settings'in canlı örnek metni başlangıç
+  89,5 pt yerine 67,5 pt kaldı. Bu, sorgunun bulunamaması değil gerçek görüntü
+  farkıdır; geri yükleme başarısı sayılmadı. Yeni kontrol canlı farkı saklayıp
+  başlangıçtaki gibi yeni açılmış Settings ve Ceviz'i ölçüyor; tüm görüntüler
+  toplandıktan sonra aynı sıkı eşitlikler uygulanıyor. Test runner'ın font
+  kategorisi yalnız tanı olarak saklanıyor.
   Paralel incelemede dosya ölçüm kapısı da güçlendirildi: yalnız son iki doğru
   ölçümü seçmek yerine tam iki finalizasyon zorunlu; ek veya ölçülemeyen
   finalizasyon kanıtta saklanıp reddediliyor. Önce eski kodda yanlış başarı
   yeniden üretildi; düzeltmede **42/42** Watch yardımcı testi ve **91/91**
   tüm Python testleri geçti, bağımsız incelemede açık bulgu kalmadı.
-  Bu son ölçüm-kapısı değişikliği yedinci koşunun dondurulmuş kaynağında yok;
+  Bu son ölçüm-kapısı değişikliği `8b29476053092b583ccb2acfdd99067d459db39c`
+  ile doğrulama dalında; yedinci koşunun dondurulmuş kaynağında yok,
   sonraki koşuya girecek. Süre kanıtı simülatörde oluşan dosyaya aittir;
   sonuç kartının görünmesi yeni komutun kimlikli, kalıcı teslim kanıtı değildir.
   Eşleşen yeni komut/makbuz ve kesinti sonrası teslim fiziksel kabul adımıdır.
+- Gerçek maksimum-yazı hatasının düzeltmesi hazır: içerik ve alt düğmeler
+  tek dikey yerleşimde ayrı kardeşler. Kısa hazır içerik doğrudan yerleştiriliyor;
+  uzun takip/sonuç içeriği kaydırılabilir kalıyor. Süre görselde kısaltıldı,
+  ekran okuyucunun tam cümlesi korundu. Silme onayı ek satır yerine hazır
+  başlığının yerini alıyor. Dinamik fontlar ve 54 pt düğme alanı değiştirilmedi.
+  Süre metni/düğme çakışması için ek native kontroller kondu. Yerel **91/91**
+  test ve taze bağımsız inceleme geçti; yeni native ekran kanıtı henüz yok.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

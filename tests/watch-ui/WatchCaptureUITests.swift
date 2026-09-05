@@ -91,6 +91,25 @@ final class WatchCaptureUITests: XCTestCase {
         XCTFail("The actual Settings UI did not expose a reachable \(title) row")
     }
 
+    private func openSettingsTextSize(in settings: XCUIApplication) -> Bool {
+        if settings.navigationBars["Text Size"].exists { return true }
+        if settings.navigationBars["Settings"].exists {
+            openSettingsRow("Display & Brightness", in: settings)
+        }
+        guard settings.navigationBars["Display & Brightness"].exists else {
+            captureSettings(settings, "settings-unexpected-navigation")
+            XCTFail("Settings must show an observed page before navigating to Text Size")
+            return false
+        }
+        openSettingsRow("Text Size", in: settings)
+        guard settings.navigationBars["Text Size"].waitForExistence(timeout: 8) else {
+            captureSettings(settings, "settings-text-size-not-opened")
+            XCTFail("The actual Text Size page did not open")
+            return false
+        }
+        return true
+    }
+
     private func setSettingsTextSize(_ target: CGFloat, in settings: XCUIApplication) -> Bool {
         // This native control exposes the AA buttons as one slider. Tap its
         // observed left/right letters; a best-effort drag restored the wrong step.
@@ -146,8 +165,7 @@ final class WatchCaptureUITests: XCTestCase {
         }
         settings.launch()
         captureSettings(settings, "settings-opened")
-        openSettingsRow("Display & Brightness", in: settings)
-        openSettingsRow("Text Size", in: settings)
+        guard openSettingsTextSize(in: settings) else { return }
         captureSettings(settings, "settings-text-size-before")
         // Display & Brightness also contains a slider. Never adjust it until the
         // Text Size page itself and its unique slider have been positively identified.
@@ -165,20 +183,41 @@ final class WatchCaptureUITests: XCTestCase {
             settings.activate()
             self.captureSettings(settings, "settings-before-restore")
             guard self.setSettingsTextSize(originalPosition, in: settings) else { return }
-            XCTAssertEqual(settings.sliders.element(boundBy: 0).normalizedSliderPosition, originalPosition, accuracy: 0.01)
+            let livePosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
+            let livePreview = preview.exists ? preview.frame.size : nil
+            self.captureSettings(settings, "settings-restored-live")
+            // Keep the live discrepancy as evidence, then compare like lifecycles:
+            // the baseline and this measurement both use a freshly launched Settings.
+            settings.launch()
+            self.captureSettings(settings, "settings-restored-relaunched")
+            guard self.openSettingsTextSize(in: settings) else { return }
+            XCTAssertEqual(settings.sliders.count, 1, "The fresh Text Size page must expose its unique control")
+            let coldPosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
+            let coldPreview = settings.staticTexts["Apps that support Dynamic Type will adjust to your preferred reading size."]
             let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                preview.exists && abs(preview.frame.width - originalPreview.width) <= 1 &&
-                    abs(preview.frame.height - originalPreview.height) <= 1
-            }, object: preview)
-            XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 8), .completed,
-                           "The actual Settings preview must return to its original text geometry")
-            let restoredPreview = preview.frame.size
-            self.captureSettings(settings, "settings-restored")
-            XCTAssertEqual(restoredPreview.width, originalPreview.width, accuracy: 1)
-            XCTAssertEqual(restoredPreview.height, originalPreview.height, accuracy: 1,
-                           "The actual Settings preview must return to its original text geometry")
+                coldPreview.exists && abs(coldPreview.frame.width - originalPreview.width) <= 1 &&
+                    abs(coldPreview.frame.height - originalPreview.height) <= 1
+            }, object: coldPreview)
+            let restoreResult = XCTWaiter.wait(for: [restored], timeout: 8)
+            let restoredPreview = coldPreview.exists ? coldPreview.frame.size : nil
+            self.captureSettings(settings, "settings-restored-cold")
             self.recordTestRunnerTextCategory("restored-settings")
             let restoredAppText = self.checkReadyScreenEnglish("ready-restored")
+            let measurements = XCTAttachment(string: "original position=\(originalPosition) preview=\(originalPreview) app=\(originalAppText)\nlive position=\(livePosition) preview=\(String(describing: livePreview))\ncold position=\(coldPosition) preview=\(String(describing: restoredPreview)) app=\(restoredAppText)")
+            measurements.name = "text-size-restore-measurements"
+            measurements.lifetime = .keepAlways
+            self.add(measurements)
+            // Capture both restored apps before an equality failure can halt teardown.
+            XCTAssertEqual(livePosition, originalPosition, accuracy: 0.01)
+            XCTAssertEqual(coldPosition, originalPosition, accuracy: 0.01)
+            XCTAssertEqual(restoreResult, .completed,
+                           "Fresh Settings must return to its original text geometry")
+            if let restoredPreview {
+                XCTAssertEqual(restoredPreview.width, originalPreview.width, accuracy: 1)
+                XCTAssertEqual(restoredPreview.height, originalPreview.height, accuracy: 1)
+            } else {
+                XCTFail("The fresh Settings preview must be present after restore")
+            }
             XCTAssertEqual(restoredAppText.title.width, originalAppText.title.width, accuracy: 1)
             XCTAssertEqual(restoredAppText.title.height, originalAppText.title.height, accuracy: 1)
             XCTAssertEqual(restoredAppText.limit.width, originalAppText.limit.width, accuracy: 1)
@@ -212,9 +251,12 @@ final class WatchCaptureUITests: XCTestCase {
         // Text selectors also exercise the previous build without new identifiers.
         XCTAssertTrue(app.staticTexts["Ready to listen"].waitForExistence(timeout: 15))
         capture(screenshotName, in: app)
+        assertVisible(app.staticTexts["Ready to listen"], in: app, "The complete ready heading must be visible")
         assertVisible(app.staticTexts["Up to 15 seconds"], in: app,
                       "15-second limit must be fully visible without scrolling")
         assertVisible(app.buttons["Start recording"], in: app, "Microphone must be reachable without scrolling")
+        XCTAssertFalse(app.staticTexts["Up to 15 seconds"].frame.intersects(app.buttons["Start recording"].frame),
+                       "The microphone action must not cover any part of the duration limit")
         let offline = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Phone offline")).firstMatch
         if offline.exists {
             assertVisible(offline, in: app, "A displayed Phone offline label must not be clipped by the microphone action")
@@ -246,6 +288,8 @@ final class WatchCaptureUITests: XCTestCase {
             capture("recording-\(language)")
             app.buttons["capture.cancel"].tap()
             assertVisible(app.staticTexts["capture.durationLimit"], in: app, "Discard must return to ready")
+            XCTAssertFalse(app.staticTexts["capture.durationLimit"].frame.intersects(start.frame),
+                           "The microphone action must not cover the duration limit after discard")
             let discarded = app.staticTexts[language == "tr" ? "Kayıt silindi" : "Discarded"]
             assertVisible(discarded, in: app, "The complete discard confirmation must be visible without scrolling")
             XCTAssertFalse(discarded.frame.intersects(start.frame),

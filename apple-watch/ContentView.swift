@@ -110,22 +110,22 @@ struct ContentView: View {
     }
 
     private var voiceTab: some View {
-        Group {
-            if voicePhase == .recording {
-                recordingArea
-            } else {
-                ScrollView {
+        VStack(spacing: 6) {
+            Group {
+                if voicePhase == .recording {
+                    recordingArea
+                } else {
                     TimelineView(.periodic(from: .now, by: 10)) { context in
-                        VStack(alignment: .leading, spacing: 8) {
+                        let content = VStack(alignment: .leading, spacing: 4) {
                             switch voicePhase {
                             case .idle:
-                                Text("Ready to listen").font(.headline)
+                                Text(LocalizedStringKey(recordingWasCancelled ? "Recording discarded" : "Ready to listen"))
+                                    .font(.headline)
                                     .accessibilityIdentifier("capture.ready")
-                                Text("Up to 15 seconds").font(.body)
+                                Text("Up to 15 s").font(.body)
+                                    .accessibilityLabel(Text("Up to 15 seconds"))
                                     .accessibilityIdentifier("capture.durationLimit")
-                                if recordingWasCancelled {
-                                    Text("Recording discarded").font(.body)
-                                } else {
+                                if !recordingWasCancelled {
                                     followUpCaption(at: context.date)
                                 }
                                 if !sessionManager.isReachable {
@@ -146,14 +146,25 @@ struct ContentView: View {
                         }
                         .foregroundColor(CVZ.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        if voicePhase == .idle {
+                            // Short ready feedback fits without Watch ScrollView's
+                            // extra margins; longer follow-up content remains scrollable.
+                            ViewThatFits(in: .vertical) {
+                                content
+                                ScrollView { content }
+                            }
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
+                        } else {
+                            ScrollView { content.fixedSize(horizontal: false, vertical: true) }
+                        }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A sibling action row owns its space; text cannot flow behind it.
+            captureActions
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Reserve action space before laying out text; scrolling never moves the controls.
-        .safeAreaInset(edge: .bottom, spacing: 6) { captureActions }
         .padding(.horizontal, 4)
         .background(CVZ.bg.ignoresSafeArea())
     }

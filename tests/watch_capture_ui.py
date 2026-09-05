@@ -144,16 +144,30 @@ def capture_log_stream(watch_udid, log_path):
 
 
 def capture_file_metrics(log):
-    rows = re.findall(r"Capture finalized: duration_seconds=([0-9.]+) bytes=(\d+) codec=(\d+) sample_rate=([0-9.]+) channels=(\d+)", log)
-    return [{"duration_seconds": float(duration), "bytes": int(size), "codec": int(codec),
-             "sample_rate": float(rate), "channels": int(channels)} for duration, size, codec, rate, channels in rows]
+    metrics = []
+    for row in re.findall(r"Capture finalized: ([^\r\n]*)", log):
+        match = re.fullmatch(r"duration_seconds=(\d+(?:\.\d+)?) bytes=(\d+) codec=(\d+) sample_rate=(\d+(?:\.\d+)?) channels=(\d+)", row.strip())
+        if match:
+            duration, size, codec, rate, channels = match.groups()
+            metrics.append({"duration_seconds": float(duration), "bytes": int(size), "codec": int(codec),
+                            "sample_rate": float(rate), "channels": int(channels)})
+        else:
+            # Retain every finalization so missing metadata cannot hide behind later
+            # valid captures. Validation, not parsing, owns the recorded failure state.
+            unavailable = {"file_metadata": "unavailable"}
+            if size := re.search(r"\bbytes=(\d+)\b", row):
+                unavailable["bytes"] = int(size.group(1))
+            metrics.append(unavailable)
+    return metrics
 
 
 def require_capture_durations(metrics):
-    if len(metrics) < 2:
-        raise RuntimeError("Actual file metadata missing for manual and automatic captures")
+    if len(metrics) != 2:
+        raise RuntimeError(f"Actual file metadata missing or unexpected finalization count: expected exactly 2, found {len(metrics)}")
+    if any(metric.get("file_metadata") == "unavailable" for metric in metrics):
+        raise RuntimeError("Actual file metadata missing for manual or automatic capture")
     # UI polling/tap latency permits a small margin around six seconds remaining.
-    for metric, bounds in zip(metrics[-2:], [(8.0, 12.0), (14.5, 16.0)]):
+    for metric, bounds in zip(metrics, [(8.0, 12.0), (14.5, 16.0)]):
         if not (bounds[0] <= metric["duration_seconds"] <= bounds[1]
                 and all(metric[key] > 0 for key in ("bytes", "codec", "sample_rate", "channels"))):
             raise RuntimeError(f"Actual capture file metadata does not match the 9s/15s scenarios: {metric}")

@@ -184,6 +184,29 @@ class ActualCaptureMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "9s/15s"):
             capture.require_capture_durations(metrics)
 
+    def test_extra_finalization_cannot_be_hidden_by_two_valid_measurements(self):
+        valid = [f"Capture finalized: duration_seconds={duration} bytes=41000 codec=1633772320 sample_rate=16000 channels=1"
+                 for duration in (9.2, 15.0)]
+        extras = ["Capture finalized: duration_seconds=2.0 bytes=4000 codec=1633772320 sample_rate=16000 channels=1",
+                  "Capture finalized: bytes=400 file_metadata=unavailable",
+                  "Capture finalized: bytes=400"]
+        for extra in extras:
+            for position in range(3):
+                with self.subTest(extra=extra, position=position):
+                    lines = valid.copy()
+                    lines.insert(position, extra)
+                    with self.assertRaises(RuntimeError):
+                        capture.require_capture_durations(capture.capture_file_metrics("\n".join(lines)))
+
+    def test_unavailable_metadata_is_retained_for_context_before_validation_fails(self):
+        log = "Capture finalized: bytes=400 file_metadata=unavailable\nCapture finalized: duration_seconds=15.0 bytes=68000 codec=1633772320 sample_rate=16000 channels=1"
+        metrics = capture.capture_file_metrics(log)
+        self.assertEqual(metrics[0], {"file_metadata": "unavailable", "bytes": 400})
+        self.assertEqual(len(metrics), 2)
+        self.assertEqual(json.loads(json.dumps(metrics)), metrics)
+        with self.assertRaisesRegex(RuntimeError, "missing"):
+            capture.require_capture_durations(metrics)
+
 
 class CaptureLogStreamTests(unittest.TestCase):
     def test_collector_is_ready_before_body_and_only_owned_process_is_stopped(self):

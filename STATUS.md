@@ -21,10 +21,11 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım hedefleniyor.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
   alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Yerel Python **89/89**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
+- Yerel Python **91/91**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
   programı (iki uygulamanın gerçek modelleriyle taşıma sözleşmesi dahil) ve
-  iPhone/Watch/widget Release derlemesi geçti. Gerçek Watch UI ve ses dosyası
-  süre testleri henüz çalışmadı; simülatör fiziksel dosya teslimini kanıtlamaz.
+  iPhone/Watch/widget Release derlemesi geçti. Gerçek 40 mm normal yazı UI
+  testleri geçti; büyük yazı, 49 mm ve ses dosyası süre testleri henüz
+  doğrulanmadı. Simülatör fiziksel dosya teslimini kanıtlamaz.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
@@ -64,12 +65,12 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   akışı hazırlanıyor. Aynı simülatör çifti ardışık testlerde açık tutulacak;
   her denemede Ceviz test kurulumu yine temizlenecek, hiçbir senaryo atlanmayacak.
 - Hazır ekranda boş takip rozeti alanı çevrimdışı satırını aşağı itiyordu;
-  bu alanı kaldıran küçük ContentView düzeltmesi hazır. Henüz native derleme
-  veya yeni görüntüyle doğrulanmadı; yukarıdaki görüntü bu düzeltmeyi içermiyor.
+  bu alanı kaldıran ContentView düzeltmesi dördüncü doğrulamada native
+  derleme ve yeni normal-yazı görüntüsüyle doğrulandı.
 - Kullanıcı 6 Eylül'de açıkça **önce otomatik ekran kontrollerinin tamamlanmasını**
   seçti. UI/süre testlerini atlayarak iç TestFlight adayı çıkarılmayacak.
   Testlerdeki font değişikliği gerçek `com.apple.NanoSettings` kontrollerinden
-  yapılacak; sistem font kategorisi ve geri yükleme okunarak doğrulanacak.
+  yapılacak; gerçek ayar değeri, Ceviz metin geometrisi ve geri yükleme okunacak.
   Bu test hazırlığı üretim uygulamasına görünüm/durum enjeksiyonu eklemiyor.
 - Dördüncü doğrulama için gerçek Ayarlar testi, cihaz çifti sahipliği ve boş
   takip rozeti düzeltmesi hazır; 89 yerel Python testi geçti. Bu son değişiklikler
@@ -120,6 +121,22 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   denetimi harf düğmelerine basıp her basamağı okuyarak hedefe ulaştırılacak;
   geri yükleme de okunarak doğrulanacak. Büyük yazıdaki Ceviz testleri,
   9/15 saniye dosya ölçümleri ve 49 mm henüz çalışmadı; yükleme yok.
+- Yedinci doğrulama: `dbfe9c1abe770f1035595ec28b88f6beff7f5380`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/33998346812>.
+  Kod testleri, Apple derlemesi ve Watch açılışı geçti; 40 mm normal yazıdaki
+  iki native test de geçti. Büyük yazı ve kalan ekran/süre matrisi sürüyor.
+  Ayarlar harf düğmelerindeki her basamak okunacak; Ceviz metinleri
+  önce/büyük/geri yüklenmiş halde yeni uygulama açılışıyla karşılaştırılacak.
+  Test runner'ın font kategorisi yalnız tanı olarak saklanıyor.
+  Paralel incelemede dosya ölçüm kapısı da güçlendirildi: yalnız son iki doğru
+  ölçümü seçmek yerine tam iki finalizasyon zorunlu; ek veya ölçülemeyen
+  finalizasyon kanıtta saklanıp reddediliyor. Önce eski kodda yanlış başarı
+  yeniden üretildi; düzeltmede **42/42** Watch yardımcı testi ve **91/91**
+  tüm Python testleri geçti, bağımsız incelemede açık bulgu kalmadı.
+  Bu son ölçüm-kapısı değişikliği yedinci koşunun dondurulmuş kaynağında yok;
+  sonraki koşuya girecek. Süre kanıtı simülatörde oluşan dosyaya aittir;
+  sonuç kartının görünmesi yeni komutun kimlikli, kalıcı teslim kanıtı değildir.
+  Eşleşen yeni komut/makbuz ve kesinti sonrası teslim fiziksel kabul adımıdır.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

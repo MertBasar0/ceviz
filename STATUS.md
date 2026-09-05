@@ -21,7 +21,7 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım hedefleniyor.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
   alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Yerel Python **83/83**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
+- Yerel Python **89/89**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
   programı (iki uygulamanın gerçek modelleriyle taşıma sözleşmesi dahil) ve
   iPhone/Watch/widget Release derlemesi geçti. Gerçek Watch UI ve ses dosyası
   süre testleri henüz çalışmadı; simülatör fiziksel dosya teslimini kanıtlamaz.
@@ -52,6 +52,28 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   <https://github.com/MertBasar0/ceviz/actions/runs/33992244824>, bu yeni
   karşı kanıt üzerine durduruldu; üretim kodu değişmeden düzeltilmiş kontrolle
   tekrar doğrulanacak. Durdurulan çalışmaların hiçbiri UI/ses başarısı sayılmaz.
+- Üçüncü doğrulama, `0bd3377d660d918e8a0440b042511a1e2bb73a35`:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33992504192>.
+  83 Python, relay/Ruby/beş Swift programı, iPhone/Watch/widget derlemesi,
+  gerçek Watch açılışı ve yerel imzalar geçti. 40 mm hazır ekranı incelendi;
+  eski sürümün native XCTest paketi de `TEST BUILD SUCCEEDED` ile derlendi.
+  Ardından watchOS 26.4, `simctl ui ... content_size` çağrısını
+  `Runtime does not support dynamic text` / 45 ile reddetti. Bu bir beklenen
+  UI regresyonu değil, test hazırlama hatasıdır; XCTest dokunuşları ve ses
+  ölçümleri hiç başlamadı. Desteklenmeyen komutun yerine gerçek Watch Ayarlar
+  akışı hazırlanıyor. Aynı simülatör çifti ardışık testlerde açık tutulacak;
+  her denemede Ceviz test kurulumu yine temizlenecek, hiçbir senaryo atlanmayacak.
+- Hazır ekranda boş takip rozeti alanı çevrimdışı satırını aşağı itiyordu;
+  bu alanı kaldıran küçük ContentView düzeltmesi hazır. Henüz native derleme
+  veya yeni görüntüyle doğrulanmadı; yukarıdaki görüntü bu düzeltmeyi içermiyor.
+- Kullanıcı 6 Eylül'de açıkça **önce otomatik ekran kontrollerinin tamamlanmasını**
+  seçti. UI/süre testlerini atlayarak iç TestFlight adayı çıkarılmayacak.
+  Testlerdeki font değişikliği gerçek `com.apple.NanoSettings` kontrollerinden
+  yapılacak; sistem font kategorisi ve geri yükleme okunarak doğrulanacak.
+  Bu test hazırlığı üretim uygulamasına görünüm/durum enjeksiyonu eklemiyor.
+- Dördüncü doğrulama için gerçek Ayarlar testi, cihaz çifti sahipliği ve boş
+  takip rozeti düzeltmesi hazır; 89 yerel Python testi geçti. Bu son değişiklikler
+  henüz Apple ortamında derlenip gerçek ekran/ayar/süre kanıtı üretmedi.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

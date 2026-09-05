@@ -13,14 +13,17 @@ import watch_capture_ui as capture
 class CaptureRunPlanTests(unittest.TestCase):
     def test_four_short_matrix_runs_and_one_small_normal_finish(self):
         runs = capture.capture_runs(False)
-        self.assertEqual(runs, [(40, "large", "short"), (40, "extra-extra-extra-large", "short"),
-                                (49, "large", "short"), (49, "extra-extra-extra-large", "short"),
-                                (40, "large", "finish")])
-        self.assertEqual(capture.test_selection("short"), [f"-skip-testing:{capture.FINISH_TEST}"])
+        self.assertEqual(runs, [(40, "device-default", "short"), (40, "larger-settings", "short"),
+                                (40, "device-default", "finish"), (49, "device-default", "short"),
+                                (49, "larger-settings", "short")])
+        self.assertEqual(capture.test_selection("short"), [
+            "-only-testing:CevizWatchUITests/WatchCaptureUITests/testReadyScreenEnglish",
+            "-only-testing:CevizWatchUITests/WatchCaptureUITests/testRecordAndDiscardBothLanguages"])
+        self.assertEqual(capture.test_selection("short", "larger-settings"), [f"-only-testing:{capture.LARGER_TEST}"])
         self.assertEqual(capture.test_selection("finish"), [f"-only-testing:{capture.FINISH_TEST}"])
 
     def test_baseline_only_runs_existing_english_text_selectors(self):
-        self.assertEqual(capture.capture_runs(True), [(40, "large", "baseline")])
+        self.assertEqual(capture.capture_runs(True), [(40, "device-default", "baseline")])
         self.assertEqual(capture.test_selection("baseline"),
                          ["-only-testing:CevizWatchUITests/WatchCaptureUITests/testReadyScreenEnglish"])
         with self.assertRaises(ValueError):
@@ -59,6 +62,111 @@ class WatchContainerIsolationTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 capture.reinstall_watch("sim-watch", Path("built-watch.app"))
         self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
+
+
+class SimulatorPairLifetimeTests(unittest.TestCase):
+    def test_same_pair_stays_warm_and_previous_pair_stops_before_next_boot(self):
+        owner = capture.CaptureSimulatorPair()
+        states = {udid: "Shutdown" for udid in ("phone40", "watch40", "phone49", "watch49")}
+        actions = []
+
+        def simctl(command, udid, *args):
+            actions.append((command, udid))
+            if command == "boot":
+                states[udid] = "Booted"
+
+        def shutdown(command, **kwargs):
+            self.assertEqual(kwargs, {"check": True, "timeout": 60})
+            actions.append(("shutdown", command[-1]))
+            states[command[-1]] = "Shutdown"
+
+        with patch.object(owner, "device_states", side_effect=lambda: states.copy()), \
+                patch.object(capture, "simctl", side_effect=simctl), \
+                patch.object(capture.subprocess, "run", side_effect=shutdown):
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            self.assertEqual([action for action in actions if action[0] != "bootstatus"],
+                             [("boot", "phone40"), ("boot", "watch40")])
+            warm_end = len(actions)
+            owner.use({"udid": "phone49"}, {"udid": "watch49"})
+            owner.close()
+        self.assertEqual(actions[warm_end:], [("shutdown", "watch40"), ("shutdown", "phone40"),
+                                      ("boot", "phone49"), ("bootstatus", "phone49"),
+                                      ("boot", "watch49"), ("bootstatus", "watch49"),
+                                      ("shutdown", "watch49"), ("shutdown", "phone49")])
+        self.assertTrue(all(state == "Shutdown" for state in states.values()))
+
+    def test_preexisting_pair_is_not_stopped_or_run_alongside_another_pair(self):
+        owner = capture.CaptureSimulatorPair()
+        with patch.object(owner, "device_states", return_value={"phone40": "Booted", "watch40": "Booted"}), \
+                patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as shutdown:
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            with self.assertRaisesRegex(RuntimeError, "outside this runner's ownership"):
+                owner.use({"udid": "phone49"}, {"udid": "watch49"})
+            owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual([call.args for call in simctl.call_args_list],
+                         [("bootstatus", "phone40", "-b"), ("bootstatus", "watch40", "-b")])
+
+    def test_partial_boot_timeout_keeps_cleanup_ownership(self):
+        owner = capture.CaptureSimulatorPair()
+        states = {"phone40": "Shutdown", "watch40": "Shutdown"}
+
+        def timeout(*args):
+            states["phone40"] = "Booted"
+            raise subprocess.TimeoutExpired("boot", 300)
+
+        def stopped(*args, **kwargs):
+            states["phone40"] = "Shutdown"
+
+        with patch.object(owner, "device_states", side_effect=lambda: states.copy()), \
+                patch.object(capture, "simctl", side_effect=timeout), \
+                patch.object(capture.subprocess, "run") as shutdown:
+            shutdown.side_effect = stopped
+            with self.assertRaises(subprocess.TimeoutExpired):
+                owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.close()
+        shutdown.assert_called_once_with(["xcrun", "simctl", "shutdown", "phone40"], check=True, timeout=60)
+
+    def test_failed_shutdown_prevents_booting_next_pair(self):
+        owner = capture.CaptureSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        with patch.object(owner, "device_states", return_value={"phone40": "Booted", "watch40": "Booted"}), \
+                patch.object(capture, "simctl") as simctl, \
+                patch.object(capture.subprocess, "run", side_effect=subprocess.TimeoutExpired("shutdown", 60)):
+            with self.assertRaisesRegex(RuntimeError, "shutdown failed"):
+                owner.use({"udid": "phone49"}, {"udid": "watch49"})
+        simctl.assert_not_called()
+        self.assertEqual(owner.started, ["phone40", "watch40"])
+
+    def test_same_pair_reboots_framework_stopped_device_without_duplicate_ownership(self):
+        owner = capture.CaptureSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        states = {"phone40": "Booted", "watch40": "Shutdown"}
+        with patch.object(owner, "device_states", return_value=states), patch.object(capture, "simctl") as simctl:
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+        self.assertEqual([call.args for call in simctl.call_args_list], [
+            ("bootstatus", "phone40", "-b"), ("boot", "watch40"), ("bootstatus", "watch40", "-b")])
+        self.assertEqual(owner.started, ["phone40", "watch40"])
+
+    def test_close_accepts_verified_shutdown_but_not_unknown_state(self):
+        owner = capture.CaptureSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        with patch.object(owner, "device_states", return_value={"phone40": "Shutdown", "watch40": "Shutdown"}), \
+                patch.object(capture.subprocess, "run") as shutdown:
+            owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual(owner.started, [])
+        owner.started = ["unknown-device"]
+        with patch.object(owner, "device_states", return_value={}), patch.object(capture.subprocess, "run") as shutdown:
+            with self.assertRaisesRegex(RuntimeError, "state is unknown"):
+                owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual(owner.started, ["unknown-device"])
 
 
 class ActualCaptureMetadataTests(unittest.TestCase):

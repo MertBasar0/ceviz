@@ -115,36 +115,39 @@ struct ContentView: View {
                 recordingArea
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        switch voicePhase {
-                        case .idle:
-                            Text("Ready to listen").font(.headline)
-                                .accessibilityIdentifier("capture.ready")
-                            Text("Up to 15 seconds").font(.body)
-                                .accessibilityIdentifier("capture.durationLimit")
-                            if recordingWasCancelled {
-                                Text("Recording discarded").font(.body)
-                            } else {
-                                followUpCaption
+                    TimelineView(.periodic(from: .now, by: 10)) { context in
+                        VStack(alignment: .leading, spacing: 8) {
+                            switch voicePhase {
+                            case .idle:
+                                Text("Ready to listen").font(.headline)
+                                    .accessibilityIdentifier("capture.ready")
+                                Text("Up to 15 seconds").font(.body)
+                                    .accessibilityIdentifier("capture.durationLimit")
+                                if recordingWasCancelled {
+                                    Text("Recording discarded").font(.body)
+                                } else {
+                                    followUpCaption(at: context.date)
+                                }
+                                if !sessionManager.isReachable {
+                                    Label("Phone offline", systemImage: "iphone").font(.caption)
+                                        .foregroundColor(CVZ.textSub)
+                                }
+                            case .preparing:
+                                ProgressView("Preparing microphone…").font(.body).tint(CVZ.accent)
+                            case .finalizing:
+                                ProgressView("Finishing recording…").font(.body).tint(CVZ.accent)
+                            case .sending:
+                                ProgressView("Sending request…").font(.body).tint(CVZ.accent)
+                            case .result:
+                                resultCard(at: context.date)
+                            case .recording:
+                                EmptyView()
                             }
-                            if !sessionManager.isReachable {
-                                Label("Phone offline", systemImage: "iphone").font(.caption)
-                                    .foregroundColor(CVZ.textSub)
-                            }
-                        case .preparing:
-                            ProgressView("Preparing microphone…").font(.body).tint(CVZ.accent)
-                        case .finalizing:
-                            ProgressView("Finishing recording…").font(.body).tint(CVZ.accent)
-                        case .sending:
-                            ProgressView("Sending request…").font(.body).tint(CVZ.accent)
-                        case .result:
-                            resultCard
-                        case .recording:
-                            EmptyView()
                         }
+                        .foregroundColor(CVZ.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .foregroundColor(CVZ.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -155,7 +158,7 @@ struct ContentView: View {
         .background(CVZ.bg.ignoresSafeArea())
     }
 
-    private var resultCard: some View {
+    private func resultCard(at date: Date) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if let state = displayedState {
                 Label(NSLocalizedString(state.titleKey, comment: "job state"), systemImage: state.symbolName)
@@ -175,18 +178,17 @@ struct ContentView: View {
                 Text("Review the next step on iPhone.")
                     .font(.body).foregroundColor(CVZ.warn)
             }
-            followUpCaption
+            followUpCaption(at: date)
         }
     }
 
-    private var followUpCaption: some View {
-        TimelineView(.periodic(from: .now, by: 10)) { context in
-            if !sessionManager.isSending, let last = sessionManager.lastResultAt,
-               context.date.timeIntervalSince(last) < WatchSessionManager.continuationWindow {
-                Text("↩ follow-up").font(.caption).foregroundColor(CVZ.accent)
-            }
+    @ViewBuilder
+    private func followUpCaption(at date: Date) -> some View {
+        // An absent/expired caption must not leave a TimelineView row in the stack.
+        if !sessionManager.isSending, let last = sessionManager.lastResultAt,
+           date.timeIntervalSince(last) < WatchSessionManager.continuationWindow {
+            Text("↩ follow-up").font(.caption).foregroundColor(CVZ.accent)
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var recordingArea: some View {

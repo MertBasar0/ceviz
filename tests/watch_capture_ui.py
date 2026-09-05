@@ -13,13 +13,15 @@ from watch_launch_smoke import choose_simulators, simctl
 
 WATCH_ID = "com.mertbasar.cevizwatch.watchkitapp"
 FINISH_TEST = "CevizWatchUITests/WatchCaptureUITests/testManualAndAutomaticFinishRetainRecording"
+LARGER_TEST = "CevizWatchUITests/WatchCaptureUITests/testLargerTextReadyAndDiscardBothLanguages"
 
 
 def capture_runs(baseline):
     if baseline:
-        return [(40, "large", "baseline")]
-    return [(screen, size, "short") for screen in (40, 49)
-            for size in ("large", "extra-extra-extra-large")] + [(40, "large", "finish")]
+        return [(40, "device-default", "baseline")]
+    return [(40, "device-default", "short"), (40, "larger-settings", "short"),
+            (40, "device-default", "finish"), (49, "device-default", "short"),
+            (49, "larger-settings", "short")]
 
 
 def select_watch(inventory, pairs, sdk_versions, screen):
@@ -29,14 +31,67 @@ def select_watch(inventory, pairs, sdk_versions, screen):
     return choose_simulators(filtered, pairs, sdk_versions)
 
 
-def test_selection(mode):
+def test_selection(mode, size="device-default"):
     if mode == "baseline":
         return ["-only-testing:CevizWatchUITests/WatchCaptureUITests/testReadyScreenEnglish"]
     if mode == "finish":
         return [f"-only-testing:{FINISH_TEST}"]
     if mode == "short":
-        return [f"-skip-testing:{FINISH_TEST}"]
+        if size == "larger-settings":
+            return [f"-only-testing:{LARGER_TEST}"]
+        return ["-only-testing:CevizWatchUITests/WatchCaptureUITests/testReadyScreenEnglish",
+                "-only-testing:CevizWatchUITests/WatchCaptureUITests/testRecordAndDiscardBothLanguages"]
     raise ValueError(f"Unknown capture test mode: {mode}")
+
+
+class CaptureSimulatorPair:
+    """Keep one selected pair warm; app containers remain isolated per scenario."""
+    def __init__(self):
+        self.current = ()
+        self.started = []
+
+    @staticmethod
+    def device_states():
+        inventory = json.loads(simctl("list", "devices", "--json", capture=True))["devices"]
+        return {device["udid"]: device["state"] for devices in inventory.values() for device in devices}
+
+    def use(self, phone, watch):
+        selected = (phone["udid"], watch["udid"])
+        if selected != self.current:
+            previous = self.current
+            self.close()
+            states = self.device_states()
+            if any(states.get(udid) != "Shutdown" for udid in previous):
+                raise RuntimeError("Previous pair is not confirmed shut down; refusing a second concurrent pair outside this runner's ownership")
+            self.current = selected
+        for udid in selected:
+            state = self.device_states().get(udid)
+            if state is None:
+                raise RuntimeError(f"Simulator state is unknown: {udid}")
+            if state != "Booted":
+                # A timed-out boot may still start the device; retain cleanup ownership.
+                if udid not in self.started:
+                    self.started.append(udid)
+                simctl("boot", udid)
+            simctl("bootstatus", udid, "-b")
+
+    def close(self):
+        errors = []
+        for udid in reversed(self.started.copy()):
+            try:
+                state = self.device_states().get(udid)
+                if state is None:
+                    raise RuntimeError(f"Simulator state is unknown: {udid}")
+                if state != "Shutdown":
+                    subprocess.run(["xcrun", "simctl", "shutdown", udid], check=True, timeout=60)
+                    if self.device_states().get(udid) != "Shutdown":
+                        raise RuntimeError(f"Simulator shutdown was not confirmed: {udid}")
+                self.started.remove(udid)
+            except (RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                errors.append(f"Simulator shutdown failed for {udid}: {error}")
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        self.current = ()
 
 
 def reinstall_watch(watch_udid, watch_app):
@@ -115,6 +170,7 @@ def main(project, baseline=False):
     subprocess.run(["xcodegen", "generate", "--spec", "project.watch-ui.yml"], cwd=project, check=True)
     evidence = []
     built = False
+    active_pair = CaptureSimulatorPair()
     try:
         for screen, size, mode in capture_runs(baseline):
             # Re-read pair ownership: a previous run may have safely created a pair.
@@ -122,7 +178,6 @@ def main(project, baseline=False):
             pairs = list(json.loads(simctl("list", "pairs", "--json", capture=True))["pairs"].values())
             choice = select_watch(inventory, pairs, context["sdk_versions"], screen)
             watch, phone = choice["watch"], choice["phone"]
-            started = []
             name = re.sub(r"[^a-zA-Z0-9-]", "-", watch["name"]) + "-" + size + "-" + mode
             result = output / (name + ".xcresult")
             log_path = output / (name + ".log")
@@ -134,14 +189,7 @@ def main(project, baseline=False):
             if choice["needs_pair"]:
                 simctl("pair", watch["udid"], phone["udid"])
             try:
-                for device in (phone, watch):
-                    state = json.loads(simctl("list", "devices", "--json", capture=True))["devices"]
-                    booted = any(item["udid"] == device["udid"] and item["state"] == "Booted"
-                                 for devices in state.values() for item in devices)
-                    if not booted:
-                        simctl("boot", device["udid"])
-                        started.append(device["udid"])
-                    simctl("bootstatus", device["udid"], "-b")
+                active_pair.use(phone, watch)
                 simctl("install", phone["udid"], str(bridge))
                 common = ["-project", "CevizWatch.xcodeproj", "-scheme", "CevizWatchUI", "-configuration", "Release",
                           "-destination", f"platform=watchOS Simulator,id={watch['udid']}", "-derivedDataPath", str(derived),
@@ -154,10 +202,12 @@ def main(project, baseline=False):
                         raise RuntimeError(f"The selected project did not produce its Watch test app: {watch_app}")
                     built = True
                 reinstall_watch(watch["udid"], watch_app)
-                simctl("ui", watch["udid"], "content_size", size)
-                record["observed_content_size"] = simctl("ui", watch["udid"], "content_size", capture=True).strip()
+                # watchOS rejects simctl content_size. XCTest changes Settings via
+                # real controls and records the public device category in attachments.
+                record["content_size_evidence"] = ("Native XCTest category and Settings attachments" if size == "larger-settings"
+                                                   else "Native XCTest device category attachment")
                 record["status"] = "running"
-                command = ["xcodebuild", "test-without-building", *common, "-resultBundlePath", str(result), *test_selection(mode)]
+                command = ["xcodebuild", "test-without-building", *common, "-resultBundlePath", str(result), *test_selection(mode, size)]
                 collector = capture_log_stream(watch["udid"], audio_log_path) if mode == "finish" else nullcontext()
                 with collector as capture_stream:
                     with log_path.open("w") as log:
@@ -194,15 +244,20 @@ def main(project, baseline=False):
                         except RuntimeError as error:
                             record.update(status="failed", failure=str(error))
                             metadata_error = error
-                for udid in reversed(started):
-                    try:
-                        subprocess.run(["xcrun", "simctl", "shutdown", udid], check=False, timeout=60)
-                    except subprocess.TimeoutExpired:
-                        record.setdefault("cleanup_errors", []).append(f"Simulator shutdown timed out: {udid}")
                 if metadata_error:
                     raise metadata_error
     finally:
-        (output / "context.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+        had_error = sys.exc_info()[0] is not None
+        try:
+            active_pair.close()
+        except RuntimeError as error:
+            if evidence:
+                evidence[-1].setdefault("cleanup_errors", []).append(str(error))
+                evidence[-1]["status"] = "failed"
+            if not had_error:
+                raise
+        finally:
+            (output / "context.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,12 @@
 
 Son güncelleme: **5 Eylül 2026**
 
-## Hazırlanan paket — Beta 4
+## İç test adayı — Beta 4
+
+**2026.6.5 (1788570416)**, Apple tarafından **VALID** olarak işlendi ve
+**Mert** iç test grubunda **IN_BETA_TESTING** durumu API ile doğrulandı.
+Dış **Beta** grubuna atanmadı; gerçek kadran açılışı cihazda doğrulanana kadar
+dış dağıtım bekliyor. Kullanıcı iPhone ve Watch uygulamalarını birlikte güncellemeli.
 
 Kullanıcı, güvenilir bilek akışı geliştirmelerini ve testlerden sonra commit,
 TestFlight upload, dış Beta grubuna dağıtım, widget kimliği/imzalama profilini
@@ -83,9 +88,12 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   ve profil/imza kaynaklarının varlığı kontrol edildi. Bu ZIP incelemesi tek
   başına kriptografik imza doğrulaması değildir.
   IPA SHA256: `76138c74cacc330300bdb66b2a96f6e6ee8c139655cb66f1a8f17fd101026cd5`.
-  Apple upload kaydı `f0b61d35-1ff8-4e66-95a6-a297ce2f2d9d`, aynı sürüm/build
-  için **PROCESSING**, hata/uyarı listeleri boş. Normal build listesi henüz
-  kayıt döndürmediğinden indirilebilir iç test erişimi doğrulanmadı.
+  Apple upload/build kaydı `f0b61d35-1ff8-4e66-95a6-a297ce2f2d9d`, aynı
+  sürüm/build için **COMPLETE**, hata/uyarı listeleri boş. Normal build API'si
+  **VALID / internal IN_BETA_TESTING / external READY_FOR_BETA_SUBMISSION**
+  döndürdü. Grup üyeliği yalnız **Mert**, otomatik bildirim açık; **Beta** üyeliği
+  yok. İç test erişimi doğrulandı. Apple build kaydının işlemleme sonrası zamanı
+  **5 Eylül 01:28:41 UTC**; upload kabul zamanı yukarıdaki **01:09:33 UTC**.
   Yeni `buildUploads` endpoint'i dar JWT scope eşleştirmesinde Apple'ın iç
   `/ac-gateway` yolu nedeniyle 403 verdi. Apple belgelerindeki standart,
   isteğe bağlı scope'suz 60 saniyelik JWT ile yalnız bu Ceviz build'ine sabit
@@ -119,13 +127,13 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   systemd durumunun aynı kaldığı ölçüldü, gateway çalışma sağlığı iddiası yok.
 - Sürüm notları ve fiziksel kabul listesi:
   [Beta 4 aday notları](docs/release-notes-2026.6.5-beta.4.md).
-- Bu bölüm yeni build'in yayımlandığı anlamına gelmez. Aşağıdaki Beta 3,
-  yeni dağıtım API ile doğrulanana kadar geçerli yayımlanmış sürümdür.
+- Beta 4 şimdilik yalnız iç test adayıdır. Aşağıdaki Beta 3, fiziksel kontrol
+  ve yeni dış dağıtım API ile doğrulanana kadar geçerli dış Beta sürümüdür.
 - Sonraki dilim: açık devam bağlamı, kişisel kısa yollar ve uygulama içi Doctor.
 - Mevcut iş dosyası eşzamanlı yazma ve cihaz bazlı bildirim yeniden denemesi
   ayrıca ele alınmalı; garantili teslimat/uzak işte exactly-once iddiası yok.
 
-## Güncel sürüm
+## Güncel dış Beta sürümü
 
 - Sürüm: **Ceviz 2026.6.5 Beta 3**
 - TestFlight build: **1788552567**

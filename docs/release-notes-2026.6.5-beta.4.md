@@ -3,10 +3,11 @@
 Release candidate. Build, external TestFlight availability, and device checks
 must be recorded in `STATUS.md` before this is described as distributed.
 
-Signed candidate **2026.6.5 (1788570416)** has been uploaded to Apple for internal
-device validation. The latest upload audit reports **PROCESSING**, without
-errors or warnings; installable internal access is not yet confirmed. External
-Beta assignment is held until the real Watch-face capture route is checked.
+Signed candidate **2026.6.5 (1788570416)** is available to the **Mert** internal
+TestFlight group. Apple reports **VALID / internal IN_BETA_TESTING**; upload
+processing is complete without errors or warnings. External state is
+**READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
+distribution is held until the real Watch-face capture route is checked.
 
 ## What's new
 

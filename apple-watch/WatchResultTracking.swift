@@ -33,6 +33,12 @@ struct WatchDeliveryTracking {
         return true
     }
 
+    mutating func invalidate(removedCommandIDs: Set<String>) -> Bool {
+        guard let commandID, removedCommandIDs.contains(commandID) else { return false }
+        reset()
+        return true
+    }
+
     mutating func reset() {
         generation += 1
         commandID = nil

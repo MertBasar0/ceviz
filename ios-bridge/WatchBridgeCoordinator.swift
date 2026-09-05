@@ -4,6 +4,25 @@ import UserNotifications
 import WatchConnectivity
 import os
 
+/// File receipt wakes the phone in the background. Keep a bounded execution
+/// lease while submitting it; expiration is not a job acknowledgement.
+@MainActor
+private final class CommandBackgroundLease {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init() {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "Ceviz command receipt") { [weak self] in
+            self?.finish()
+        }
+    }
+
+    func finish() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+    }
+}
+
 /// The iPhone Companion Bridge that sits between the Apple Watch (WCSession)
 /// and the OpenClaw Backend (URLSession).
 class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCenterDelegate {
@@ -15,6 +34,9 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     private let handoffNudgeDefaultsKey = "watch-ceviz.last-handoff-nudge"
     @MainActor private var latestContinuationJobId: String?
     @MainActor private var latestContinuationDetails: ContinuationDetails?
+    private var pendingCommandReceipts: [String: (message: [String: Any], createdAt: Date)] = [:]
+    private var commandConfigurationGeneration = 0
+    private let commandResetDefaultsKey = "cvz.watchCommandResetAt"
 
     private override init() {
         super.init()
@@ -41,15 +63,25 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     }
 
     func resetConnectionState() {
+        commandConfigurationGeneration += 1
+        let configuredAt = Date().timeIntervalSince1970
+        UserDefaults.standard.set(configuredAt, forKey: commandResetDefaultsKey)
+        pendingCommandReceipts.removeAll()
         BackendTransport.shared.reset()
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         session.delegate = self
         session.activate()
 
+        if session.activationState == .activated {
+            for transfer in session.outstandingUserInfoTransfers
+            where transfer.userInfo["action"] as? String == WatchCommandTransport.receiptAction {
+                transfer.cancel()
+            }
+        }
         let resetMessage: [String: Any] = [
             "action": "reset_connection_state",
-            "configured_at": Date().timeIntervalSince1970
+            "configured_at": configuredAt
         ]
         if session.isReachable {
             session.sendMessage(resetMessage, replyHandler: nil) { [weak self] error in
@@ -91,12 +123,14 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     func sessionReachabilityDidChange(_ session: WCSession) {
         DispatchQueue.main.async {
             WatchLinkStatus.shared.isReachable = session.isReachable
+            self.flushCommandReceipts()
         }
     }
 
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         DispatchQueue.main.async {
             WatchLinkStatus.shared.isReachable = session.isReachable
+            if activationState == .activated { self.flushCommandReceipts() }
         }
         if let error = error {
             logger.error("WCSession activation failed: \(error.localizedDescription)")
@@ -108,37 +142,120 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     /// Handles messages from the Apple Watch and proxies them to the backend.
     func session(_ session: WCSession, didReceiveMessageData messageData: Data, replyHandler: @escaping (Data) -> Void) {
         logger.info("Received audio command payload from Watch")
-
-        // 1. Decode incoming WCSession message payload (from Watch)
-        let requestPayload: WatchCommandRequest
         do {
-            requestPayload = try JSONDecoder().decode(WatchCommandRequest.self, from: messageData)
+            let incoming = try WatchCommandTransport.decode(messageData)
+            handleCommand(incoming, replyHandler: replyHandler)
         } catch {
-            logger.error("Failed to decode WatchCommandRequest: \(error.localizedDescription)")
-            replyWithError(message: "Invalid payload format", replyHandler: replyHandler)
-            return
+            logger.error("Rejected invalid or expired Watch command")
+            replyWithError(message: "Invalid or expired payload", replyHandler: replyHandler)
         }
+    }
 
-        // 2. Demo modunda backend'e gitme, ornek sonucu don
-        if DemoMode.isActive {
-            let demo = DemoMode.watchReply(for: DemoMode.jobs.first?.id)
-            var payload = demo
-            payload["status"] = "completed"
-            payload["summary_text"] = demo["summary"] ?? ""
-            if let data = try? JSONSerialization.data(withJSONObject: payload) {
-                replyHandler(data)
-            } else {
-                replyWithError(message: "demo", replyHandler: replyHandler)
+    func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?["action"] as? String == WatchCommandTransport.fileAction else { return }
+        do {
+            // Apple deletes this URL when the delegate returns. Read and validate
+            // now, before handing the owned request bytes to asynchronous HTTP.
+            let incoming = try WatchCommandTransport.receiveFile(at: file.fileURL, metadata: file.metadata)
+            handleCommand(incoming, replyHandler: nil)
+        } catch {
+            // No receipt means no retirement on Watch. Expired files must never
+            // start a job, even if WC delivers them after its app was suspended.
+            logger.error("Rejected unreadable, invalid or expired Watch command file")
+        }
+    }
+
+    private func handleCommand(_ incoming: WatchCommandTransport.Incoming, replyHandler: ((Data) -> Void)?) {
+        Task { @MainActor in
+            let resetTime = UserDefaults.standard.double(forKey: self.commandResetDefaultsKey)
+            let resetAt = resetTime > 0 ? Date(timeIntervalSince1970: resetTime) : nil
+            // Recheck after the main-queue hop: a configuration reset or expiry
+            // may have occurred since the WC delegate read this delayed file.
+            if (incoming.identity != nil || resetAt != nil),
+               !WatchCommandTransport.isCurrent(incoming.request, after: resetAt) {
+                if let replyHandler { self.replyWithError(message: "Expired request", replyHandler: replyHandler) }
+                return
             }
+            let generation = self.commandConfigurationGeneration
+            let lease = CommandBackgroundLease()
+            let completion: (Data) -> Void = { data in
+                Task { @MainActor in
+                    defer { lease.finish() }
+                    guard self.commandConfigurationGeneration == generation else { return }
+                    replyHandler?(data)
+                    if let identity = incoming.identity,
+                       let receipt = try? WatchCommandTransport.receipt(responseData: data, identity: identity) {
+                        self.queueCommandReceipt(receipt)
+                    }
+                }
+            }
+            if DemoMode.isActive {
+                var payload = DemoMode.watchReply(for: DemoMode.jobs.first?.id)
+                payload["status"] = "completed"
+                payload["summary_text"] = payload["summary"] ?? ""
+                if let data = try? JSONSerialization.data(withJSONObject: payload) {
+                    completion(data)
+                } else {
+                    self.replyWithError(message: "demo", replyHandler: completion)
+                }
+                return
+            }
+            self.forwardToBackend(request: incoming.request, configurationGeneration: generation, replyHandler: completion)
+        }
+    }
+
+    @MainActor private func queueCommandReceipt(_ message: [String: Any]) {
+        guard let commandID = message["command_id"] as? String else { return }
+        var stamped = message
+        stamped["connection_reset_at"] = UserDefaults.standard.double(forKey: commandResetDefaultsKey)
+        let createdAt = Date()
+        stamped["receipt_created_at"] = createdAt.timeIntervalSince1970
+        pendingCommandReceipts[commandID] = (stamped, createdAt)
+        flushCommandReceipts()
+    }
+
+    private func flushCommandReceipts() {
+        let cutoff = Date().addingTimeInterval(-WatchCommandTransport.maximumAge)
+        pendingCommandReceipts = pendingCommandReceipts.filter { $0.value.createdAt >= cutoff }
+        guard !pendingCommandReceipts.isEmpty else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else {
+            session.activate()
             return
         }
+        for entry in pendingCommandReceipts.values {
+            let message = entry.message
+            let alreadyQueued = session.outstandingUserInfoTransfers.contains {
+                $0.userInfo["action"] as? String == WatchCommandTransport.receiptAction &&
+                $0.userInfo["command_id"] as? String == message["command_id"] as? String &&
+                $0.userInfo["audio_digest"] as? String == message["audio_digest"] as? String
+            }
+            if !alreadyQueued { session.transferUserInfo(message) }
+        }
+        pendingCommandReceipts.removeAll()
+    }
 
-        // 3. Forward to Backend
-        forwardToBackend(request: requestPayload, replyHandler: replyHandler)
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        guard error != nil,
+              userInfoTransfer.userInfo["action"] as? String == WatchCommandTransport.receiptAction,
+              let id = userInfoTransfer.userInfo["command_id"] as? String else { return }
+        DispatchQueue.main.async {
+            // Do not recursively retry an error. The next activation/reachability
+            // change can requeue this small receipt; the Watch still owns its audio.
+            guard userInfoTransfer.userInfo["connection_reset_at"] as? Double ==
+                UserDefaults.standard.double(forKey: self.commandResetDefaultsKey),
+                  let createdAt = userInfoTransfer.userInfo["receipt_created_at"] as? Double,
+                  Date().timeIntervalSince1970 - createdAt < WatchCommandTransport.maximumAge else { return }
+            self.pendingCommandReceipts[id] = (userInfoTransfer.userInfo, Date(timeIntervalSince1970: createdAt))
+        }
     }
     
     /// Handles dictionary messages for fetching data like active jobs.
     func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
+        if message["action"] as? String == WatchCommandTransport.capabilitiesAction {
+            replyHandler(["audio_file_v1": true])
+            return
+        }
         if message["action"] as? String == "register_watch_push",
            let token = message["apns_token"] as? String,
            let bundleId = message["bundle_id"] as? String {
@@ -344,7 +461,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
         task.resume()
     }
     
-    private func forwardToBackend(request: WatchCommandRequest, replyHandler: @escaping (Data) -> Void) {
+    private func forwardToBackend(request: WatchCommandRequest, configurationGeneration: Int, replyHandler: @escaping (Data) -> Void) {
         var urlRequest = URLRequest(url: backendURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -377,6 +494,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             
             if let decodedResponse = try? JSONDecoder().decode(WatchCommandResponse.self, from: responseData) {
                 Task { @MainActor in
+                    guard self.commandConfigurationGeneration == configurationGeneration else { return }
                     self.storeLatestContinuation(
                         jobId: decodedResponse.jobId,
                         summaryText: decodedResponse.reportMeta?.watchSummary ?? decodedResponse.summaryText,

@@ -28,6 +28,7 @@ targets:
     sources:
       - path: ios-bridge
       - path: job-state
+      - path: watch-transport
     settings:
       base:
         # Gercek Info.plist kullaniliyor: CFBundleURLTypes ve
@@ -54,6 +55,7 @@ targets:
     sources:
       - path: apple-watch
       - path: job-state
+      - path: watch-transport
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO

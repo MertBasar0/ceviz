@@ -65,9 +65,17 @@
 "Connected" = "Bağlı";
 "Offline" = "Çevrimdışı";
 "Preparing microphone…" = "Mikrofon hazırlanıyor…";
+"Finishing recording…" = "Kayıt tamamlanıyor…";
+"Recording" = "Kayıt";
+"Delete" = "Sil";
+"Send" = "Gönder";
+"%d s" = "%d sn";
 "Sending request…" = "İstek gönderiliyor…";
 "Ready to listen" = "Dinlemeye hazır";
 "Up to 15 seconds" = "En fazla 15 saniye";
+"Request could not be prepared. Recording remains saved on Watch." = "İstek hazırlanamadı. Kayıt saatte saklanıyor.";
+"Recording saved. Transferring to iPhone in the background…" = "Kayıt saklandı. Arka planda iPhone'a aktarılıyor…";
+"Update Ceviz on iPhone to send this recording. It remains saved on Watch." = "Bu kaydı göndermek için iPhone'daki Ceviz'i güncelle. Kayıt saatte saklanıyor.";
 "Agent-reported result" = "Ajanın bildirdiği sonuç";
 "You can start another request. Earlier jobs stay in Jobs." = "Yeni bir istek başlatabilirsiniz. Önceki işler İşler'de kalır.";
 "Review the next step on iPhone." = "Sonraki adımı iPhone'da inceleyin.";

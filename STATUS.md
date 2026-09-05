@@ -2,6 +2,41 @@
 
 Son güncelleme: **5 Eylül 2026**
 
+## Devam eden düzeltme — kayıt ve mikrofon ekranı
+
+Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
+tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
+tüm kabul listesinin tamamlandığı anlamına gelmez. Aynı denemede 15 saniye
+dolmadan “kayıt çok uzun” hatası, küçük yazı ve ekran dışına taşan eylem bildirildi.
+Kullanıcı netleştirdi: sayaçta **6 saniye kalırken Gönder'e kendisi bastı**;
+bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
+
+- Kullanıcı, kayıt güvenilirliği ve sade mikrofon ekranı düzeltmesini onayladı.
+- Hata mesajının kaynağı Watch'taki 60.000 bayt JSON kontrolüydü; süre kontrolü
+  değildi. Bu dal teslim alınmayan kaydı kuyruktan siliyordu. Gerçek sorunlu
+  ses dosyası elimizde olmadığından gerçekleşen codec/boyut nedeni doğrulanmadı.
+- Kayıt bitişi ve monoton sayaç tek yaşam döngüsüne alınıyor; gerçek dosyanın
+  yalnız sayısal süre/boyut/format tanısı eklenecek, ses içeriği loglanmayacak.
+- Büyük istekler için Apple'ın dosya aktarımı ve eşleşen iş makbuzu; gönderim
+  hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım hedefleniyor.
+- Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
+  alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
+- Yerel Python **76/76** (8 yeni test-runner kontrolü dahil), relay **3/3** geçti. Yeni Swift ve gerçek
+  Watch UI testleri henüz Apple ortamında çalıştırılmadı. Windows/WSL'de
+  Swift/Xcode yok; ses dosyası aktarımı simülatörde fiziksel teslim kanıtı olamaz.
+- Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
+  mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
+  kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
+- Recorder/UI/transport bağımsız kaynak incelemesi tamamlandı; reset sonrası
+  gecikmiş dosya/makbuz ve farklı telefon-saat sürümü bulguları kapatıldı.
+  Native dosya aktarımı ve monoton kayıt sahibi için ek üretim kodu gerekli;
+  küçük mesajların hızlı yolu ve mevcut backend kimliği korunuyor.
+- Bu düzeltme Apple doğrulama dalına hazırlanıyor; henüz yeni build/yükleme
+  yok. Aşağıdaki iç aday halen son yüklü build. Dış Beta, kayıt ve ekran cihaz
+  kontrolünü bekliyor.
+- OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede
+  değiştirilmedi; değişiklik Apple Watch/iPhone uygulama katmanında.
+
 ## İç test adayı — Beta 4
 
 **2026.6.5 (1788570416)**, Apple tarafından **VALID** olarak işlendi ve

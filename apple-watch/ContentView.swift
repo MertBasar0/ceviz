@@ -9,8 +9,6 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var preparingCapture = false
     @State private var captureReady = false
-    @State private var recordingSeconds: TimeInterval = 0
-    @State private var recordingTimer: Timer?
     @State private var recordingWasCancelled = false
     @State private var requestedResult: RequestedResult?
 
@@ -19,6 +17,20 @@ struct ContentView: View {
         let text: String
         let url: String?
         let jobID: String?
+    }
+
+    private enum VoicePhase: Equatable {
+        case idle, preparing, recording, finalizing, sending, result
+    }
+
+    private var voicePhase: VoicePhase {
+        if recorder.isRecording { return .recording }
+        if preparingCapture { return .preparing }
+        if sessionManager.isCapturing { return .finalizing }
+        if requestedResult != nil { return .result }
+        if sessionManager.isSending { return .sending }
+        if captureReady || (sessionManager.responseText.isEmpty && sessionManager.resultState == nil) { return .idle }
+        return .result
     }
 
     private var displayedState: CVZJobState? { requestedResult?.state ?? sessionManager.resultState }
@@ -44,13 +56,26 @@ struct ContentView: View {
         }
         .background(CVZ.bg)
         .onAppear {
+            // The recorder owns finalization; both manual and timed stops submit here once.
+            recorder.onRecordingFinished = { [weak manager = sessionManager] result in
+                guard let manager else { return }
+                manager.isCapturing = false
+                switch result {
+                case .success(let audio):
+                    WKInterfaceDevice.current().play(.stop)
+                    manager.sendAudioCommand(audioBase64: audio)
+                case .failure(let error):
+                    manager.stopExtendedSession()
+                    manager.showCaptureError(error.localizedDescription)
+                }
+            }
             sessionManager.audioPlayerManager = player
             sessionManager.resumeResultPollingIfNeeded()
             sessionManager.processQueue()
         }
         .onOpenURL { url in
             guard let route = WatchCaptureRoute(url: url, isRecording: recorder.isRecording,
-                                                preparingCapture: preparingCapture) else { return }
+                                                preparingCapture: sessionManager.isCapturing) else { return }
             selectedTab = 0
             requestedResult = nil
             captureReady = route == .ready
@@ -63,13 +88,10 @@ struct ContentView: View {
             if phase == .background && preparingCapture { cancelRecording() }
         }
         .onChange(of: selectedTab) { tab in
-            if tab != 0 && (recorder.isRecording || preparingCapture) { cancelRecording() }
-        }
-        .onChange(of: recorder.isRecording) { recording in
-            if !recording && recordingTimer != nil { stop() }
+            if tab != 0 && sessionManager.isCapturing { cancelRecording() }
         }
         .onChange(of: sessionManager.resultState) { state in
-            if !recorder.isRecording && !preparingCapture,
+            if !sessionManager.isCapturing,
                state?.isReportedResult == true || state == .failed {
                 captureReady = false
             }
@@ -80,7 +102,7 @@ struct ContentView: View {
             // finishes in the background; this does not change delivery ownership.
             requestedResult = RequestedResult(state: state, text: sessionManager.responseText,
                                               url: sessionManager.handoffUrl, jobID: sessionManager.handoffJobId)
-            if recorder.isRecording || preparingCapture { cancelRecording(resumeQueue: false) }
+            if sessionManager.isCapturing { cancelRecording(resumeQueue: false) }
             selectedTab = 0
             captureReady = false
             recordingWasCancelled = false
@@ -88,52 +110,47 @@ struct ContentView: View {
     }
 
     private var voiceTab: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Label(LocalizedStringKey(sessionManager.isReachable ? "Connected" : "Offline"), systemImage: "iphone")
-                    .font(.caption2)
-                    .foregroundColor(sessionManager.isReachable ? CVZ.accent : CVZ.textSub)
-                    .lineLimit(1)
-                    .accessibilityLabel(Text(LocalizedStringKey(sessionManager.isReachable ? "Phone connected" : "Phone offline")))
-                Spacer(minLength: 2)
-                Button { selectedTab = 1 } label: {
-                    Image(systemName: "list.bullet").frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                    .buttonStyle(.plain).accessibilityLabel(Text("Jobs"))
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    if recorder.isRecording {
-                        recordingArea
-                    } else if requestedResult != nil {
-                        resultCard
-                    } else if preparingCapture || sessionManager.isSending {
-                        ProgressView(LocalizedStringKey(preparingCapture ? "Preparing microphone…" : "Sending request…"))
-                            .font(.caption).tint(CVZ.accent)
-                    } else if captureReady || (sessionManager.responseText.isEmpty && sessionManager.resultState == nil) {
-                        Text("Ready to listen").font(.headline).foregroundColor(CVZ.text)
-                        Text("Up to 15 seconds")
-                            .font(.caption).foregroundColor(CVZ.textSub)
-                    } else {
-                        resultCard
+        Group {
+            if voicePhase == .recording {
+                recordingArea
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        switch voicePhase {
+                        case .idle:
+                            Text("Ready to listen").font(.headline)
+                                .accessibilityIdentifier("capture.ready")
+                            Text("Up to 15 seconds").font(.body)
+                                .accessibilityIdentifier("capture.durationLimit")
+                            if recordingWasCancelled {
+                                Text("Recording discarded").font(.body)
+                            } else {
+                                followUpCaption
+                            }
+                            if !sessionManager.isReachable {
+                                Label("Phone offline", systemImage: "iphone").font(.caption)
+                                    .foregroundColor(CVZ.textSub)
+                            }
+                        case .preparing:
+                            ProgressView("Preparing microphone…").font(.body).tint(CVZ.accent)
+                        case .finalizing:
+                            ProgressView("Finishing recording…").font(.body).tint(CVZ.accent)
+                        case .sending:
+                            ProgressView("Sending request…").font(.body).tint(CVZ.accent)
+                        case .result:
+                            resultCard
+                        case .recording:
+                            EmptyView()
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            micButton
-            TimelineView(.periodic(from: .now, by: 10)) { context in
-                if recordingWasCancelled {
-                    Text("Recording discarded").font(.caption2).foregroundColor(CVZ.textSub)
-                } else if !recorder.isRecording && !preparingCapture && !sessionManager.isSending,
-                          let last = sessionManager.lastResultAt,
-                          context.date.timeIntervalSince(last) < WatchSessionManager.continuationWindow {
-                    Text("↩ follow-up").font(.caption2).foregroundColor(CVZ.accent)
+                    .foregroundColor(CVZ.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // The optional footer must not take the result area's flexible height.
-            .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Reserve action space before laying out text; scrolling never moves the controls.
+        .safeAreaInset(edge: .bottom, spacing: 6) { captureActions }
         .padding(.horizontal, 4)
         .background(CVZ.bg.ignoresSafeArea())
     }
@@ -141,65 +158,97 @@ struct ContentView: View {
     private var resultCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let state = displayedState {
-                CVZStatusChip(state: state)
+                Label(NSLocalizedString(state.titleKey, comment: "job state"), systemImage: state.symbolName)
+                    .font(.headline).foregroundColor(CVZ.statusColor(state))
+                    .accessibilityIdentifier("capture.result.\(state)")
                 if state.isReportedResult {
-                    Text("Agent-reported result").font(.caption2).foregroundColor(CVZ.textSub)
+                    Text("Agent-reported result").font(.caption).foregroundColor(CVZ.textSub)
                 }
             }
             Text(displayedText)
-                .font(.body).foregroundColor(CVZ.text).lineLimit(3)
+                .font(.body).foregroundColor(CVZ.text)
                 .fixedSize(horizontal: false, vertical: true)
             if displayedState == .running || displayedState == .queued {
                 Text("You can start another request. Earlier jobs stay in Jobs.")
-                    .font(.caption2).foregroundColor(CVZ.textSub)
+                    .font(.body).foregroundColor(CVZ.textSub)
             } else if displayedState?.needsAttention == true {
                 Text("Review the next step on iPhone.")
-                    .font(.caption).foregroundColor(CVZ.warn)
+                    .font(.body).foregroundColor(CVZ.warn)
             }
-            if let url = displayedURL {
-                Button { sessionManager.openHandoff(url: url, jobId: displayedJobID) } label: {
-                    Label(LocalizedStringKey(handoffRequested ? "SENT TO IPHONE" : "Open on iPhone"), systemImage: "iphone.and.arrow.forward")
-                        .font(.caption.weight(.semibold))
-                }
-                .tint(CVZ.accent).disabled(handoffRequested)
+            followUpCaption
+        }
+    }
+
+    private var followUpCaption: some View {
+        TimelineView(.periodic(from: .now, by: 10)) { context in
+            if !sessionManager.isSending, let last = sessionManager.lastResultAt,
+               context.date.timeIntervalSince(last) < WatchSessionManager.continuationWindow {
+                Text("↩ follow-up").font(.caption).foregroundColor(CVZ.accent)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var recordingArea: some View {
-        VStack(spacing: 6) {
-            Label("● REC", systemImage: "mic.fill").font(.caption).foregroundColor(CVZ.err)
-            Text(String(format: NSLocalizedString("%d seconds left", comment: "capture countdown"), max(0, Int(ceil(AudioRecorderManager.maximumDuration - recordingSeconds)))))
-                .font(.title3.weight(.semibold)).monospacedDigit().foregroundColor(CVZ.text)
-            ProgressView(value: recordingSeconds, total: AudioRecorderManager.maximumDuration).tint(CVZ.err)
-            Text("Tap send when you finish.").font(.caption2).foregroundColor(CVZ.textSub)
+        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            let remaining = max(0, Int(ceil(AudioRecorderManager.maximumDuration - recorder.elapsedSeconds)))
+            VStack(spacing: 4) {
+                Text("Recording").font(.body.weight(.semibold)).foregroundColor(CVZ.text)
+                    .accessibilityIdentifier("capture.recording")
+                Text(String(format: NSLocalizedString("%d s", comment: "short capture countdown"), remaining))
+                    .font(.title2.weight(.bold)).monospacedDigit().foregroundColor(CVZ.text)
+                    .accessibilityLabel(Text(String(format: NSLocalizedString("%d seconds left", comment: "capture countdown"), remaining)))
+                    .accessibilityIdentifier("capture.countdown")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity)
     }
 
-    private var micButton: some View {
-        HStack(spacing: 18) {
-            if recorder.isRecording || preparingCapture {
+    private var captureActions: some View {
+        HStack(spacing: 12) {
+            if sessionManager.isCapturing {
                 Button(action: { cancelRecording() }) {
-                    Image(systemName: "xmark").font(.title3).foregroundColor(CVZ.err)
-                        .frame(width: 44, height: 44).background(CVZ.errBg, in: Circle())
+                    Text("Delete").font(.body.weight(.semibold)).foregroundColor(CVZ.err)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(CVZ.errBg, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain).accessibilityLabel(Text("Discard recording"))
+                .accessibilityIdentifier("capture.cancel")
+            } else if voicePhase == .result, let url = displayedURL {
+                Button { sessionManager.openHandoff(url: url, jobId: displayedJobID) } label: {
+                    Image(systemName: "iphone.and.arrow.forward").font(.title3.weight(.semibold))
+                        .foregroundColor(CVZ.accent).frame(maxWidth: .infinity, minHeight: 54)
+                        .background(CVZ.panel, in: RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(.plain).disabled(handoffRequested)
+                .accessibilityLabel(Text(LocalizedStringKey(handoffRequested ? "SENT TO IPHONE" : "Open on iPhone")))
+                .accessibilityIdentifier("capture.openOnPhone")
             }
-            Button { recorder.isRecording ? stop() : start() } label: {
-                Image(systemName: recorder.isRecording ? "arrow.up" : "mic")
-                    .font(.title2.weight(.semibold)).foregroundColor(CVZ.accent)
-                    .frame(width: 54, height: 54).background(CVZ.panel, in: Circle())
-                    .overlay(Circle().stroke(CVZ.accent, lineWidth: 1.5))
+            Button {
+                if recorder.isRecording { recorder.stopRecording() } else { start() }
+            } label: {
+                Group {
+                    if sessionManager.isCapturing {
+                        Text("Send").font(.body.weight(.semibold))
+                    } else {
+                        Image(systemName: "mic").font(.title2.weight(.semibold))
+                    }
+                }
+                    .foregroundColor(CVZ.accent)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(CVZ.panel, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(CVZ.accent, lineWidth: 1.5))
             }
             .buttonStyle(.plain)
-            .disabled(sessionManager.isSending || preparingCapture)
-            .accessibilityLabel(Text(LocalizedStringKey(recorder.isRecording ? "Send recording" : "Start recording")))
+            .disabled(!recorder.isRecording && (sessionManager.isSending || sessionManager.isCapturing))
+            .accessibilityLabel(Text(LocalizedStringKey(sessionManager.isCapturing ? "Send recording" : "Start recording")))
+            .accessibilityIdentifier("capture.primary")
         }
+        .background(CVZ.bg)
     }
 
     private func start() {
-        guard !preparingCapture && !sessionManager.isSending && !recorder.isRecording else { return }
+        guard !sessionManager.isCapturing && !sessionManager.isSending else { return }
         recordingWasCancelled = false
         requestedResult = nil
         captureReady = false
@@ -216,36 +265,16 @@ struct ContentView: View {
             }
             sessionManager.startExtendedSession()
             WKInterfaceDevice.current().play(.start)
-            recordingSeconds = 0
-            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
-                recordingSeconds = recorder.elapsedSeconds
-                if recordingSeconds >= AudioRecorderManager.maximumDuration { stop() }
-            }
-        }
-    }
-
-    private func stop() {
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        let audio = recorder.stopRecording()
-        sessionManager.isCapturing = false
-        if let audio {
-            WKInterfaceDevice.current().play(.stop)
-            sessionManager.sendAudioCommand(audioBase64: audio)
-        } else {
-            sessionManager.stopExtendedSession()
-            sessionManager.showCaptureError(recorder.lastError ?? NSLocalizedString("Could not capture audio", comment: ""))
         }
     }
 
     private func cancelRecording(resumeQueue: Bool = true) {
-        recordingTimer?.invalidate()
-        recordingTimer = nil
         preparingCapture = false
         recorder.cancelRecording()
         sessionManager.isCapturing = false
         sessionManager.stopExtendedSession()
         recordingWasCancelled = true
+        captureReady = true
         WKInterfaceDevice.current().play(.click)
         if resumeQueue { sessionManager.processQueue() }
     }

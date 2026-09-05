@@ -1,0 +1,30 @@
+include:
+  - project.yml
+
+targets:
+  CevizWatchUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    deploymentTarget: "9.0"
+    sources:
+      - path: tests/watch-ui
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CevizWatchApp
+        PRODUCT_BUNDLE_IDENTIFIER: com.mertbasar.cevizwatch.uitests
+    dependencies:
+      - target: CevizWatchApp
+
+schemes:
+  CevizWatchUI:
+    build:
+      targets:
+        CevizWatchApp: all
+        CevizWatchUITests: [test]
+    test:
+      config: Release
+      targets:
+        - CevizWatchUITests
+      gatherCoverageData: false
+      deleteScreenshotsWhenEachTestSucceeds: false

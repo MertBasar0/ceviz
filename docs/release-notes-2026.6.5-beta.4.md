@@ -7,7 +7,28 @@ Signed candidate **2026.6.5 (1788570416)** is available to the **Mert** internal
 TestFlight group. Apple reports **VALID / internal IN_BETA_TESTING**; upload
 processing is complete without errors or warnings. External state is
 **READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
-distribution is held until the real Watch-face capture route is checked.
+distribution is held for the capture reliability and layout checks below.
+
+## Capture correction in progress
+
+The tester reported a successful physical complication-to-command flow, followed
+by a premature “recording too long” error and unreadable/clipped capture controls.
+The source of that message was a serialized-message byte limit, not the recording
+duration. The rejected audio file is unavailable, so its actual encoding/size has
+not been measured. Build **1788570416** does not contain this correction.
+
+The approved correction separates recording completion from rendering, preserves
+elapsed time at stop, keeps failed deliveries queued, and uses native file transfer
+for requests above the interactive message budget. Matching receipts, connection
+reset boundaries, and request expiry must be checked on both devices. A reserved
+action area and a dedicated recording state replace the crowded microphone screen.
+
+Before external distribution, verify both updated apps on a paired real device:
+manual send and automatic 15-second finish; no premature size error; readable
+counter and reachable Delete/Send with larger text; retained audio and correct
+receipt after a connection interruption. Simulator UI and pure state tests are
+not proof of microphone quality, physical file transfer, or remote exactly-once
+effects. Executed checks and the next exact build belong in `STATUS.md`.
 
 ## What's new
 

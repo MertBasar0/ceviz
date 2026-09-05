@@ -65,9 +65,17 @@
 "Connected" = "Connected";
 "Offline" = "Offline";
 "Preparing microphone…" = "Preparing microphone…";
+"Finishing recording…" = "Finishing recording…";
+"Recording" = "Recording";
+"Delete" = "Delete";
+"Send" = "Send";
+"%d s" = "%d s";
 "Sending request…" = "Sending request…";
 "Ready to listen" = "Ready to listen";
 "Up to 15 seconds" = "Up to 15 seconds";
+"Request could not be prepared. Recording remains saved on Watch." = "Request could not be prepared. Recording remains saved on Watch.";
+"Recording saved. Transferring to iPhone in the background…" = "Recording saved. Transferring to iPhone in the background…";
+"Update Ceviz on iPhone to send this recording. It remains saved on Watch." = "Update Ceviz on iPhone to send this recording. It remains saved on Watch.";
 "Agent-reported result" = "Agent-reported result";
 "You can start another request. Earlier jobs stay in Jobs." = "You can start another request. Earlier jobs stay in Jobs.";
 "Review the next step on iPhone." = "Review the next step on iPhone.";

@@ -32,12 +32,12 @@ class SimulatorBootTests(unittest.TestCase):
                 self.assertEqual([call.args[0] for call in diagnostics.call_args_list],
                                  ["Boot progress", "Migration stalled"])
 
-    def test_zero_exit_with_failed_migration_is_fatal_before_install(self):
+    def test_zero_exit_migration_diagnostic_is_preserved_without_claiming_readiness(self):
         diagnostic = "Status=3, isTerminal=YES, Elapsed=02:06.\n\tData Migration Failed\n"
         with patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, diagnostic)), \
-                patch("builtins.print"):
-            with self.assertRaisesRegex(RuntimeError, "data migration failed before app installation"):
-                SMOKE.simctl("bootstatus", "fixture-phone", "-b")
+                patch("builtins.print") as warning:
+            self.assertEqual(SMOKE.simctl("bootstatus", "fixture-phone", "-b", capture=True), diagnostic)
+            self.assertIn("not app readiness proof", warning.call_args.args[0])
 
     def test_successful_boot_preserves_diagnostics_and_has_a_deadline(self):
         for diagnostic in ("Status=4294967295, isTerminal=YES\nFinished\n", "Device already booted, nothing to do.\n"):
@@ -45,6 +45,9 @@ class SimulatorBootTests(unittest.TestCase):
                     patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, diagnostic)) as run:
                 self.assertEqual(SMOKE.simctl("bootstatus", "fixture-phone", "-b", capture=True), diagnostic)
                 self.assertEqual(run.call_args.kwargs["timeout"], 300)
+        with patch.object(SMOKE.subprocess, "run") as run:
+            SMOKE.simctl("boot", "fixture-watch")
+            self.assertEqual(run.call_args.kwargs["timeout"], 300)
 
 
 class SimulatorSelectionTests(unittest.TestCase):

@@ -40,10 +40,18 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   açılışına ulaşıldığını ve dış URL çağrısının yine 115 verdiğini gösterdi.
   40 mm hazır ekranı incelendi: 15 saniye açıklaması ve mikrofon görünür;
   ekranın altındaki ikincil çevrimdışı satırı kısmen kırpılıyor. Kayıt ekranı
-  ve ses süre testleri çalışmadı, imzalama veya yükleme başlamadı. Test sahibi artık bu
-  sıfır çıkış kodlu açılış hatasını reddediyor, tanıyı koruyor ve beklemeyi
-  sınırlıyor. Sayısal ses ölçümleri yalnız ilgili test sırasında canlı toplanacak;
+  ve ses süre testleri çalışmadı, imzalama veya yükleme başlamadı. Önce bu
+  sıfır çıkış kodlu tanıyı durdurucu sayan test kontrolü eklendi; ancak önceki
+  başarılı `33934521351` çalışmasının tam günlüklerinde de aynı tanı ve ardından
+  çalışan uygulama görüldü. Tek başına host migration metnini uygulama hatası
+  sayan bu kontrol geri düzeltildi: tanı uyarı olarak korunur; kurulum, gerçek
+  açılış ve UI/ses ölçümü geçmeden başarı verilmez. Açılış beklemeleri sınırlı.
+  Sayısal ses ölçümleri yalnız ilgili test sırasında canlı toplanacak;
   kalıcılığı garanti olmayan geçmiş info günlükleri kanıt sayılmayacak.
+  Test altyapısı adayı `7db1d6adb5d1ae288dd0b09a8fe61ec8b02804e7` ile başlayan
+  <https://github.com/MertBasar0/ceviz/actions/runs/33992244824>, bu yeni
+  karşı kanıt üzerine durduruldu; üretim kodu değişmeden düzeltilmiş kontrolle
+  tekrar doğrulanacak. Durdurulan çalışmaların hiçbiri UI/ses başarısı sayılmaz.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

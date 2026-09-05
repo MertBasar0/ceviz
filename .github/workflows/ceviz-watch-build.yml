@@ -81,7 +81,7 @@ jobs:
           xcodegen generate
           xcodebuild -list -project CevizWatch.xcodeproj
 
-      - name: Validate unsigned iPhone, Watch, and complication build
+      - name: Validate simulator iPhone, Watch, and complication build
         run: |
           set -euo pipefail
           mkdir -p build
@@ -91,7 +91,8 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/validation \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY=- \
             build | tee build/validation-build.log
           WIDGET_PATH='build/validation/Build/Products/Release-iphonesimulator/CevizBridge.app/Watch/CevizWatchApp.app/PlugIns/CevizWatchWidget.appex'
           test -x "$WIDGET_PATH/CevizWatchWidget"

@@ -62,6 +62,8 @@
 "Status unavailable" = "Durum alınamadı";
 "Phone connected" = "Telefon bağlı";
 "Phone offline" = "Telefon çevrimdışı";
+"Connected" = "Bağlı";
+"Offline" = "Çevrimdışı";
 "Preparing microphone…" = "Mikrofon hazırlanıyor…";
 "Sending request…" = "İstek gönderiliyor…";
 "Ready to listen" = "Dinlemeye hazır";

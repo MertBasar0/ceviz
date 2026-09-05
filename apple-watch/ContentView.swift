@@ -89,10 +89,11 @@ struct ContentView: View {
     private var voiceTab: some View {
         VStack(spacing: 6) {
             HStack {
-                Label(LocalizedStringKey(sessionManager.isReachable ? "Phone connected" : "Phone offline"), systemImage: "iphone")
+                Label(LocalizedStringKey(sessionManager.isReachable ? "Connected" : "Offline"), systemImage: "iphone")
                     .font(.caption2)
                     .foregroundColor(sessionManager.isReachable ? CVZ.accent : CVZ.textSub)
                     .lineLimit(1)
+                    .accessibilityLabel(Text(LocalizedStringKey(sessionManager.isReachable ? "Phone connected" : "Phone offline")))
                 Spacer(minLength: 2)
                 Button { selectedTab = 1 } label: {
                     Image(systemName: "list.bullet").frame(width: 44, height: 44)
@@ -129,6 +130,8 @@ struct ContentView: View {
                     Text("↩ follow-up").font(.caption2).foregroundColor(CVZ.accent)
                 }
             }
+            // The optional footer must not take the result area's flexible height.
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 4)
         .background(CVZ.bg.ignoresSafeArea())

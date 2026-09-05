@@ -131,6 +131,29 @@ def collect_url_failure_diagnostics(output, watch_udid):
     ])
 
 
+def validate_local_signature_text(details, bundle_id):
+    fields = dict(line.split("=", 1) for line in details.splitlines() if "=" in line)
+    if fields.get("Identifier") != bundle_id:
+        raise RuntimeError(f"Simulator code Identifier does not match CFBundleIdentifier {bundle_id}")
+    if fields.get("Signature") != "adhoc":
+        raise RuntimeError(f"Simulator bundle {bundle_id} must use certificate-free ad hoc signing")
+    return {"identifier": bundle_id, "signature": "adhoc"}
+
+
+def verify_local_bundle_signature(diagnostics, name, bundle, expected_id):
+    info = plistlib.loads((bundle / "Info.plist").read_bytes())
+    if info.get("CFBundleIdentifier") != expected_id:
+        raise RuntimeError(f"Unexpected simulator bundle identifier at {bundle}")
+    details = record_command(diagnostics, f"{name}-codesign-display", [
+        "codesign", "-d", "--verbose=4", str(bundle),
+    ], required=True)
+    signature = validate_local_signature_text(details.stdout + "\n" + details.stderr, expected_id)
+    record_command(diagnostics, f"{name}-codesign-verify", [
+        "codesign", "--verify", "--strict", "--verbose=2", str(bundle),
+    ], required=True)
+    return {"bundle": str(bundle), **signature, "verified": True}
+
+
 def main():
     output = Path("build/watch-launch-smoke")
     output.mkdir(parents=True, exist_ok=True)
@@ -163,6 +186,17 @@ def run_smoke(output, diagnostics, context, started):
     if len(watches) != 1:
         raise RuntimeError("Expected exactly one embedded Ceviz Watch application")
 
+    # Simulator execution needs its ordinary local identity, not distribution
+    # credentials. Check all three Xcode-produced bundles before installation.
+    context["local_signatures"] = []
+    for name, bundle, bundle_id in (
+        ("bridge", bridge, "com.mertbasar.cevizwatch"),
+        ("watch", watches[0], watch_id),
+        ("widget", watches[0] / "PlugIns" / "CevizWatchWidget.appex", watch_id + ".widget"),
+    ):
+        context["local_signatures"].append(
+            verify_local_bundle_signature(diagnostics, name, bundle, bundle_id))
+
     # Read the selected Xcode SDKs, not the newest runtime installed on the runner.
     sdk_versions = {}
     for role, sdk in (("watch", "watchsimulator"), ("phone", "iphonesimulator")):
@@ -192,6 +226,8 @@ def run_smoke(output, diagnostics, context, started):
     simctl("install", phone["udid"], str(bridge))
     simctl("install", watch["udid"], str(watches[0]))
     installed_path = simctl("get_app_container", watch["udid"], watch_id, "app", capture=True).strip()
+    context["installed_watch_signature"] = verify_local_bundle_signature(
+        diagnostics, "installed-watch", Path(installed_path), watch_id)
     installed_plist = Path(installed_path, "Info.plist").read_bytes()
     (diagnostics / "installed-watch-Info.plist").write_bytes(installed_plist)
     info = plistlib.loads(installed_plist)

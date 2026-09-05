@@ -71,7 +71,8 @@ cancelled. Check the recorded result before resubmitting a consequential task.
 
 Required gates: Python endpoint/contract tests, real relay-handler tests with
 synthetic keys, shared Swift state/upgrade tests, Watch focus/retry tests,
-secretless signing-lane tests, unsigned embedded-widget build, and signed IPA.
+secretless signing-lane tests, locally signed simulator/embedded-widget build,
+and distribution-signed IPA.
 Record executed gates and exact build identity in `STATUS.md`.
 
 Next product slice: explicit follow-up/new-task context, personal quick actions,

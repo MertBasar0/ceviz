@@ -22,11 +22,26 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   `LSApplicationWorkspaceErrorDomain 115` ile başarısız. Kadran gezinmesi
   doğrulanmış sayılmadı. Watch URL kaydına `Editor` rolü eklendi; SDK ile eşleşen
   simülatör seçimi ve ek tanı kontrolü hazır. Ek 9 kontrolle yerel Python toplamı
-  **58/58** geçti. Bu değişikliklerden sonraki Apple doğrulaması henüz bekleniyor.
+  **58/58** geçti.
+- İkinci Apple kontrolü (`b8b636c6d6acfe72062e43be24187f4b33151223`):
+  <https://github.com/MertBasar0/ceviz/actions/runs/33931103215>.
+  Testler ve native derleme yeniden geçti; SDK/runtime 26.4, 40 mm Watch
+  simülatörü, kurulu URL scheme + `Editor` kaydı doğrulandı. Dış `openurl`
+  yine 115 ile başarısız; günlüklerde uygulama kimliği uyuşmazlığı ve scheme
+  handler bulunamadığı görüldü. Dağıtım imzası/yükleme yine başlamadı.
+  Bu komut gerçek WidgetKit komplikasyon tıklamasının kanıtı değildir.
+  Simülatörün normal, sertifikasız yerel imzasıyla kimlik doğrulaması hazır;
+  üretilen üç paket ve kurulu Watch kimliği kontrol edilecek. Yerel Python
+  toplamı **62/62** geçti; hatanın nedeni henüz kesinleşmedi.
+  40 mm ekranda boş footer'ın alan tüketmesi de düzeltildi; yeni görsel kanıt bekliyor.
 - iPhone İngilizce demo ekran kontrolü **5/5 görsel incelendi**:
   <https://github.com/MertBasar0/ceviz/actions/runs/33929929029>.
   `[NEEDS INPUT]` liste/raporda tutarlı, diğer raporlarda `[DONE]`; bu kanıt
   örnek veriyle düzen/durum sunumunu kapsar, gerçek görev teslimini değil.
+- Türkçe iPhone simülatör ekranları da **5/5 incelendi**:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33931213126>.
+  iPhone 17 Pro Max simülatöründe 1320×2868 JPEG; `[GİRDİ BEKLİYOR]` / `[TAMAM]`
+  ayrımı ve ajan-bildirimli sonuç başlığı tutarlı. Fiziksel cihaz testi değildir.
 - Bildirim relay'i güncellendi: canlı sürüm
   `5b72fe99-6bad-4df8-84f1-56cbf60c3153` (%100), `/healthz` HTTP 200.
   Yayımlanan kaynak SHA256:

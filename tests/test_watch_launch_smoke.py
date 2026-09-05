@@ -102,5 +102,26 @@ class GateReportingTests(unittest.TestCase):
                 os.chdir(previous)
 
 
+class LocalSignatureTests(unittest.TestCase):
+    def test_matching_ad_hoc_signature_is_accepted(self):
+        proof = SMOKE.validate_local_signature_text(
+            "Executable=/sample/CevizWatchApp\nIdentifier=com.example.watch\nSignature=adhoc\nTeamIdentifier=not set\n",
+            "com.example.watch")
+        self.assertEqual(proof, {"identifier": "com.example.watch", "signature": "adhoc"})
+
+    def test_executable_name_identity_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "Identifier does not match"):
+            SMOKE.validate_local_signature_text("Identifier=CevizWatchApp\nSignature=adhoc\n", "com.example.watch")
+
+    def test_certificate_signature_is_not_accepted_as_local(self):
+        with self.assertRaisesRegex(RuntimeError, "certificate-free"):
+            SMOKE.validate_local_signature_text(
+                "Identifier=com.example.watch\nAuthority=Apple Development: Example\n", "com.example.watch")
+
+    def test_missing_code_identity_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "Identifier does not match"):
+            SMOKE.validate_local_signature_text("code object is not signed at all\n", "com.example.watch")
+
+
 if __name__ == "__main__":
     unittest.main()

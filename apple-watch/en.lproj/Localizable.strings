@@ -62,6 +62,8 @@
 "Status unavailable" = "Status unavailable";
 "Phone connected" = "Phone connected";
 "Phone offline" = "Phone offline";
+"Connected" = "Connected";
+"Offline" = "Offline";
 "Preparing microphone…" = "Preparing microphone…";
 "Sending request…" = "Sending request…";
 "Ready to listen" = "Ready to listen";

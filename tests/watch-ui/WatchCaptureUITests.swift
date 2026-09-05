@@ -180,7 +180,9 @@ final class WatchCaptureUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(button.frame.height, 44)
                 XCTAssertFalse(button.frame.intersects(countdown.frame), "Action space must not cover the countdown")
             }
-            capture("recording-\(language)", in: app)
+            // Capture the frame before the real 15s deadline; detailed AX queries
+            // can outlast recording on a loaded runner. Inspect AX after discard.
+            capture("recording-\(language)")
             app.buttons["capture.cancel"].tap()
             assertVisible(app.staticTexts["capture.durationLimit"], in: app, "Discard must return to ready")
             let discarded = app.staticTexts[language == "tr" ? "Kayıt silindi" : "Discarded"]

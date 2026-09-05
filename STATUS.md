@@ -95,7 +95,16 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   sürümün beş senaryosunu koruyarak yalnız bu matrisi yeniden çalıştıracak.
   Silme sonrası İngilizce görüntüde yalnız “Recording” görünmesi üzerine
   onay “Discarded” olarak kısaltıldı; Türkçe “Kayıt silindi” düzeltildi.
-  Onayın bütünüyle görünmesi native kabul kontrolüne eklenecek.
+  Onayın bütünüyle görünmesi native kabul kontrolüne eklendi.
+- Beşinci doğrulama `a49ba377f4a95e960c1d05d581f54e1046e69b59`:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33996017849>.
+  Kod/derleme/açılış geçti; 40 mm hazır ekran ve İngilizce kayıt/silme ile
+  kısa “Discarded” onayı doğrulandı. Türkçe kayıt görüntüsünde 7 saniye kaldı;
+  ardından ek AX tanısı 18 saniyeyi aşınca kayıt doğal süre sınırında sona
+  erdi ve test Sil düğmesini bulamadı. Son AX ağacı korunmuş kuyruk sonucunu
+  gösterdi. Bu, 15 saniyelik dosya süresi ölçümü yerine geçmez. Süre sınırlı
+  adımda ayrıntılı AX tanısı kaldırılacak; görüntü ve tüm görünürlük kontrolleri
+  kalacak, tanı hazır/silme sonrası alınacak. Büyük yazı ve 49 mm çalışmadı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

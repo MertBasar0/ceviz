@@ -105,6 +105,21 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   gösterdi. Bu, 15 saniyelik dosya süresi ölçümü yerine geçmez. Süre sınırlı
   adımda ayrıntılı AX tanısı kaldırılacak; görüntü ve tüm görünürlük kontrolleri
   kalacak, tanı hazır/silme sonrası alınacak. Büyük yazı ve 49 mm çalışmadı.
+- Altıncı doğrulama yalnız bu tanı sırası düzeltmesiyle başladı:
+  `9db2c07e24019b7045c7b02bbd21e3e47d108f36`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/33996874347>.
+  40 yerel Watch yardımcı testi ve bağımsız inceleme geçti. Apple kod testleri,
+  derleme ve normal Watch açılışı geçti. 40 mm normal yazıdaki EN/TR kayıt/silme
+  ve tam onay görünürlüğü **2/2** geçti. Gerçek Ayarlar'da `Display & Brightness`
+  → `Text Size` bulundu; kaydırma düzeltmesi native olarak doğrulandı.
+  Slider %29'dan %100'e çıktı, Ayarlar örnek yazısı büyüdü; fakat test runner'ın
+  `WKInterfaceDevice` kategori değeri değişmediği için test durdu. Geri alma
+  sürüklemesi de hedef %29 yerine %14'e indi; bu ayar geri yükleme başarısı
+  sayılmıyor. Kontrol yalnız test sürecindeki kategoriye dayanmayacak; gerçek
+  ayar değeri ve Ceviz'in gerçek metin geometrisi ölçülecek. Özel yazı boyutu
+  denetimi harf düğmelerine basıp her basamağı okuyarak hedefe ulaştırılacak;
+  geri yükleme de okunarak doğrulanacak. Büyük yazıdaki Ceviz testleri,
+  9/15 saniye dosya ölçümleri ve 49 mm henüz çalışmadı; yükleme yok.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

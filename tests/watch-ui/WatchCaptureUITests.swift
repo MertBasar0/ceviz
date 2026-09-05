@@ -42,14 +42,12 @@ final class WatchCaptureUITests: XCTestCase {
         XCTAssertTrue(app.frame.contains(element.frame), message)
     }
 
-    @discardableResult
-    private func recordSystemTextSize(_ scenario: String) -> String {
+    private func recordTestRunnerTextCategory(_ scenario: String) {
         let category = WKInterfaceDevice.current().preferredContentSizeCategory
-        let attachment = XCTAttachment(string: "scenario=\(scenario) preferredContentSizeCategory=\(category)")
-        attachment.name = "system-text-size-\(scenario)"
+        let attachment = XCTAttachment(string: "scenario=\(scenario) testRunnerPreferredContentSizeCategory=\(category) diagnosticOnly=true; not the Settings or Ceviz process")
+        attachment.name = "test-runner-text-category-\(scenario)"
         attachment.lifetime = .keepAlways
         add(attachment)
-        return category
     }
 
     private func captureSettings(_ settings: XCUIApplication, _ name: String) {
@@ -93,7 +91,51 @@ final class WatchCaptureUITests: XCTestCase {
         XCTFail("The actual Settings UI did not expose a reachable \(title) row")
     }
 
+    private func setSettingsTextSize(_ target: CGFloat, in settings: XCUIApplication) -> Bool {
+        // This native control exposes the AA buttons as one slider. Tap its
+        // observed left/right letters; a best-effort drag restored the wrong step.
+        for step in 0...8 {
+            guard settings.navigationBars["Text Size"].exists, settings.sliders.count == 1 else {
+                captureSettings(settings, "settings-unidentified-text-size")
+                XCTFail("Refusing to change text size without its page and unique control")
+                return false
+            }
+            let slider = settings.sliders.element(boundBy: 0)
+            let position = slider.normalizedSliderPosition
+            guard position.isFinite, (0...1).contains(position),
+                  slider.isHittable, settings.frame.contains(slider.frame) else {
+                captureSettings(settings, "settings-unreachable-text-size")
+                XCTFail("The actual Text Size control must be readable and fully reachable")
+                return false
+            }
+            if abs(position - target) <= 0.01 { return true }
+            guard step < 8 else { break }
+            let increasing = position < target
+            slider.coordinate(withNormalizedOffset: CGVector(dx: increasing ? 0.85 : 0.15, dy: 0.5)).tap()
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                slider.exists && abs(slider.normalizedSliderPosition - position) > 0.01
+            }, object: slider)
+            guard XCTWaiter.wait(for: [changed], timeout: 8) == .completed else {
+                captureSettings(settings, "settings-text-size-no-progress")
+                XCTFail("A letter tap did not change the actual Text Size value")
+                return false
+            }
+            let next = slider.normalizedSliderPosition
+            let movedTowardTarget = increasing ? (next > position && next <= target + 0.01)
+                                             : (next < position && next >= target - 0.01)
+            guard movedTowardTarget else {
+                captureSettings(settings, "settings-text-size-wrong-step")
+                XCTFail("The Text Size value moved away from or past its target")
+                return false
+            }
+        }
+        captureSettings(settings, "settings-text-size-step-limit")
+        XCTFail("The bounded letter taps did not reach the actual Text Size target")
+        return false
+    }
+
     private func useLargerSystemText() {
+        let originalAppText = checkReadyScreenEnglish("ready-before-larger")
         // Bundle ID verified from this runtime's simctl listapps, not an app fixture.
         let settings = XCUIApplication(bundleIdentifier: "com.apple.NanoSettings")
         settings.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -114,44 +156,62 @@ final class WatchCaptureUITests: XCTestCase {
         XCTAssertEqual(settings.sliders.count, 1, "Expected one actual Text Size slider; inspect the attached Settings tree")
         let slider = settings.sliders.element(boundBy: 0)
         let originalPosition = slider.normalizedSliderPosition
-        let originalCategory = recordSystemTextSize("before-larger-settings")
+        let preview = settings.staticTexts["Apps that support Dynamic Type will adjust to your preferred reading size."]
+        XCTAssertTrue(preview.waitForExistence(timeout: 8))
+        let originalPreview = preview.frame.size
+        XCTAssertGreaterThan(originalPreview.height, 0)
+        recordTestRunnerTextCategory("before-larger-settings")
         addTeardownBlock {
             settings.activate()
             self.captureSettings(settings, "settings-before-restore")
-            guard settings.navigationBars["Text Size"].exists, settings.sliders.count == 1 else {
-                XCTFail("Settings no longer shows Text Size; refusing to adjust an unidentified control during restore")
-                return
-            }
-            let restoredSlider = settings.sliders.element(boundBy: 0)
-            restoredSlider.adjust(toNormalizedSliderPosition: originalPosition)
+            guard self.setSettingsTextSize(originalPosition, in: settings) else { return }
+            XCTAssertEqual(settings.sliders.element(boundBy: 0).normalizedSliderPosition, originalPosition, accuracy: 0.01)
             let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                WKInterfaceDevice.current().preferredContentSizeCategory == originalCategory
-            }, object: nil)
+                preview.exists && abs(preview.frame.width - originalPreview.width) <= 1 &&
+                    abs(preview.frame.height - originalPreview.height) <= 1
+            }, object: preview)
             XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 8), .completed,
-                           "The original system text-size category must be restored")
-            XCTAssertEqual(restoredSlider.normalizedSliderPosition, originalPosition, accuracy: 0.05)
-            self.recordSystemTextSize("restored-settings")
+                           "The actual Settings preview must return to its original text geometry")
+            let restoredPreview = preview.frame.size
             self.captureSettings(settings, "settings-restored")
+            XCTAssertEqual(restoredPreview.width, originalPreview.width, accuracy: 1)
+            XCTAssertEqual(restoredPreview.height, originalPreview.height, accuracy: 1,
+                           "The actual Settings preview must return to its original text geometry")
+            self.recordTestRunnerTextCategory("restored-settings")
+            let restoredAppText = self.checkReadyScreenEnglish("ready-restored")
+            XCTAssertEqual(restoredAppText.title.width, originalAppText.title.width, accuracy: 1)
+            XCTAssertEqual(restoredAppText.title.height, originalAppText.title.height, accuracy: 1)
+            XCTAssertEqual(restoredAppText.limit.width, originalAppText.limit.width, accuracy: 1)
+            XCTAssertEqual(restoredAppText.limit.height, originalAppText.limit.height, accuracy: 1,
+                           "Ceviz must return to its original text geometry after restoring Settings")
         }
         XCTAssertLessThan(originalPosition, 0.95, "The device is already at maximum text size; a larger scenario cannot be claimed")
-        slider.adjust(toNormalizedSliderPosition: 1)
-        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            WKInterfaceDevice.current().preferredContentSizeCategory != originalCategory
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 8), .completed,
-                       "Moving Settings must change the public system text-size category")
-        XCTAssertGreaterThanOrEqual(slider.normalizedSliderPosition, 0.95,
+        guard setSettingsTextSize(1, in: settings) else { return }
+        XCTAssertEqual(slider.normalizedSliderPosition, 1, accuracy: 0.01,
                                     "The actual Text Size slider must reach its maximum")
-        recordSystemTextSize("larger-settings")
+        let enlarged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            preview.exists && preview.frame.height > originalPreview.height
+        }, object: preview)
+        XCTAssertEqual(XCTWaiter.wait(for: [enlarged], timeout: 8), .completed,
+                       "The actual Settings preview must visibly grow")
+        XCTAssertGreaterThan(preview.frame.height, originalPreview.height,
+                             "The actual Settings preview must visibly grow")
+        recordTestRunnerTextCategory("larger-settings")
         captureSettings(settings, "settings-text-size-larger")
+        let enlargedAppText = checkReadyScreenEnglish("ready-larger")
+        XCTAssertGreaterThan(enlargedAppText.title.height, originalAppText.title.height,
+                             "Ceviz must render a larger heading under the real system setting")
+        XCTAssertGreaterThan(enlargedAppText.limit.height, originalAppText.limit.height,
+                             "Ceviz must render larger duration text under the real system setting")
     }
 
-    private func checkReadyScreenEnglish() {
+    @discardableResult
+    private func checkReadyScreenEnglish(_ screenshotName: String = "ready-en") -> (title: CGSize, limit: CGSize) {
         let app = launch("en")
         defer { app.terminate() }
         // Text selectors also exercise the previous build without new identifiers.
         XCTAssertTrue(app.staticTexts["Ready to listen"].waitForExistence(timeout: 15))
-        capture("ready-en", in: app)
+        capture(screenshotName, in: app)
         assertVisible(app.staticTexts["Up to 15 seconds"], in: app,
                       "15-second limit must be fully visible without scrolling")
         assertVisible(app.buttons["Start recording"], in: app, "Microphone must be reachable without scrolling")
@@ -161,6 +221,7 @@ final class WatchCaptureUITests: XCTestCase {
             XCTAssertFalse(offline.frame.intersects(app.buttons["Start recording"].frame),
                            "The microphone action must not cover the Phone offline label")
         }
+        return (app.staticTexts["Ready to listen"].frame.size, app.staticTexts["Up to 15 seconds"].frame.size)
     }
 
     private func checkRecordAndDiscardBothLanguages() {
@@ -194,18 +255,17 @@ final class WatchCaptureUITests: XCTestCase {
     }
 
     func testReadyScreenEnglish() {
-        recordSystemTextSize("device-default-ready")
+        recordTestRunnerTextCategory("device-default-ready")
         checkReadyScreenEnglish()
     }
 
     func testRecordAndDiscardBothLanguages() {
-        recordSystemTextSize("device-default-recording")
+        recordTestRunnerTextCategory("device-default-recording")
         checkRecordAndDiscardBothLanguages()
     }
 
     func testLargerTextReadyAndDiscardBothLanguages() {
         useLargerSystemText()
-        checkReadyScreenEnglish()
         checkRecordAndDiscardBothLanguages()
     }
 
@@ -222,7 +282,7 @@ final class WatchCaptureUITests: XCTestCase {
     }
 
     func testManualAndAutomaticFinishRetainRecording() {
-        recordSystemTextSize("device-default-finish")
+        recordTestRunnerTextCategory("device-default-finish")
         let app = launch("en")
         defer { app.terminate() }
         let start = app.buttons["capture.primary"]

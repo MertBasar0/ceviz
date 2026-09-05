@@ -202,10 +202,10 @@ def main(project, baseline=False):
                         raise RuntimeError(f"The selected project did not produce its Watch test app: {watch_app}")
                     built = True
                 reinstall_watch(watch["udid"], watch_app)
-                # watchOS rejects simctl content_size. XCTest changes Settings via
-                # real controls and records the public device category in attachments.
-                record["content_size_evidence"] = ("Native XCTest category and Settings attachments" if size == "larger-settings"
-                                                   else "Native XCTest device category attachment")
+                # XCTest operates real Settings and verifies the application's text.
+                # The test runner's own category is diagnostic, not live system proof.
+                record["content_size_evidence"] = ("Actual Settings value and Ceviz text geometry before/after/restore" if size == "larger-settings"
+                                                   else "Normal-device app screenshots; test-runner category diagnostic")
                 record["status"] = "running"
                 command = ["xcodebuild", "test-without-building", *common, "-resultBundlePath", str(result), *test_selection(mode, size)]
                 collector = capture_log_stream(watch["udid"], audio_log_path) if mode == "finish" else nullcontext()

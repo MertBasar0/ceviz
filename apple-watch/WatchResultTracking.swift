@@ -1,5 +1,16 @@
 import Foundation
 
+/// A capture link only navigates; recording remains owned by the mic action.
+enum WatchCaptureRoute: Equatable {
+    case ready
+    case preserveCapture
+
+    init?(url: URL, isRecording: Bool, preparingCapture: Bool) {
+        guard url.scheme == "ceviz-watch", url.host == "capture" else { return nil }
+        self = isRecording || preparingCapture ? .preserveCapture : .ready
+    }
+}
+
 /// Retries share a command identity. A valid older receipt still owns that
 /// command, while transport failures only belong to the newest attempt.
 struct WatchDeliveryTracking {

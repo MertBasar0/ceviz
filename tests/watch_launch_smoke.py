@@ -154,19 +154,27 @@ def verify_local_bundle_signature(diagnostics, name, bundle, expected_id):
     return {"bundle": str(bundle), **signature, "verified": True}
 
 
-def main():
+def initial_context(candidate_for_device_check=False):
+    return {
+        "scope": "Unconfigured normal app launch and external simulator URL injection; no real job or complication tap tested",
+        "candidate_for_device_check": candidate_for_device_check,
+        "cold_launch": {"status": "not_run", "visual_review": "pending"},
+        "capture_url": {"status": "not_run", "url": "ceviz-watch://capture", "visual_review": "pending"},
+        "widget_tap": {"status": "not_tested", "reason": "Generic simctl URL injection is not a WidgetKit complication tap"},
+        "external_distribution": {"status": "blocked_pending_device_validation"},
+    }
+
+
+def main(*, candidate_for_device_check=False):
     output = Path("build/watch-launch-smoke")
     output.mkdir(parents=True, exist_ok=True)
     diagnostics = output / "diagnostics"
     diagnostics.mkdir(exist_ok=True)
-    context = {
-        "scope": "Unconfigured normal app launch and external simulator URL injection; no real job or complication tap tested",
-        "cold_launch": {"status": "not_run", "visual_review": "pending"},
-        "capture_url": {"status": "not_run", "url": "ceviz-watch://capture", "visual_review": "pending"},
-    }
+    context = initial_context(candidate_for_device_check)
     started = []
     try:
-        run_smoke(output, diagnostics, context, started)
+        run_smoke(output, diagnostics, context, started,
+                  candidate_for_device_check=candidate_for_device_check)
     except Exception as error:
         context["failure"] = f"{type(error).__name__}: {error}"
         raise
@@ -176,7 +184,7 @@ def main():
             subprocess.run(["xcrun", "simctl", "shutdown", udid], check=False, timeout=60)
 
 
-def run_smoke(output, diagnostics, context, started):
+def run_smoke(output, diagnostics, context, started, *, candidate_for_device_check=False):
     bridge = Path("build/validation/Build/Products/Release-iphonesimulator/CevizBridge.app")
     watch_id = "com.mertbasar.cevizwatch.watchkitapp"
     watches = [
@@ -255,16 +263,40 @@ def run_smoke(output, diagnostics, context, started):
     except Exception:
         context["cold_launch"]["status"] = "failed"
         raise
+    run_capture_url_probe(output, diagnostics, context, watch["udid"],
+                          candidate_for_device_check=candidate_for_device_check)
+
+
+def run_capture_url_probe(output, diagnostics, context, watch_udid, *, candidate_for_device_check=False):
+    probe_command = ["xcrun", "simctl", "openurl", watch_udid, "ceviz-watch://capture"]
     try:
-        record_command(diagnostics, "watch-openurl", ["xcrun", "simctl", "openurl", watch["udid"], "ceviz-watch://capture"], required=True)
+        record_command(diagnostics, "watch-openurl", probe_command, required=True)
         time.sleep(2)
-        simctl("io", watch["udid"], "screenshot", str(output / "02-capture-url.png"))
+        simctl("io", watch_udid, "screenshot", str(output / "02-capture-url.png"))
         context["capture_url"].update(status="succeeded", screenshot="02-capture-url.png")
-    except Exception:
-        context["capture_url"]["status"] = "failed"
-        collect_url_failure_diagnostics(diagnostics, watch["udid"])
-        raise  # URL injection failure still blocks signing; it is not a passing complication test.
+    except Exception as error:
+        context["capture_url"].update(status="failed", failure=f"{type(error).__name__}: {error}")
+        collect_url_failure_diagnostics(diagnostics, watch_udid)
+        known_115 = (
+            isinstance(error, subprocess.CalledProcessError)
+            and error.cmd == probe_command
+            and error.returncode == 115
+            and re.search(r"\(domain=LSApplicationWorkspaceErrorDomain,\s*code=115\)", error.stderr or "") is not None
+        )
+        if candidate_for_device_check and known_115:
+            context["capture_url"]["candidate_exception_applied"] = True
+            context["candidate_status"] = "unresolved_widget_navigation_requires_device_check"
+            print("::warning::Generic simulator URL injection failed with LSApplicationWorkspaceErrorDomain 115. "
+                  "Explicit device-check candidate only: WidgetKit tap is NOT TESTED and external distribution remains blocked.", flush=True)
+            return
+        raise  # Strict by default; other errors and timeouts remain fatal in candidate mode.
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidate-for-device-check", action="store_true",
+                        help="Retain known external URL error 115 as unresolved candidate evidence; does not authorize external distribution")
+    options = parser.parse_args()
+    main(candidate_for_device_check=options.candidate_for_device_check)

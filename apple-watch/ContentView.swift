@@ -49,10 +49,11 @@ struct ContentView: View {
             sessionManager.processQueue()
         }
         .onOpenURL { url in
-            guard url.scheme == "ceviz-watch", url.host == "capture" else { return }
+            guard let route = WatchCaptureRoute(url: url, isRecording: recorder.isRecording,
+                                                preparingCapture: preparingCapture) else { return }
             selectedTab = 0
             requestedResult = nil
-            captureReady = !recorder.isRecording && !preparingCapture
+            captureReady = route == .ready
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {

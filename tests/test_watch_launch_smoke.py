@@ -82,7 +82,7 @@ class GateReportingTests(unittest.TestCase):
         import json
         import os
 
-        def failed_smoke(output, diagnostics, context, started):
+        def failed_smoke(output, diagnostics, context, started, *, candidate_for_device_check=False):
             context["cold_launch"]["status"] = "succeeded"
             context["capture_url"]["status"] = "failed"
             raise RuntimeError("synthetic URL injection failure")
@@ -121,6 +121,76 @@ class LocalSignatureTests(unittest.TestCase):
     def test_missing_code_identity_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "Identifier does not match"):
             SMOKE.validate_local_signature_text("code object is not signed at all\n", "com.example.watch")
+
+
+class CandidateURLProbeTests(unittest.TestCase):
+    @staticmethod
+    def url_failure(code=115, domain="LSApplicationWorkspaceErrorDomain"):
+        import subprocess
+        return subprocess.CalledProcessError(
+            code, ["xcrun", "simctl", "openurl", "fixture-watch", "ceviz-watch://capture"],
+            stderr=f"An error was encountered processing the command (domain={domain}, code={code}):\n")
+
+    def probe(self, error, *, candidate=False):
+        context = SMOKE.initial_context(candidate)
+        self.context = context
+        with patch.object(SMOKE, "record_command", side_effect=error), \
+                patch.object(SMOKE, "collect_url_failure_diagnostics") as diagnostics:
+            try:
+                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
+                                            candidate_for_device_check=candidate)
+            finally:
+                diagnostics.assert_called_once()
+        return context
+
+    def test_default_strict_known_115_is_fatal(self):
+        import subprocess
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.probe(self.url_failure())
+        self.assertEqual(self.context["capture_url"]["status"], "failed")
+        self.assertNotIn("candidate_exception_applied", self.context["capture_url"])
+
+    def test_explicit_candidate_retains_known_115_as_unresolved(self):
+        with patch("builtins.print") as warning:
+            context = self.probe(self.url_failure(), candidate=True)
+        self.assertEqual(context["capture_url"]["status"], "failed")
+        self.assertTrue(context["capture_url"]["candidate_exception_applied"])
+        self.assertEqual(context["candidate_status"], "unresolved_widget_navigation_requires_device_check")
+        self.assertEqual(context["widget_tap"]["status"], "not_tested")
+        self.assertEqual(context["external_distribution"]["status"], "blocked_pending_device_validation")
+        self.assertIn("::warning::", warning.call_args.args[0])
+
+    def test_unknown_error_or_other_domain_115_remains_fatal(self):
+        import subprocess
+        for error in (self.url_failure(code=1), self.url_failure(domain="UnknownErrorDomain"), RuntimeError("unknown")):
+            with self.subTest(error=error), self.assertRaises((subprocess.CalledProcessError, RuntimeError)):
+                self.probe(error, candidate=True)
+
+    def test_timeout_remains_fatal_in_candidate_mode(self):
+        import subprocess
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.probe(subprocess.TimeoutExpired(["xcrun", "simctl", "openurl"], 60), candidate=True)
+
+    def test_successful_generic_injection_never_claims_widget_tap(self):
+        context = SMOKE.initial_context(True)
+        with patch.object(SMOKE, "record_command"), patch.object(SMOKE, "simctl"), patch.object(SMOKE.time, "sleep"):
+            SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
+                                        candidate_for_device_check=True)
+        self.assertEqual(context["capture_url"]["status"], "succeeded")
+        self.assertEqual(context["widget_tap"]["status"], "not_tested")
+        self.assertEqual(context["external_distribution"]["status"], "blocked_pending_device_validation")
+
+    def test_error_115_from_screenshot_is_not_the_allowed_url_exception(self):
+        import subprocess
+        context = SMOKE.initial_context(True)
+        error = self.url_failure()
+        error.cmd = ["xcrun", "simctl", "io", "fixture-watch", "screenshot", "unused.png"]
+        with patch.object(SMOKE, "record_command"), patch.object(SMOKE, "simctl", side_effect=error), \
+                patch.object(SMOKE.time, "sleep"), patch.object(SMOKE, "collect_url_failure_diagnostics"):
+            with self.assertRaises(subprocess.CalledProcessError):
+                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
+                                            candidate_for_device_check=True)
+        self.assertNotIn("candidate_exception_applied", context["capture_url"])
 
 
 if __name__ == "__main__":

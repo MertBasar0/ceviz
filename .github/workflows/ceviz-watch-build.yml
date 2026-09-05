@@ -11,6 +11,11 @@ on:
         required: false
         default: "app-store"
         type: string
+      candidate_for_device_check:
+        description: "Internal device-check candidate only: preserve unresolved Watch URL evidence; do not distribute externally"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ceviz-watch-build
@@ -99,7 +104,14 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = 'com.apple.widgetkit-extension'
 
       - name: Capture real Watch launch before signing
-        run: python3 tests/watch_launch_smoke.py
+        env:
+          CEVIZ_DEVICE_CHECK_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_for_device_check }}
+        run: |
+          if [ "$CEVIZ_DEVICE_CHECK_CANDIDATE" = "true" ]; then
+            python3 tests/watch_launch_smoke.py --candidate-for-device-check
+          else
+            python3 tests/watch_launch_smoke.py
+          fi
 
       - name: Upload Watch launch proof
         if: always()

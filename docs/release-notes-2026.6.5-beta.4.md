@@ -75,6 +75,15 @@ secretless signing-lane tests, locally signed simulator/embedded-widget build,
 and distribution-signed IPA.
 Record executed gates and exact build identity in `STATUS.md`.
 
+The generic external `simctl openurl` probe currently fails with LaunchServices
+error 115 even with matching runtime, installed URL metadata, and verified local
+signatures. This is unresolved and is not the actual WidgetKit tap path. Normal
+CI keeps the strict probe. An explicitly selected internal device-check candidate
+may retain that specific failure as diagnostic evidence while producing a signed
+TestFlight build for physical validation. Other native smoke failures still stop
+the build. Neither a successful generic URL probe nor navigation unit tests prove
+WidgetKit delivery. Keep external Beta distribution pending the device check.
+
 Next product slice: explicit follow-up/new-task context, personal quick actions,
 and in-app Doctor guidance. Existing backend file-write concurrency and
 per-device notification retry behavior need a separate persistence/delivery

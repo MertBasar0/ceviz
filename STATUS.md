@@ -33,7 +33,28 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   Simülatörün normal, sertifikasız yerel imzasıyla kimlik doğrulaması hazır;
   üretilen üç paket ve kurulu Watch kimliği kontrol edilecek. Yerel Python
   toplamı **62/62** geçti; hatanın nedeni henüz kesinleşmedi.
-  40 mm ekranda boş footer'ın alan tüketmesi de düzeltildi; yeni görsel kanıt bekliyor.
+  40 mm ekranda boş footer'ın alan tüketmesi de düzeltildi.
+- Üçüncü Apple kontrolü (`98e145f48a272dd20bbf812afb9265448f92ff01`):
+  <https://github.com/MertBasar0/ceviz/actions/runs/33932219345>.
+  **62 Python**, relay/Ruby/Swift kontrolleri ve yerel imzalı native derleme
+  geçti. Üretilen üç paket ve kurulu Watch için kimlik, ad hoc imza ve strict
+  imza doğrulaması başarılı. Önceki kimlik uyuşmazlığı günlükte tekrarlanmadı;
+  dış `openurl` yine kayıtlı scheme handler bulamayarak 115 ile durdu.
+  Dağıtım imzası/yükleme başlamadı. 40 mm gerçek simülatör görüntüsünde kısa
+  bağlantı başlığı, hazır başlığı ve mikrofon tamamen görünür; yardımcı ikinci
+  açıklama bu boyutta görünmüyor. Gerçek WidgetKit dokunuşu halen doğrulanmadı.
+- Cihaz doğrulaması için ayrı, açıkça seçilen bir aday build yolu hazır:
+  normal CI'nin katı kontrolü korunuyor; yalnız bilinen dış URL 115 hatası
+  aday modunda kanıtları ve uyarısıyla saklanıyor. İmza, kurulum, native derleme
+  ve normal açılış hataları yine durdurucu. Bu izin bir kadran testi başarısı
+  veya dış Beta dağıtım onayı değildir. Önce kullanıcının mevcut iç test
+  grubunda fiziksel kadran kontrolü, ardından dış Beta dağıtımı yapılacak.
+  Aday kalıcı Apple “Internal Only” niteliğinde değil; aynı imzalı paketin
+  cihaz kontrolünden sonra dış gruba taşınabilmesi korunuyor. Otomatik dış
+  dağıtım çalıştırılmıyor; gerçek grup üyeliği yükleme sonrasında okunacak.
+  Güncel yerel Python **68/68**, relay **3/3** geçti. Gerçek Watch URL kararını
+  kullanan 28 ek URL/kayıt-durumu birleşimi Swift testine eklendi; bunlar
+  Apple ortamında çalıştırılmayı bekliyor, OS bağlantı teslimini kanıtlamıyor.
 - iPhone İngilizce demo ekran kontrolü **5/5 görsel incelendi**:
   <https://github.com/MertBasar0/ceviz/actions/runs/33929929029>.
   `[NEEDS INPUT]` liste/raporda tutarlı, diğer raporlarda `[DONE]`; bu kanıt

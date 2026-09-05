@@ -73,7 +73,29 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   Bu test hazırlığı üretim uygulamasına görünüm/durum enjeksiyonu eklemiyor.
 - Dördüncü doğrulama için gerçek Ayarlar testi, cihaz çifti sahipliği ve boş
   takip rozeti düzeltmesi hazır; 89 yerel Python testi geçti. Bu son değişiklikler
-  henüz Apple ortamında derlenip gerçek ekran/ayar/süre kanıtı üretmedi.
+  `5afca665104c104ed052d792997d9a02bdef187b` ile yalnız doğrulama dalına gönderildi:
+  <https://github.com/MertBasar0/ceviz/actions/runs/33994445810>.
+  Apple ortamında kod testleri, iPhone/Watch/widget Release derlemesi ve gerçek
+  Watch açılışı geçti. Yeni 40 mm açılış görüntüsü incelendi: süre açıklaması,
+  çevrimdışı satırı ve mikrofon düğmesi kırpılmadan görünür. Bu, normal hazır
+  ekran kanıtıdır. Önceki sürümün 15 saniye açıklaması için özgül görünürlük
+  hatası gerçek XCTest ile yeniden üretildi. Yeni 40 mm varsayılan yazıda
+  hazır ekran ve EN/TR kayıt/silme testleri **2/2** geçti; kayıt görüntüleri
+  incelendi. Sağ eylem düğmesinde ilk bakışta şüphelenilen kırpılma, bağımsız
+  görsel inceleme ve özgün dosyanın piksel ölçümüyle doğrulanmadı: 324 piksel
+  görüntüde kontur en sağda x=313, sağ kenarda 10 piksel boşluk var. Bu nedenle
+  üretim yerleşimine ek düzeltme yapılmıyor.
+  Büyük yazı testi `Display & Brightness` satırını bulamadı ve koşu durdu.
+  Kaydedilen gerçek Settings videosu satırın mevcut olduğunu, tam ekran hızlı
+  kaydırmasının üzerinden atladığını gösteriyor. Yazı boyutu değiştirilmedi;
+  9/15 saniye dosya ölçümleri ve 49 mm senaryoları bu koşuda çalışmadı.
+- Sonraki dar düzeltme testin gerçek Ayarlar listesinde kısa/yavaş sürükleme
+  kullanmasıdır; hedef erişimi ve görünür satır ilerlemesi doğrulanacak. Eski
+  hazır ekran regresyonunun gerçek kanıtı artık mevcut, sonraki koşu yeni
+  sürümün beş senaryosunu koruyarak yalnız bu matrisi yeniden çalıştıracak.
+  Silme sonrası İngilizce görüntüde yalnız “Recording” görünmesi üzerine
+  onay “Discarded” olarak kısaltıldı; Türkçe “Kayıt silindi” düzeltildi.
+  Onayın bütünüyle görünmesi native kabul kontrolüne eklenecek.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

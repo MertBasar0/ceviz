@@ -22,6 +22,20 @@ final class WatchCaptureUITests: XCTestCase {
         add(attachment)
     }
 
+    private func capture(_ name: String, in app: XCUIApplication) {
+        capture(name)
+        let controls = ["capture.primary", "capture.cancel", "capture.countdown"].map { identifier in
+            let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+            return element.exists
+                ? "\(identifier): frame=\(element.frame), hittable=\(element.isHittable), label=\(element.label)"
+                : "\(identifier): absent"
+        }
+        let attachment = XCTAttachment(string: "app.frame=\(app.frame)\n\(controls.joined(separator: "\n"))\n\(app.debugDescription)")
+        attachment.name = "\(name)-accessibility"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func assertVisible(_ element: XCUIElement, in app: XCUIApplication, _ message: String) {
         XCTAssertTrue(element.waitForExistence(timeout: 8), message)
         XCTAssertTrue(element.isHittable, message)
@@ -49,12 +63,31 @@ final class WatchCaptureUITests: XCTestCase {
 
     private func openSettingsRow(_ title: String, in settings: XCUIApplication) {
         let row = settings.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch
-        for _ in 0..<8 {
+        for step in 0...8 {
             if row.exists && row.isHittable {
+                captureSettings(settings, "settings-found-\(title)")
                 row.tap()
                 return
             }
-            settings.swipeUp()
+            guard step < 8 else { break }
+            // Native video showed full-screen swipes fling past Display & Brightness.
+            // A short slow drag with an end hold exposes overlapping, settled rows.
+            guard settings.collectionViews.count == 1 else {
+                captureSettings(settings, "settings-unexpected-list-\(title)")
+                XCTFail("Expected the actual Settings collection before scrolling toward \(title)")
+                return
+            }
+            let list = settings.collectionViews.element(boundBy: 0)
+            let rowsBefore = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
+            let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let end = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+            let rowsAfter = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
+            guard (row.exists && row.isHittable) || rowsAfter != rowsBefore else {
+                captureSettings(settings, "settings-no-scroll-progress-\(title)")
+                XCTFail("The Settings list did not move toward \(title); refusing repeated unchanged gestures")
+                return
+            }
         }
         captureSettings(settings, "settings-missing-\(title)")
         XCTFail("The actual Settings UI did not expose a reachable \(title) row")
@@ -118,7 +151,7 @@ final class WatchCaptureUITests: XCTestCase {
         defer { app.terminate() }
         // Text selectors also exercise the previous build without new identifiers.
         XCTAssertTrue(app.staticTexts["Ready to listen"].waitForExistence(timeout: 15))
-        capture("ready-en")
+        capture("ready-en", in: app)
         assertVisible(app.staticTexts["Up to 15 seconds"], in: app,
                       "15-second limit must be fully visible without scrolling")
         assertVisible(app.buttons["Start recording"], in: app, "Microphone must be reachable without scrolling")
@@ -147,10 +180,14 @@ final class WatchCaptureUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(button.frame.height, 44)
                 XCTAssertFalse(button.frame.intersects(countdown.frame), "Action space must not cover the countdown")
             }
-            capture("recording-\(language)")
+            capture("recording-\(language)", in: app)
             app.buttons["capture.cancel"].tap()
             assertVisible(app.staticTexts["capture.durationLimit"], in: app, "Discard must return to ready")
-            capture("discarded-\(language)")
+            let discarded = app.staticTexts[language == "tr" ? "Kayıt silindi" : "Discarded"]
+            assertVisible(discarded, in: app, "The complete discard confirmation must be visible without scrolling")
+            XCTAssertFalse(discarded.frame.intersects(start.frame),
+                           "The microphone action must not cover the discard confirmation")
+            capture("discarded-\(language)", in: app)
         }
     }
 

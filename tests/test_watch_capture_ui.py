@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -74,6 +75,72 @@ class ActualCaptureMetadataTests(unittest.TestCase):
         metrics = [{"duration_seconds": 9.0, "bytes": 41000, "codec": 1, "sample_rate": 16000, "channels": 1}] * 2
         with self.assertRaisesRegex(RuntimeError, "9s/15s"):
             capture.require_capture_durations(metrics)
+
+
+class CaptureLogStreamTests(unittest.TestCase):
+    def test_collector_is_ready_before_body_and_only_owned_process_is_stopped(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(capture.subprocess, "Popen") as popen:
+            process = popen.return_value
+            process.poll.return_value = None
+
+            def started(*args, **kwargs):
+                kwargs["stdout"].write("Filtering the log data using the AudioCapture predicate\n")
+                kwargs["stdout"].flush()
+                return process
+
+            popen.side_effect = started
+            log_path = Path(temporary) / "audio.log"
+            with capture.capture_log_stream("watch-udid", log_path) as running:
+                self.assertIs(running, process)
+                self.assertIn("Filtering the log data using", log_path.read_text())
+                process.terminate.assert_not_called()
+            command = popen.call_args.args[0]
+            self.assertEqual(command, ["xcrun", "simctl", "spawn", "watch-udid", "log", "stream",
+                                       "--level", "info", "--style", "compact", "--timeout", "13m", "--predicate",
+                                       'subsystem == "com.mertbasar.ceviz.watch" AND category == "AudioCapture"'])
+            process.terminate.assert_called_once()
+            process.wait.assert_called_once_with(timeout=10)
+            process.kill.assert_not_called()
+
+    def test_early_collector_exit_never_runs_ui_body(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(capture.subprocess, "Popen") as popen:
+            popen.return_value.poll.return_value = 1
+            with self.assertRaisesRegex(RuntimeError, "before readiness"):
+                with capture.capture_log_stream("watch-udid", Path(temporary) / "audio.log"):
+                    self.fail("The UI test must not start without an active collector")
+            popen.return_value.terminate.assert_not_called()
+
+    def test_readiness_timeout_kills_stuck_owned_collector(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(capture.subprocess, "Popen") as popen, \
+                patch.object(capture.time, "monotonic", side_effect=[0, 16]):
+            process = popen.return_value
+            process.poll.return_value = None
+            process.wait.side_effect = [subprocess.TimeoutExpired("log stream", 10), 0]
+            with self.assertRaisesRegex(RuntimeError, "did not confirm readiness"):
+                with capture.capture_log_stream("watch-udid", Path(temporary) / "audio.log"):
+                    self.fail("The UI test must not start after a collector timeout")
+            process.terminate.assert_called_once()
+            process.kill.assert_called_once()
+            self.assertEqual(process.wait.call_count, 2)
+
+    def test_cleanup_timeout_does_not_mask_existing_ui_failure(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(capture.subprocess, "Popen") as popen:
+            process = popen.return_value
+            process.poll.return_value = None
+            process.wait.side_effect = subprocess.TimeoutExpired("log stream", 10)
+
+            def started(*args, **kwargs):
+                kwargs["stdout"].write("Filtering the log data using the AudioCapture predicate\n")
+                kwargs["stdout"].flush()
+                return process
+
+            popen.side_effect = started
+            log_path = Path(temporary) / "audio.log"
+            with self.assertRaisesRegex(RuntimeError, "original UI failure"):
+                with capture.capture_log_stream("watch-udid", log_path):
+                    raise RuntimeError("original UI failure")
+            self.assertIn("cleanup timed out", log_path.read_text())
+            process.kill.assert_called_once()
 
 
 if __name__ == "__main__":

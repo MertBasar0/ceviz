@@ -9,9 +9,27 @@ from pathlib import Path
 
 
 def simctl(*args, capture=False):
-    return subprocess.run(
-        ["xcrun", "simctl", *args], check=True, text=True, capture_output=capture
-    ).stdout
+    boot_status = args[0] == "bootstatus"
+    try:
+        result = subprocess.run(
+            ["xcrun", "simctl", *args], check=True, text=True,
+            capture_output=capture or boot_status, timeout=300 if boot_status else 120,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        for diagnostic in (error.stdout, error.stderr):
+            if diagnostic:
+                print(diagnostic.decode(errors="replace") if isinstance(diagnostic, bytes) else diagnostic, flush=True)
+        raise
+    if boot_status:
+        if not capture:
+            print(result.stdout, flush=True)
+        if result.stderr:
+            print(result.stderr, flush=True)
+        # CoreSimulator can report terminal migration failure with exit code zero.
+        # Do not install/test on that failed boot or mistake it for app evidence.
+        if "Data Migration Failed" in result.stdout:
+            raise RuntimeError(f"Simulator {args[1]} data migration failed before app installation")
+    return result.stdout
 
 
 def runtime_version(runtime):

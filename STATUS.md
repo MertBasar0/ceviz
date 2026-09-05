@@ -1,6 +1,6 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **5 Eylül 2026**
+Son güncelleme: **6 Eylül 2026**
 
 ## Devam eden düzeltme — kayıt ve mikrofon ekranı
 
@@ -15,15 +15,16 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
 - Hata mesajının kaynağı Watch'taki 60.000 bayt JSON kontrolüydü; süre kontrolü
   değildi. Bu dal teslim alınmayan kaydı kuyruktan siliyordu. Gerçek sorunlu
   ses dosyası elimizde olmadığından gerçekleşen codec/boyut nedeni doğrulanmadı.
-- Kayıt bitişi ve monoton sayaç tek yaşam döngüsüne alınıyor; gerçek dosyanın
-  yalnız sayısal süre/boyut/format tanısı eklenecek, ses içeriği loglanmayacak.
+- Kayıt bitişi ve monoton sayaç tek yaşam döngüsüne alındı; gerçek dosyanın
+  yalnız sayısal süre/boyut/format tanısı eklendi, ses içeriği loglanmıyor.
 - Büyük istekler için Apple'ın dosya aktarımı ve eşleşen iş makbuzu; gönderim
   hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım hedefleniyor.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
   alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Yerel Python **76/76** (8 yeni test-runner kontrolü dahil), relay **3/3** geçti. Yeni Swift ve gerçek
-  Watch UI testleri henüz Apple ortamında çalıştırılmadı. Windows/WSL'de
-  Swift/Xcode yok; ses dosyası aktarımı simülatörde fiziksel teslim kanıtı olamaz.
+- Yerel Python **83/83**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
+  programı (iki uygulamanın gerçek modelleriyle taşıma sözleşmesi dahil) ve
+  iPhone/Watch/widget Release derlemesi geçti. Gerçek Watch UI ve ses dosyası
+  süre testleri henüz çalışmadı; simülatör fiziksel dosya teslimini kanıtlamaz.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
@@ -31,9 +32,20 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   gecikmiş dosya/makbuz ve farklı telefon-saat sürümü bulguları kapatıldı.
   Native dosya aktarımı ve monoton kayıt sahibi için ek üretim kodu gerekli;
   küçük mesajların hızlı yolu ve mevcut backend kimliği korunuyor.
-- Bu düzeltme Apple doğrulama dalına hazırlanıyor; henüz yeni build/yükleme
-  yok. Aşağıdaki iç aday halen son yüklü build. Dış Beta, kayıt ve ekran cihaz
-  kontrolünü bekliyor.
+- Kaynak `f01c17f9b8446e6275468e71f434a5071c90979e`, yalnız
+  `codex/watch-capture-repair` doğrulama dalına gönderildi; `main` değişmedi.
+  İlk doğrulama: <https://github.com/MertBasar0/ceviz/actions/runs/33991428373>.
+  SDK ile eşleşen iPhone Air simülatörü `Data Migration Failed` bildirdi;
+  uzayan çalışma durduruldu. Sonradan alınan tam günlük/artefakt, Watch normal
+  açılışına ulaşıldığını ve dış URL çağrısının yine 115 verdiğini gösterdi.
+  40 mm hazır ekranı incelendi: 15 saniye açıklaması ve mikrofon görünür;
+  ekranın altındaki ikincil çevrimdışı satırı kısmen kırpılıyor. Kayıt ekranı
+  ve ses süre testleri çalışmadı, imzalama veya yükleme başlamadı. Test sahibi artık bu
+  sıfır çıkış kodlu açılış hatasını reddediyor, tanıyı koruyor ve beklemeyi
+  sınırlıyor. Sayısal ses ölçümleri yalnız ilgili test sırasında canlı toplanacak;
+  kalıcılığı garanti olmayan geçmiş info günlükleri kanıt sayılmayacak.
+- Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
+  Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede
   değiştirilmedi; değişiklik Apple Watch/iPhone uygulama katmanında.
 

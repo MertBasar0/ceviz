@@ -4,6 +4,9 @@ import argparse
 import json
 import re
 import subprocess
+import sys
+import time
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from watch_launch_smoke import choose_simulators, simctl
@@ -47,6 +50,44 @@ def reinstall_watch(watch_udid, watch_app):
     simctl("privacy", watch_udid, "grant", "microphone", WATCH_ID)
 
 
+@contextmanager
+def capture_log_stream(watch_udid, log_path):
+    # Info messages are memory-only unless collected. Subscribe before the test,
+    # and keep only this run's numeric capture category, not historical app logs.
+    command = ["xcrun", "simctl", "spawn", watch_udid, "log", "stream", "--level", "info",
+               "--style", "compact", "--timeout", "13m", "--predicate",
+               'subsystem == "com.mertbasar.ceviz.watch" AND category == "AudioCapture"']
+    with log_path.open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 15
+            while "Filtering the log data using" not in log_path.read_text(errors="replace"):
+                if process.poll() is not None:
+                    raise RuntimeError(f"Capture log stream exited before readiness: {log_path}")
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(f"Capture log stream did not confirm readiness: {log_path}")
+                time.sleep(0.1)
+            if process.poll() is not None:
+                raise RuntimeError(f"Capture log stream exited before the UI test: {log_path}")
+            yield process
+        finally:
+            # Only the owned collector is terminated; never an app or other log session.
+            # Its native timeout also bounds the simulator-side process if the host dies.
+            had_error = sys.exc_info()[0] is not None
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        log.write("Capture log stream cleanup timed out after kill\n")
+                        if not had_error:
+                            raise
+
+
 def capture_file_metrics(log):
     rows = re.findall(r"Capture finalized: duration_seconds=([0-9.]+) bytes=(\d+) codec=(\d+) sample_rate=([0-9.]+) channels=(\d+)", log)
     return [{"duration_seconds": float(duration), "bytes": int(size), "codec": int(codec),
@@ -85,6 +126,8 @@ def main(project, baseline=False):
             name = re.sub(r"[^a-zA-Z0-9-]", "-", watch["name"]) + "-" + size + "-" + mode
             result = output / (name + ".xcresult")
             log_path = output / (name + ".log")
+            audio_log_path = output / (name + "-audio-capture.log")
+            capture_stream = None
             record = {"device": watch, "runtime": choice["watch_runtime"], "content_size": size,
                       "mode": mode, "result": str(result), "status": "preparing"}
             evidence.append(record)
@@ -115,50 +158,42 @@ def main(project, baseline=False):
                 record["observed_content_size"] = simctl("ui", watch["udid"], "content_size", capture=True).strip()
                 record["status"] = "running"
                 command = ["xcodebuild", "test-without-building", *common, "-resultBundlePath", str(result), *test_selection(mode)]
-                with log_path.open("w") as log:
-                    process = subprocess.run(command, cwd=project, stdout=log, stderr=subprocess.STDOUT, timeout=720, check=False)
-                logs = log_path.read_text(errors="replace")
-                print(logs[-7000:], flush=True)
-                record["exit_code"] = process.returncode
-                if result.exists():
-                    subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(result),
-                                    "--output-path", str(output / (name + "-attachments"))], check=True)
-                if baseline:
-                    reproduced = process.returncode != 0 and "15-second limit must be fully visible" in logs
-                    record["status"] = "regression_reproduced" if reproduced else "regression_not_reproduced"
-                    if not reproduced:
-                        raise RuntimeError("Previous build did not reproduce the specific ready-screen visibility assertion")
-                else:
-                    record["status"] = "passed" if process.returncode == 0 else "failed"
-                    if process.returncode:
-                        raise RuntimeError(f"Native capture UI tests failed: {log_path}")
+                collector = capture_log_stream(watch["udid"], audio_log_path) if mode == "finish" else nullcontext()
+                with collector as capture_stream:
+                    with log_path.open("w") as log:
+                        process = subprocess.run(command, cwd=project, stdout=log, stderr=subprocess.STDOUT, timeout=720, check=False)
+                    logs = log_path.read_text(errors="replace")
+                    print(logs[-7000:], flush=True)
+                    record["exit_code"] = process.returncode
+                    if result.exists():
+                        subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(result),
+                                        "--output-path", str(output / (name + "-attachments"))], check=True)
+                    if baseline:
+                        reproduced = process.returncode != 0 and "15-second limit must be fully visible" in logs
+                        record["status"] = "regression_reproduced" if reproduced else "regression_not_reproduced"
+                        if not reproduced:
+                            raise RuntimeError("Previous build did not reproduce the specific ready-screen visibility assertion")
+                    else:
+                        record["status"] = "passed" if process.returncode == 0 else "failed"
+                        if process.returncode:
+                            raise RuntimeError(f"Native capture UI tests failed: {log_path}")
+                    if capture_stream and capture_stream.poll() is not None:
+                        raise RuntimeError(f"Capture log stream ended during the UI test: {audio_log_path}")
             except Exception as error:
                 record.update(status="failed", failure=f"{type(error).__name__}: {error}")
                 raise
             finally:
                 metadata_error = None
                 if mode == "finish":
-                    try:
-                        capture_log = subprocess.run([
-                            "xcrun", "simctl", "spawn", watch["udid"], "log", "show", "--last", "10m", "--info",
-                            "--style", "compact", "--predicate",
-                            'subsystem == "com.mertbasar.ceviz.watch" AND category == "AudioCapture"',
-                        ], text=True, capture_output=True, timeout=60, check=False)
-                        (output / (name + "-audio-capture.log")).write_text(
-                            capture_log.stdout + capture_log.stderr, encoding="utf-8")
-                        record["audio_capture_log_exit_code"] = capture_log.returncode
-                        record["capture_file_metrics"] = capture_file_metrics(capture_log.stdout)
-                        if record["status"] == "passed":
-                            try:
-                                require_capture_durations(record["capture_file_metrics"])
-                            except RuntimeError as error:
-                                record.update(status="failed", failure=str(error))
-                                metadata_error = error
-                    except subprocess.TimeoutExpired:
-                        record["audio_capture_log_error"] = "Diagnostic log read timed out; file metadata proof unavailable"
-                        if record["status"] == "passed":
-                            record["status"] = "failed"
-                            metadata_error = RuntimeError(record["audio_capture_log_error"])
+                    record["audio_capture_log_exit_code"] = capture_stream.returncode if capture_stream else None
+                    capture_log = audio_log_path.read_text(errors="replace") if audio_log_path.exists() else ""
+                    record["capture_file_metrics"] = capture_file_metrics(capture_log)
+                    if record["status"] == "passed":
+                        try:
+                            require_capture_durations(record["capture_file_metrics"])
+                        except RuntimeError as error:
+                            record.update(status="failed", failure=str(error))
+                            metadata_error = error
                 for udid in reversed(started):
                     try:
                         subprocess.run(["xcrun", "simctl", "shutdown", udid], check=False, timeout=60)

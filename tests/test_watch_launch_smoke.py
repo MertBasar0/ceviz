@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -18,6 +19,32 @@ def device(udid, name, available=True):
 
 def pair(watch, phone):
     return {"watch": {"udid": watch}, "phone": {"udid": phone}}
+
+
+class SimulatorBootTests(unittest.TestCase):
+    def test_failed_or_timed_out_boot_preserves_diagnostics(self):
+        for failure in (subprocess.TimeoutExpired(["xcrun"], 300, output=b"Boot progress", stderr=b"Migration stalled"),
+                        subprocess.CalledProcessError(1, ["xcrun"], output="Boot progress", stderr="Migration stalled")):
+            with self.subTest(failure=failure), patch.object(SMOKE.subprocess, "run", side_effect=failure), \
+                    patch("builtins.print") as diagnostics:
+                with self.assertRaises(type(failure)):
+                    SMOKE.simctl("bootstatus", "fixture-phone", "-b")
+                self.assertEqual([call.args[0] for call in diagnostics.call_args_list],
+                                 ["Boot progress", "Migration stalled"])
+
+    def test_zero_exit_with_failed_migration_is_fatal_before_install(self):
+        diagnostic = "Status=3, isTerminal=YES, Elapsed=02:06.\n\tData Migration Failed\n"
+        with patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, diagnostic)), \
+                patch("builtins.print"):
+            with self.assertRaisesRegex(RuntimeError, "data migration failed before app installation"):
+                SMOKE.simctl("bootstatus", "fixture-phone", "-b")
+
+    def test_successful_boot_preserves_diagnostics_and_has_a_deadline(self):
+        for diagnostic in ("Status=4294967295, isTerminal=YES\nFinished\n", "Device already booted, nothing to do.\n"):
+            with self.subTest(diagnostic=diagnostic), \
+                    patch.object(SMOKE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, diagnostic)) as run:
+                self.assertEqual(SMOKE.simctl("bootstatus", "fixture-phone", "-b", capture=True), diagnostic)
+                self.assertEqual(run.call_args.kwargs["timeout"], 300)
 
 
 class SimulatorSelectionTests(unittest.TestCase):

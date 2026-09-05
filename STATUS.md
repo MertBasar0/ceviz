@@ -55,6 +55,19 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   Güncel yerel Python **68/68**, relay **3/3** geçti. Gerçek Watch URL kararını
   kullanan 28 ek URL/kayıt-durumu birleşimi Swift testine eklendi; bunlar
   Apple ortamında çalıştırılmayı bekliyor, OS bağlantı teslimini kanıtlamıyor.
+- İlk açık cihaz adayı (`820aa73b8d8d7ccc8145d582f360696e123a1e87`):
+  <https://github.com/MertBasar0/ceviz/actions/runs/33933488909>.
+  68 Python, relay/Ruby, iki Swift programı (28 URL/durum birleşimi dahil),
+  native derleme ve normal Watch açılışı geçti. Aday bayrağı ve çözülemeyen
+  dış URL 115 kanıtı artefaktta doğrulandı; gerçek kadran dokunuşu yapılmadı.
+  Apple widget bundle ID oluşturuldu ve ayrı GET ile kaydı doğrulandı
+  (`com.mertbasar.cevizwatch.watchkitapp.widget`, API platformu `UNIVERSAL`).
+  Ardından Fastlane, `development:false`
+  ve `adhoc:false` seçeneklerini birlikte verilmiş sayarak profil isteğinden
+  önce durdu. **IPA/build numarası/upload yok.** App Store modunda her iki
+  anahtarı da göndermeyen dar düzeltme ve gerçek Fastlane seçenek doğrulaması
+  hazır; Apple hesabı veya sertifikalar değiştirilerek aşılmıyor. Yeni gerçek
+  seçenek testi Apple ortamında çalıştırılmayı bekliyor.
 - iPhone İngilizce demo ekran kontrolü **5/5 görsel incelendi**:
   <https://github.com/MertBasar0/ceviz/actions/runs/33929929029>.
   `[NEEDS INPUT]` liste/raporda tutarlı, diğer raporlarda `[DONE]`; bu kanıt

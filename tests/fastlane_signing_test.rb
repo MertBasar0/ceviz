@@ -83,8 +83,8 @@ begin
   profiles = $signing_events.select { |kind, _| kind == :profile }.map(&:last)
   check(profiles.map { |value| value.fetch(:app_identifier) } == SIGNING_TARGETS.values,
         "All three bundle IDs need their own profile")
-  check(profiles.all? { |value| !value.fetch(:development) && !value.fetch(:adhoc) },
-        "TestFlight must use distribution profiles")
+  check(profiles.all? { |value| !value.key?(:development) && !value.key?(:adhoc) },
+        "App Store profiles must omit both conflicting development/ad hoc options")
 
   signing = $signing_events.select { |kind, _| kind == :signing }.map(&:last)
   check(signing.length == 3, "Each target needs explicit archive signing")
@@ -102,6 +102,23 @@ begin
         "Archive must not create certificates through automatic provisioning")
   check(archive.last.fetch(:export_options).fetch(:provisioningProfiles).keys == SIGNING_TARGETS.values,
         "Export must retain the same complete profile mapping")
+
+  { "development" => { development: true }, "ad-hoc" => { adhoc: true } }.each do |method, expected|
+    $signing_events.clear
+    provision(:test_api_key, method)
+    requested = $signing_events.select { |kind, _| kind == :profile }.map(&:last)
+    check(requested.length == 3, "Every mode must provision all three targets")
+    check(requested.all? { |value| value.select { |key, _| [:development, :adhoc].include?(key) } == expected },
+          "Provisioning must pass only the selected mode flag")
+  end
+  previous_profiles = $signing_events.length
+  begin
+    provision(:test_api_key, "unknown")
+    raise "Unknown provisioning modes must stop before a profile request"
+  rescue RuntimeError => error
+    raise unless error.message == "Unsupported Ceviz provisioning method: unknown"
+  end
+  check($signing_events.length == previous_profiles, "Unknown modes must not request profiles")
 
   Spaceship::ConnectAPI::BundleId.records.delete(WIDGET_BUNDLE_ID)
   Spaceship::ConnectAPI::BundleId.fail_create = true

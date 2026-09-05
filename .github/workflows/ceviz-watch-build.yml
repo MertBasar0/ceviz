@@ -80,6 +80,11 @@ jobs:
       - name: Install Fastlane
         run: gem install fastlane --no-document
 
+      - name: Validate real Fastlane profile option configuration
+        run: |
+          ruby -c tests/fastlane_profile_options_test.rb
+          ruby tests/fastlane_profile_options_test.rb
+
       - name: Generate Xcode project
         run: |
           set -euo pipefail

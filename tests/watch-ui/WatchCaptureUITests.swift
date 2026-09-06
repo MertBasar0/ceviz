@@ -72,19 +72,23 @@ final class WatchCaptureUITests: XCTestCase {
                 return
             }
             guard step < 8 else { break }
-            // Native video showed full-screen swipes fling past Display & Brightness.
-            // A short slow drag with an end hold exposes overlapping, settled rows.
-            guard settings.collectionViews.count == 1 else {
+            // Crown input belongs to the foreground app. Navigate its real list
+            // without depending on coordinate drags that can complete without scrolling.
+            guard settings.state == .runningForeground, settings.collectionViews.count == 1 else {
                 captureSettings(settings, "settings-unexpected-list-\(title)")
-                XCTFail("Expected the actual Settings collection before scrolling toward \(title)")
+                XCTFail("Expected the foreground Settings collection before scrolling toward \(title)")
                 return
             }
             let list = settings.collectionViews.element(boundBy: 0)
             let rowsBefore = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
-            let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
-            let end = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
-            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+            // Apple defines negative delta as down and Crown velocity in turns/s,
+            // not the pixels/s used by touch drags. Each step still must move the list.
+            XCUIDevice.shared.rotateDigitalCrown(delta: -0.25, velocity: XCUIGestureVelocity(rawValue: 0.5))
             let rowsAfter = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
+            let movement = XCTAttachment(string: "delta=-0.25 velocity_turns_per_second=0.5\nbefore=\(rowsBefore)\nafter=\(rowsAfter)")
+            movement.name = "settings-crown-progress-\(title)-\(step)"
+            movement.lifetime = .keepAlways
+            add(movement)
             guard (row.exists && row.isHittable) || rowsAfter != rowsBefore else {
                 captureSettings(settings, "settings-no-scroll-progress-\(title)")
                 XCTFail("The Settings list did not move toward \(title); refusing repeated unchanged gestures")

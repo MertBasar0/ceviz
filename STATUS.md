@@ -2,7 +2,7 @@
 
 Son güncelleme: **6 Eylül 2026**
 
-## Kayıt ve mikrofon ekranı — iç dağıtım test engeline takıldı
+## Kayıt ve mikrofon ekranı — Ayarlar gezinmesi yeniden doğrulanıyor
 
 Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
@@ -51,6 +51,17 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   AAC, 16 kHz, mono. Manuel bitiş `Queued`, otomatik bitiş uygulamanın
   **demo sonucu** gösterdi; gerçek gateway teslimi kanıtı değildir.
   40 mm varsayılana dönüş **9/9** geçti; 49 mm büyük yazı bu koşuda doğrulanmadı.
+- Kullanıcının engeli çözerek iç dağıtımı tamamlama onayıyla testin Ayarlar
+  gezinme sahibi sadeleştirildi: koordinat sürüklemesi kaldırıldı, yerine
+  Apple'ın belgeli `rotateDigitalCrown(delta:velocity:)` yöntemi kullanılıyor.
+  Yön **-0,25 tur** (aşağı), hız açıkça **0,5 tur/sn**; piksel/sn olan sürükleme
+  hız sabiti taşınmadı. Öndeki Ayarlar ve tek gerçek liste doğrulanıyor;
+  her adımın önce/sonra satırları kaydediliyor. İlk ilerlemesizlikte durma,
+  sekiz adım sınırı, beş senaryonun sırası ve gerçek yazı/geri yükleme
+  kontrolleri değişmedi. **45 yerel altyapı testi geçti**; bu, Crown hareketinin
+  veya gerçek ekranların native başarı kanıtı değildir. Apple derlemesi ve
+  aynı beşli senaryo henüz bekleniyor. Üretim uygulaması ve workflow değişmedi.
+  Önceki dokunmanın Apple içinde neden kaydırmadığı çözülmüş gösterilmiyor.
 - Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
   build'i değişmedi**. Açık engel: Ayarlar'ın tamamlanan dokunma hareketiyle
   neden ilerlemediğini açıklayan native kanıt henüz yok. Sıradaki adım bu

@@ -284,6 +284,32 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   üretimde 0. Zaman aşımı halen 60 sn; kapanış hatası halen durdurucu.
   Bu düzeltme, işletim sisteminin kapanma takılmasının çözüldüğü iddiası değil.
   Kayıt ve 49 mm kontrolleri çalışmadı; TestFlight yükleme/dağıtım yapılmadı.
+- On beşinci doğrulama: `000547d396c19c7a41d54c18d48efde2e6760a80`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34009045391>.
+  94 Python testi, Apple derlemesi, gerçek açılış ve doğrulanmış simülatör
+  kapanışı geçti; açılış PNG'si şahsen incelendi. 40 mm normal UI **2/2** geçti.
+  Büyük yazı senaryosu Türkçe kaydı silme adımında durdu. Gerçek maksimum
+  sistem yazısı ve Ceviz'deki büyüme ölçüldü; EN hazır/kayıt/silme geçti.
+  TR kayıt PNG'sinde Sil/Gönder görünürken **2 sn** kaldı: kayıt sırasında
+  tekrarlanan AX boyut sorguları t=140,71…154,06 aralığını tüketti. İlk kayıt
+  ve silme için üretilen dokunuş eklerinin zamanları arasında **19,677 sn** var;
+  bu ek zamanı, gerçek touch teslim zamanı olarak sunulmuyor. Hata PNG'si daha
+  sonra **7 sn** gösteriyor. Videoda şahsen görülen sıra: ilk kayıt biter,
+  `Sırada` ve tam genişlik mikrofon görünür, ardından yeni **15 sn** kayıt başlar.
+  Sil için üretilmiş (40,5;149) noktası genişleyen mikrofonun içinde kalıyor.
+  Bu, geç dokunuşla yeniden başlatmayı destekliyor; kısa senaryoda canlı kayıt
+  olayları toplanmadığından hangi Swift düğme işleyicisinin çağrıldığı doğrudan
+  olay günlüğüyle kanıtlanmadı.
+  Settings geri alındı, fakat kuyrukta istek kaldığı için Ceviz'in Ready
+  karşılaştırması tamamlanmadı: bu koşuda dokuzlu tam geri-alma kapısı geçmedi.
+  Kısa senaryo artık viewport'u kayıt öncesi, sayaç ve iki düğmenin çerçeve
+  ve dokunulabilirlik değerlerini kayıt sırasında birer kez okuyor. Sayaç
+  için 8 sn varlık beklemesi, üç kontrolün tam görünürlüğü, düğmelerin 44 pt
+  alt sınırı, sayaçla çakışmaması ve silindi/hazır son durumu zorunlu kalıyor.
+  Test değişimi net +11 satır; yeni bekleme/tekrar/fixture yok. Daha az sorgunun
+  gerçek süre penceresini koruduğu sonraki native turda doğrulanacak. Üretim değişmedi;
+  9/15 sn ve 49 mm çalışmadı.
+  Sayaç predicate düzeltmesinin native kanıtı halen eksik; yükleme yok.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

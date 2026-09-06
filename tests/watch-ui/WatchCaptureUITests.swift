@@ -348,16 +348,27 @@ final class WatchCaptureUITests: XCTestCase {
             defer { app.terminate() }
             let start = app.buttons["capture.primary"]
             XCTAssertTrue(start.waitForExistence(timeout: 15))
+            let viewport = app.frame
             start.tap()
             let countdown = app.staticTexts["capture.countdown"]
             let cancel = app.buttons["capture.cancel"]
-            assertVisible(countdown, in: app, "Remaining time must be readable")
-            assertVisible(cancel, in: app, "Discard must stay reachable")
-            assertVisible(app.buttons["capture.primary"], in: app, "Send must stay reachable")
-            for button in [cancel, start] {
-                XCTAssertGreaterThanOrEqual(button.frame.width, 44)
-                XCTAssertGreaterThanOrEqual(button.frame.height, 44)
-                XCTAssertFalse(button.frame.intersects(countdown.frame), "Action space must not cover the countdown")
+            guard countdown.waitForExistence(timeout: 8) else {
+                capture("missing-visible-element", in: app)
+                XCTFail("Remaining time must be readable")
+                return
+            }
+            // Repeated live geometry queries consumed the real 15s capture.
+            // Measure each control once, preserving every visibility/size check.
+            let countdownFrame = countdown.frame
+            XCTAssertTrue(countdown.isHittable, "Remaining time must be readable")
+            XCTAssertTrue(viewport.contains(countdownFrame), "Remaining time must be readable")
+            for (button, message) in [(cancel, "Discard must stay reachable"), (start, "Send must stay reachable")] {
+                let frame = button.frame
+                XCTAssertTrue(button.isHittable, message)
+                XCTAssertTrue(viewport.contains(frame), message)
+                XCTAssertGreaterThanOrEqual(frame.width, 44)
+                XCTAssertGreaterThanOrEqual(frame.height, 44)
+                XCTAssertFalse(frame.intersects(countdownFrame), "Action space must not cover the countdown")
             }
             // Capture the frame before the real 15s deadline; detailed AX queries
             // can outlast recording on a loaded runner. Inspect AX after discard.

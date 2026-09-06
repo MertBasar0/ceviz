@@ -245,6 +245,25 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   bu tanı hazırlığı dokunuş zamanını değiştirebilir. Tekrar dokunma, daha uzun
   bekleme veya daha gevşek süre eşiği yok. 9/15 saniye ve 49 mm halen
   doğrulanmadı; yükleme yapılmadı.
+- On üçüncü doğrulama: `c5832591226f76bdf6c6fb2530b98e9125b46958`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34006579916>.
+  Apple derlemesi ve 40 mm normal **2/2**, büyük yazı **1/1** geçti.
+  Canlı tanı bu kez gerçek düğme işleyicisini, boş kayıt sahibini, verilmiş
+  mikrofon iznini ve native başlangıcı doğruladı. İlk denemedeki dokunuş
+  sorununun kök nedeni yine bilinmiyor; tanı öncesi hazırlık zamanını değiştirdi.
+  Bir gerçek dosya ölçüldü: **14,908 sn**, 25.516 bayt, AAC/16 kHz/mono.
+  Native başlangıç ile callback günlüğü arasındaki 16,846 sn dosya süresi değil.
+  Manuel gönderme testi geçmedi: t=26,98 ilk sayaç sorgusunu t=27,58…32,58
+  arasında yaklaşık 5 sn ayrıntılı AX tanısı izledi. Aynı ekte ilk değer 10,
+  son sorgu çıktısı 5; sonraki predicate değerlendirmesi 3 saniyeyi gördü.
+  Böylece gerçek 4…6 aralığı kaçırıldı, `manual_stop` hiç çağrılmadı ve kayıt
+  kendi sınırında tamamlandı. İkinci otomatik senaryo başlamadı. Bu tek dosya,
+  zorunlu manuel + otomatik iki-kayıt kapısının başarısı sayılmaz.
+  Dar test düzeltmesi: gerçek sayacı kendisi okuyan predicate bloğuna ayrıca
+  UI nesnesi verilmemesi (`object: nil`). Apple'ın isteğe bağlı nesne sözleşmesi
+  kullanılıyor; hedef aralık, 15 sn bekleme ve gerçek dosya sınırları aynı.
+  Tanı yükünün kalkması sonraki native günlükle doğrulanacak; üretim değişmedi.
+  49 mm çalışmadı; dağıtım/yükleme yok.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

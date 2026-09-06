@@ -416,11 +416,13 @@ final class WatchCaptureUITests: XCTestCase {
         let countdown = app.staticTexts["capture.countdown"]
         assertVisible(countdown, in: app, "Manual capture countdown must be readable")
         capture("manual-recording")
+        // Read the live countdown in the block without making it XCTest's
+        // diagnostic subject; its debug snapshots consumed the target window.
         let nineSeconds = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard countdown.exists, let first = countdown.label.split(separator: " ").first,
                   let remaining = Int(first) else { return false }
             return (4...6).contains(remaining)
-        }, object: countdown)
+        }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [nineSeconds], timeout: 15), .completed,
                        "Exercise the reported failure boundary: send with six seconds remaining")
         app.buttons["capture.primary"].tap()

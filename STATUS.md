@@ -2,7 +2,7 @@
 
 Son güncelleme: **6 Eylül 2026**
 
-## Devam eden düzeltme — kayıt ve mikrofon ekranı
+## Kayıt ve mikrofon ekranı — otomatik kontroller tamamlandı
 
 Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
@@ -18,14 +18,25 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
 - Kayıt bitişi ve monoton sayaç tek yaşam döngüsüne alındı; gerçek dosyanın
   yalnız sayısal süre/boyut/format tanısı eklendi, ses içeriği loglanmıyor.
 - Büyük istekler için Apple'ın dosya aktarımı ve eşleşen iş makbuzu; gönderim
-  hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım hedefleniyor.
+  hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım uygulandı.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
-  alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Yerel Python **91/91**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
-  programı (iki uygulamanın gerçek modelleriyle taşıma sözleşmesi dahil) ve
-  iPhone/Watch/widget Release derlemesi geçti. Gerçek 40 mm normal ve büyük
-  yazı UI testleri geçti; 49 mm ve ses dosyası süre testleri henüz
-  doğrulanmadı. Simülatör fiziksel dosya teslimini kanıtlamaz.
+  alan ayrıldı. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
+- Son doğrulama **başarılı**: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34021753131>.
+  Python **94/94**, relay **3/3**, beş Swift regresyon programı, imzalama
+  sözleşmeleri, iPhone/Watch/widget Release derlemesi ve gerçek açılış geçti.
+  Beş native senaryonun tamamı geçti: **40 ve 49 mm**, normal ve gerçek
+  maksimum sistem yazısında EN/TR hazır/kayıt/silme; iki cihazda varsayılana
+  dönüşün **9/9** kontrolü; manuel ve otomatik kayıt bitişi.
+  Son iki dosya **9,724 sn** ve **14,908 sn**; her bitişin ardından ekran
+  saklanan istek için `Queued` gösterdi. Fiziksel teslim ayrıca doğrulanacak.
+  Ekran görüntüleri ayrıca incelendi. Simülatör, fiziksel mikrofon kalitesini
+  veya iPhone'a dosya teslimini kanıtlamaz.
+- Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
+  build'i değişmedi**. Otomatik test kapısı artık tamamlandı; sıradaki adım
+  iç TestFlight adayı ve iki güncel uygulamayla fiziksel cihaz kabul kontrolü.
+  Bu adayın dış Beta dağıtımı beklemede. Eski ilk-dokunuş/kapanış sorunları bu turda görülmedi;
+  kök nedenleri onarılmış olarak sunulmuyor.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
@@ -33,6 +44,9 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   gecikmiş dosya/makbuz ve farklı telefon-saat sürümü bulguları kapatıldı.
   Native dosya aktarımı ve monoton kayıt sahibi için ek üretim kodu gerekli;
   küçük mesajların hızlı yolu ve mevcut backend kimliği korunuyor.
+
+### Doğrulama geçmişi
+
 - Kaynak `f01c17f9b8446e6275468e71f434a5071c90979e`, yalnız
   `codex/watch-capture-repair` doğrulama dalına gönderildi; `main` değişmedi.
   İlk doğrulama: <https://github.com/MertBasar0/ceviz/actions/runs/33991428373>.
@@ -336,6 +350,24 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   onarıldığı anlamına gelmeyecek. Üretim/test kodu net 0, CI metadata +9 satır.
   İlk dokunuş sorununun eski koşudaki kök nedeni de halen bilinmiyor.
   Main, TestFlight ve dış Beta değiştirilmedi.
+- On yedinci doğrulama: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34021753131> **başarılı**.
+  Ürün ve test kodu bir önceki koşuyla aynı; yalnız başarısız koşunun ham
+  Apple tanısını saklayan CI metadata düzenlemesi eklendi. Beşli sıra değişmedi.
+  40 mm normal **2/2**, maksimum yazı **1/1**, iki-kayıt testi **1/1**;
+  49 mm normal **2/2**, maksimum yazı **1/1** geçti. 49 mm son uygulama kapanışı
+  bu kez tamamlandı; önceki kapanış hatasının kök nedeni halen bilinmiyor.
+  49 mm gerçek Settings maksimumu %100, önizleme 178×125,5 pt; varsayılan
+  konum 0,444444'e dönünce önizleme 178×76, Ceviz başlığı 119×20,5,
+  süre 75×20,5 pt olarak eşleşti. Dokuz geri-yükleme kontrolü geçti ve
+  geri dönmüş Ceviz ekranı şahsen görüldü. 40 mm geri-yükleme kapısı da geçti.
+  Canlı kayıt günlüğü: manuel **9,724 sn / 25.192 bayt**, otomatik
+  **14,908 sn / 25.516 bayt**, tam iki AAC/16 kHz/mono dosya. Manuel durdurma
+  ve ayrı ikinci native bitiş gözlendi; iki sonuç da saklanan kuyruk durumuna
+  ulaştı. Bu, gerçek cihaz ses kalitesi veya fiziksel teslim kanıtı değildir.
+  `validation_only=true`: sertifika, ASC anahtarı, IPA üretimi/yüklemesi ve
+  dış dağıtım atlandı. Başarısızlık tanı adımı da doğal olarak çalışmadı;
+  yeni artifact yolunun gerçek başarısız koşudaki üretimi henüz görülmedi.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

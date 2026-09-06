@@ -9,7 +9,7 @@ processing is complete without errors or warnings. External state is
 **READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
 distribution is held for the capture reliability and layout checks below.
 
-## Capture correction in progress
+## Capture correction — simulator checks complete, not yet shipped
 
 The tester reported a successful physical complication-to-command flow, followed
 by a premature “recording too long” error and unreadable/clipped capture controls.
@@ -22,6 +22,18 @@ elapsed time at stop, keeps failed deliveries queued, and uses native file trans
 for requests above the interactive message budget. Matching receipts, connection
 reset boundaries, and request expiry must be checked on both devices. A reserved
 action area and a dedicated recording state replace the crowded microphone screen.
+
+All five native simulator scenarios passed in
+[validation run 34021753131](https://github.com/MertBasar0/ceviz/actions/runs/34021753131)
+at source `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`: 40 mm and 49 mm,
+English/Turkish, normal and actual maximum system text, verified restoration,
+and manual/automatic recording completion. Screenshots were also inspected.
+The two recorded files measured **9.724 seconds** and **14.908 seconds**;
+the screen showed a saved, queued request after each finish. This does not
+independently verify persisted queue contents or physical delivery.
+This validation did not produce or upload a new TestFlight
+build. Earlier intermittent simulator start/termination failures did not recur
+in this run; their root causes are not claimed as fixed.
 
 Before external distribution, verify both updated apps on a paired real device:
 manual send and automatic 15-second finish; no premature size error; readable

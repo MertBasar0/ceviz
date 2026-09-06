@@ -96,7 +96,7 @@ final class WatchCaptureUITests: XCTestCase {
         if settings.navigationBars["Settings"].exists {
             openSettingsRow("Display & Brightness", in: settings)
         }
-        guard settings.navigationBars["Display & Brightness"].exists else {
+        guard settings.navigationBars["Display & Brightness"].waitForExistence(timeout: 8) else {
             captureSettings(settings, "settings-unexpected-navigation")
             XCTFail("Settings must show an observed page before navigating to Text Size")
             return false

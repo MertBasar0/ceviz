@@ -152,7 +152,20 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   ekran okuyucunun tam cümlesi korundu. Silme onayı ek satır yerine hazır
   başlığının yerini alıyor. Dinamik fontlar ve 54 pt düğme alanı değiştirilmedi.
   Süre metni/düğme çakışması için ek native kontroller kondu. Yerel **91/91**
-  test ve taze bağımsız inceleme geçti; yeni native ekran kanıtı henüz yok.
+  test ve taze bağımsız inceleme geçti.
+- Sekizinci doğrulama: `d3a9ef08c9ff8e425678a3e014f97788eefe6b60`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/33999904091>.
+  Apple derlemesi/kod testleri ve 40 mm normal yazıdaki iki native test geçti;
+  beş yeni görüntü incelendi. Kısaltılmış süre ve başlığın yerini alan silme
+  onayı, çevrimdışı satırı ve mikrofonla birlikte görünür. Büyük yazıya geçişte
+  test doğru Ayarlar satırına dokundu; fakat sayfa varlığını erken kontrol etti.
+  t=35,56 sn kontrolü olumsuzken t=35,99 sn görüntüsü ve sonraki AX ağacı
+  gerçek `Display & Brightness` sayfasını gösteriyor. Bu koşuda font değişmedi;
+  büyük yazı/geri yükleme, 9/15 saniye ve 49 mm doğrulanmadı. Üretim koduna
+  dokunmadan yalnız bu sayfaya varış kontrolü mevcut 8 saniyelik bekleme
+  sözleşmesine alındı; tekrar dokunma veya sabit uyku eklenmedi. **42/42** Watch
+  yardımcı testi, **91/91** tüm Python testleri ve bağımsız inceleme geçti.
+  Yeni native koşu yine beş senaryoyu ve sıkı görünürlük/süre kapılarını koruyacak.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

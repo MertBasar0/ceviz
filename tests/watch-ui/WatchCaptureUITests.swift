@@ -27,17 +27,21 @@ final class WatchCaptureUITests: XCTestCase {
         let controls = ["capture.primary", "capture.cancel", "capture.countdown"].map { identifier in
             let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
             return element.exists
-                ? "\(identifier): frame=\(element.frame), hittable=\(element.isHittable), label=\(element.label)"
+                ? "\(identifier): frame=\(element.frame), hittable=\(element.isHittable), enabled=\(element.isEnabled), label=\(element.label)"
                 : "\(identifier): absent"
         }
-        let attachment = XCTAttachment(string: "app.frame=\(app.frame)\n\(controls.joined(separator: "\n"))\n\(app.debugDescription)")
+        let attachment = XCTAttachment(string: "app.state=\(app.state.rawValue) app.frame=\(app.frame)\n\(controls.joined(separator: "\n"))\n\(app.debugDescription)")
         attachment.name = "\(name)-accessibility"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
 
     private func assertVisible(_ element: XCUIElement, in app: XCUIApplication, _ message: String) {
-        XCTAssertTrue(element.waitForExistence(timeout: 8), message)
+        guard element.waitForExistence(timeout: 8) else {
+            capture("missing-visible-element", in: app)
+            XCTFail(message)
+            return
+        }
         XCTAssertTrue(element.isHittable, message)
         XCTAssertTrue(app.frame.contains(element.frame), message)
     }
@@ -404,6 +408,10 @@ final class WatchCaptureUITests: XCTestCase {
         defer { app.terminate() }
         let start = app.buttons["capture.primary"]
         XCTAssertTrue(start.waitForExistence(timeout: 15))
+        capture("manual-before-start", in: app)
+        XCTAssertEqual(app.state, .runningForeground, "Manual capture must start in the foreground app")
+        assertVisible(start, in: app, "Manual capture microphone must be fully reachable")
+        XCTAssertTrue(start.isEnabled, "Manual capture microphone must be enabled before tapping")
         start.tap()
         let countdown = app.staticTexts["capture.countdown"]
         assertVisible(countdown, in: app, "Manual capture countdown must be readable")
@@ -421,6 +429,10 @@ final class WatchCaptureUITests: XCTestCase {
 
         let canRecord = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: start)
         XCTAssertEqual(XCTWaiter.wait(for: [canRecord], timeout: 45), .completed)
+        capture("automatic-before-start", in: app)
+        XCTAssertEqual(app.state, .runningForeground, "Automatic capture must start in the foreground app")
+        assertVisible(start, in: app, "Automatic capture microphone must be fully reachable")
+        XCTAssertTrue(start.isEnabled, "Automatic capture microphone must be enabled before tapping")
         let began = ProcessInfo.processInfo.systemUptime
         start.tap()
         let recording = app.staticTexts["capture.recording"]

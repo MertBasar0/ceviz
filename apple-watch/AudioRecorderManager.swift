@@ -7,7 +7,7 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
     private var audioRecorder: AVAudioRecorder?
     private var interruptionObserver: NSObjectProtocol?
     private var lifecycle = WatchRecordingLifecycle()
-    private let logger = Logger(subsystem: "com.mertbasar.ceviz.watch", category: "AudioCapture")
+    static let logger = Logger(subsystem: "com.mertbasar.ceviz.watch", category: "AudioCapture")
     @Published private(set) var isRecording = false
     @Published var lastError: String?
     /// Delivered once on main after a manual or native time-limit finish, never after cancellation.
@@ -22,11 +22,13 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
     var elapsedSeconds: TimeInterval { lifecycle.elapsed(at: ProcessInfo.processInfo.systemUptime) }
 
     func startRecording(completion: @escaping (Bool) -> Void) {
+        Self.logger.info("Capture event: recorder_start busy=\(self.lifecycle.id != nil, privacy: .public)")
         guard lifecycle.id == nil else { return }
         lastError = nil
         let id = lifecycle.prepare()
         let session = AVAudioSession.sharedInstance()
         let permitted: (Bool) -> Void = { [weak self] granted in
+            Self.logger.info("Capture event: permission granted=\(granted, privacy: .public) current_owner=\(self?.lifecycle.isPreparing(id) == true, privacy: .public)")
             guard let self, self.lifecycle.isPreparing(id) else { return }
             if granted {
                 completion(self.beginRecording(session: session, id: id))
@@ -63,12 +65,14 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
             audioRecorder = recorder
             recorder.delegate = self
             guard recorder.record(forDuration: Self.maximumDuration) else {
+                Self.logger.info("Capture event: native_start rejected")
                 lastError = NSLocalizedString("Could not start recording.", comment: "")
                 lifecycle.cancel()
                 discardAudio()
                 return false
             }
             lifecycle.begin(id, at: ProcessInfo.processInfo.systemUptime)
+            Self.logger.info("Capture event: native_start accepted")
             interruptionObserver = NotificationCenter.default.addObserver(
                 forName: AVAudioSession.interruptionNotification, object: session, queue: .main
             ) { [weak self, weak recorder] notification in
@@ -82,6 +86,7 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
             isRecording = true
             return true
         } catch {
+            Self.logger.info("Capture event: preparation_error code=\((error as NSError).code, privacy: .public)")
             lastError = String(format: NSLocalizedString("Recording setup failed: %@", comment: ""), error.localizedDescription)
             lifecycle.cancel()
             discardAudio()
@@ -91,12 +96,14 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
     }
 
     func stopRecording() {
+        Self.logger.info("Capture event: manual_stop recording=\(self.isRecording, privacy: .public)")
         guard lifecycle.requestStop(at: ProcessInfo.processInfo.systemUptime) else { return }
         // The delegate owns finalization for both manual stop and record(forDuration:).
         audioRecorder?.stop()
     }
 
     func cancelRecording() {
+        Self.logger.info("Capture event: cancel recording=\(self.isRecording, privacy: .public)")
         lifecycle.cancel()
         discardAudio()
         lastError = nil
@@ -114,6 +121,7 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
     }
 
     private func finishRecording(_ recorder: AVAudioRecorder, successfully: Bool, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        Self.logger.info("Capture event: native_finish success=\(successfully, privacy: .public) current_owner=\(recorder === self.audioRecorder, privacy: .public)")
         guard recorder === audioRecorder, let id = lifecycle.id,
               lifecycle.finish(id, at: time) else { return }
         let result: Result<String, Error>
@@ -122,9 +130,9 @@ class AudioRecorderManager: NSObject, ObservableObject, AVAudioRecorderDelegate 
             if let file = try? AVAudioFile(forReading: recorder.url) {
                 let duration = Double(file.length) / file.processingFormat.sampleRate
                 let codec = file.fileFormat.streamDescription.pointee.mFormatID
-                logger.info("Capture finalized: duration_seconds=\(duration, privacy: .public) bytes=\(data.count, privacy: .public) codec=\(codec, privacy: .public) sample_rate=\(file.fileFormat.sampleRate, privacy: .public) channels=\(file.fileFormat.channelCount, privacy: .public)")
+                Self.logger.info("Capture finalized: duration_seconds=\(duration, privacy: .public) bytes=\(data.count, privacy: .public) codec=\(codec, privacy: .public) sample_rate=\(file.fileFormat.sampleRate, privacy: .public) channels=\(file.fileFormat.channelCount, privacy: .public)")
             } else {
-                logger.info("Capture finalized: bytes=\(data.count, privacy: .public) file_metadata=unavailable")
+                Self.logger.info("Capture finalized: bytes=\(data.count, privacy: .public) file_metadata=unavailable")
             }
             result = .success(data.base64EncodedString())
         } else {

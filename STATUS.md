@@ -23,8 +23,8 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   alan ayrılıyor. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
 - Yerel Python **91/91**, relay **3/3** geçti. Apple ortamında beş Swift regresyon
   programı (iki uygulamanın gerçek modelleriyle taşıma sözleşmesi dahil) ve
-  iPhone/Watch/widget Release derlemesi geçti. Gerçek 40 mm normal yazı UI
-  testleri geçti; büyük yazı, 49 mm ve ses dosyası süre testleri henüz
+  iPhone/Watch/widget Release derlemesi geçti. Gerçek 40 mm normal ve büyük
+  yazı UI testleri geçti; 49 mm ve ses dosyası süre testleri henüz
   doğrulanmadı. Simülatör fiziksel dosya teslimini kanıtlamaz.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
@@ -222,6 +222,29 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   71,5×19,5 pt ile başlangıca eşit. Bu yalnız geri yükleme alt akışının kanıtı;
   test bütünü başarısız. Yeni kısa bağlantı metni native kontrol bekliyor;
   9/15 saniye ve 49 mm henüz çalışmadı. İmza/yükleme adımı atlandı.
+- On ikinci doğrulama: `0a281fe0e16d5648ea424bd93584b30fab99eb32`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34005199330>.
+  Kod/Apple derlemesi/açılışı ve 40 mm normal yazı **2/2**, gerçek maksimum
+  yazı **1/1** geçti. Türkçe büyük silme sonrası kısa bağlantı metni
+  y=99…120,5 pt, mikrofon y=126,25…171,75 pt; arada 5,75 pt var. Görüntüde
+  `Çevrimdışı`, AX'te `capture.connection` / `Telefon çevrimdışı` doğrulandı.
+  Büyük Türkçe sayaç/Sil/Gönder görünür; geri yüklemenin dokuz kontrolü geçti.
+  Ardından ilk kez ulaşılan süre senaryosu, ilk dokunuş sonrası sayaç
+  bulunamadığı için 18,771 sn'de durdu. Gerçek olay kaydı uygulama PID'sine
+  (81,149) pt merkez dokunuşu; son AX hâlâ `Ready to listen` / `Start recording`.
+  Canlı ses günlüğünde finalizasyon yok, dosya ölçümleri boş. Video yalnız
+  6,952 sn açılış görüntüsünü içeriyor; dokunuş sonrasını göstermiyor.
+  Bu, erken kayıt bitişi veya codec hatası kanıtı değil; başlangıcın neden
+  gerçekleşmediği henüz bilinmiyor. Davranış değişikliği yapmadan aynı kayıt
+  sahibine olay tanısı ekleniyor: gerçek düğme işleyicisi, guard/izin/başlangıç,
+  iptal ve bitiş. Yalnız sabit olay adları, boolean/sayısal durum ve sahne;
+  ses/kimlik/yol/transkript yok. Üretim net +14 satır, eksik başlangıç kanıtını
+  toplamak için; durum geçişleri ve dosya ölçüm ön eki/kapısı değişmedi.
+  Testte dokunuş öncesi PNG/AX ve foreground/etkin/görünür kontrolü, eksik
+  öğede hata görüntüsü eklendi. Yeni deneme kök neden onarımı sayılmayacak;
+  bu tanı hazırlığı dokunuş zamanını değiştirebilir. Tekrar dokunma, daha uzun
+  bekleme veya daha gevşek süre eşiği yok. 9/15 saniye ve 49 mm halen
+  doğrulanmadı; yükleme yapılmadı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

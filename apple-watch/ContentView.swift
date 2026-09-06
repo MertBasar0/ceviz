@@ -1,5 +1,6 @@
 import SwiftUI
 import WatchKit
+import os
 
 struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
@@ -56,6 +57,7 @@ struct ContentView: View {
         }
         .background(CVZ.bg)
         .onAppear {
+            AudioRecorderManager.logger.info("Capture event: view_appeared scene=\(String(describing: scenePhase), privacy: .public)")
             // The recorder owns finalization; both manual and timed stops submit here once.
             recorder.onRecordingFinished = { [weak manager = sessionManager] result in
                 guard let manager else { return }
@@ -81,6 +83,7 @@ struct ContentView: View {
             captureReady = route == .ready
         }
         .onChange(of: scenePhase) { phase in
+            AudioRecorderManager.logger.info("Capture event: scene_changed phase=\(String(describing: phase), privacy: .public)")
             if phase == .active {
                 sessionManager.resumeResultPollingIfNeeded()
                 sessionManager.processQueue()
@@ -240,6 +243,7 @@ struct ContentView: View {
                 .accessibilityIdentifier("capture.openOnPhone")
             }
             Button {
+                AudioRecorderManager.logger.info("Capture event: primary_action recording=\(recorder.isRecording, privacy: .public) capturing=\(sessionManager.isCapturing, privacy: .public) sending=\(sessionManager.isSending, privacy: .public) scene=\(String(describing: scenePhase), privacy: .public)")
                 if recorder.isRecording { recorder.stopRecording() } else { start() }
             } label: {
                 Group {
@@ -264,6 +268,7 @@ struct ContentView: View {
 
     private func start() {
         guard !sessionManager.isCapturing && !sessionManager.isSending else { return }
+        AudioRecorderManager.logger.info("Capture event: view_start accepted")
         recordingWasCancelled = false
         requestedResult = nil
         captureReady = false
@@ -284,6 +289,7 @@ struct ContentView: View {
     }
 
     private func cancelRecording(resumeQueue: Bool = true) {
+        AudioRecorderManager.logger.info("Capture event: view_cancel preparing=\(preparingCapture, privacy: .public) tab=\(selectedTab, privacy: .public) resume_queue=\(resumeQueue, privacy: .public)")
         preparingCapture = false
         recorder.cancelRecording()
         sessionManager.isCapturing = false

@@ -2,7 +2,7 @@
 
 Son güncelleme: **6 Eylül 2026**
 
-## Kayıt ve mikrofon ekranı — otomatik kontroller tamamlandı
+## Kayıt ve mikrofon ekranı — iç dağıtım test engeline takıldı
 
 Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
@@ -21,7 +21,7 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım uygulandı.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
   alan ayrıldı. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Son doğrulama **başarılı**: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
+- Son tam başarılı doğrulama: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
   <https://github.com/MertBasar0/ceviz/actions/runs/34021753131>.
   Python **94/94**, relay **3/3**, beş Swift regresyon programı, imzalama
   sözleşmeleri, iPhone/Watch/widget Release derlemesi ve gerçek açılış geçti.
@@ -32,9 +32,30 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   saklanan istek için `Queued` gösterdi. Fiziksel teslim ayrıca doğrulanacak.
   Ekran görüntüleri ayrıca incelendi. Simülatör, fiziksel mikrofon kalitesini
   veya iPhone'a dosya teslimini kanıtlamaz.
+- Kullanıcının iç dağıtım onayıyla `f29baf52eca5e3f73af90c4f640df47a690667cc`
+  kaynağından imzalı aday çalışması başlatıldı:
+  <https://github.com/MertBasar0/ceviz/actions/runs/34029580846>.
+  Önceki başarılı kaynağa göre yalnız belge değişikliği vardı. Bu çalışma
+  **başarısız**: 40 mm normal/büyük yazı/kayıt bitişi ve 49 mm normal geçti;
+  49 mm büyük yazı hazırlığında gerçek Ayarlar listesinin ilk kaydırması
+  ilerlemedi. Yazı boyutu değiştirilmeden testin ilerleme denetimi durdu.
+  İmzalama ve Apple yüklemesi atlandı; **yeni IPA veya TestFlight build'i yok**.
+  Aynı hareket önceki başarılı çalışmada listeyi ilerletmişti; bu koşudaki
+  değişmeyen görüntü ve satır konumları kök nedenin kendisini açıklamıyor.
+  Koordinat değiştirme, yeniden deneme veya test gevşetme uygulanmadı.
+  Tam native hata paketi ve ekran/ses kanıtları yerelde saklandı.
+  Native oturum günlüğünde Ayarlar PID 49098 için `TouchEventsCompleted`
+  ve 0,830 sn'de başarılı sentez tamamlanması var; “hareket hiç iletilmedi”
+  denemez. Bu bildirim listenin kaydırmayı kabul ettiğini kanıtlamaz.
+  Bu koşunun iki dosyası **9,468 sn / 25.176 bayt** ve **14,908 sn / 25.516 bayt**,
+  AAC, 16 kHz, mono. Manuel bitiş `Queued`, otomatik bitiş uygulamanın
+  **demo sonucu** gösterdi; gerçek gateway teslimi kanıtı değildir.
+  40 mm varsayılana dönüş **9/9** geçti; 49 mm büyük yazı bu koşuda doğrulanmadı.
 - Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
-  build'i değişmedi**. Otomatik test kapısı artık tamamlandı; sıradaki adım
-  iç TestFlight adayı ve iki güncel uygulamayla fiziksel cihaz kabul kontrolü.
+  build'i değişmedi**. Açık engel: Ayarlar'ın tamamlanan dokunma hareketiyle
+  neden ilerlemediğini açıklayan native kanıt henüz yok. Sıradaki adım bu
+  otomasyon engelini çözerek tüm kapıları geçen iç adayın dağıtımını doğrulamak;
+  ardından iki güncel uygulamayla fiziksel cihaz kabul kontrolü.
   Bu adayın dış Beta dağıtımı beklemede. Eski ilk-dokunuş/kapanış sorunları bu turda görülmedi;
   kök nedenleri onarılmış olarak sunulmuyor.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda

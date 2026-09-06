@@ -9,7 +9,7 @@ processing is complete without errors or warnings. External state is
 **READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
 distribution is held for the capture reliability and layout checks below.
 
-## Capture correction — simulator checks complete, not yet shipped
+## Capture correction — internal upload blocked, not yet shipped
 
 The tester reported a successful physical complication-to-command flow, followed
 by a premature “recording too long” error and unreadable/clipped capture controls.
@@ -34,6 +34,18 @@ independently verify persisted queue contents or physical delivery.
 This validation did not produce or upload a new TestFlight
 build. Earlier intermittent simulator start/termination failures did not recur
 in this run; their root causes are not claimed as fixed.
+
+The subsequent signed-candidate attempt at documentation-only successor
+`f29baf52eca5e3f73af90c4f640df47a690667cc`,
+[run 34029580846](https://github.com/MertBasar0/ceviz/actions/runs/34029580846),
+was stopped by the last scenario's real Settings navigation check: its first
+49 mm list drag made no observed progress, before changing text size. The
+preceding four scenarios passed, with actual files of **9.468 / 14.908 seconds**;
+manual finish showed Queued and automatic finish showed a demo result, not a
+real gateway acknowledgement. Signing and upload were skipped, no IPA was
+produced, and TestFlight remains unchanged. The same drag worked in the earlier
+green run; why it did not move Settings in this attempt remains unverified.
+No retry or weakened test gate was used to obtain a distribution result.
 
 Before external distribution, verify both updated apps on a paired real device:
 manual send and automatic 15-second finish; no premature size error; readable

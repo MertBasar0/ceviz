@@ -192,6 +192,19 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   kaydediliyor, bu yol yazı geometrisi başarısı sayılmıyor. Dokunulmamış normal
   cihaz testi ayrıca kalıyor. 9/15 saniye ve
   49 mm senaryolarına yine ulaşılmadı; yükleme yapılmadı.
+- Onuncu doğrulama: `d0d4b3d79bc6c2a89ecf85c4ff07715d2ca5b07e`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34002617659>.
+  Kod testleri, Apple derlemesi/açılışı ve 40 mm normal yazı **2/2** geçti;
+  yeni 44 pt düğmeli açılış ve beş EN/TR ekran görüntüsü incelendi.
+  Büyük yazı hazırlığı gerçek `Default` seçimine ulaşmadan durdu: ilk küçük
+  harf dokunuşu %29 → %14, ikincisi %14'te kaldı. Görüntü/AX ve günlük,
+  denetimde beklenen sıfır basamağının bulunmadığını gösteriyor. Sayısal
+  geri alma %29'a döndü; geometri doğrulanmadığı açıkça kanıta yazıldı.
+  Yalnız gereksiz sıfıra gitme ön koşulu kaldırılıyor. Gerçek `Default`
+  etiketini arayan sınırlı, her basamağı okuyan akış; maksimum boyut,
+  yeni açılmış Settings/Ceviz ölçümü ve sıkı geri yükleme kapıları korunuyor.
+  %14 veya başka bir yüzde varsayımı eklenmiyor. Bu koşuda maksimum yazı,
+  9/15 saniye ve 49 mm senaryoları çalışmadı; yükleme yapılmadı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

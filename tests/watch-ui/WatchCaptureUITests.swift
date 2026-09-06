@@ -224,8 +224,7 @@ final class WatchCaptureUITests: XCTestCase {
         addTeardownBlock { restoreTextSize() }
         // The fresh simulator rendered its default font with a non-Default slider
         // step. Establish the actual Settings Default before taking this baseline.
-        guard setSettingsTextSize(.position(0), in: settings),
-              setSettingsTextSize(.systemDefault, in: settings) else { return }
+        guard setSettingsTextSize(.systemDefault, in: settings) else { return }
         let defaultPosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
         recoveryPosition = defaultPosition
         captureSettings(settings, "settings-system-default-selected")

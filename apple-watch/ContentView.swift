@@ -147,8 +147,7 @@ struct ContentView: View {
                         .foregroundColor(CVZ.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         if voicePhase == .idle {
-                            // Short ready feedback fits without Watch ScrollView's
-                            // extra margins; longer follow-up content remains scrollable.
+                            // Prefer direct ready content; keep longer follow-up content scrollable.
                             ViewThatFits(in: .vertical) {
                                 content
                                 ScrollView { content }
@@ -161,7 +160,7 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // A sibling action row owns its space; text cannot flow behind it.
+            // Reserve action space independently from scrollable result content.
             captureActions
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -222,7 +221,7 @@ struct ContentView: View {
             if sessionManager.isCapturing {
                 Button(action: { cancelRecording() }) {
                     Text("Delete").font(.body.weight(.semibold)).foregroundColor(CVZ.err)
-                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(CVZ.errBg, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain).accessibilityLabel(Text("Discard recording"))
@@ -230,7 +229,7 @@ struct ContentView: View {
             } else if voicePhase == .result, let url = displayedURL {
                 Button { sessionManager.openHandoff(url: url, jobId: displayedJobID) } label: {
                     Image(systemName: "iphone.and.arrow.forward").font(.title3.weight(.semibold))
-                        .foregroundColor(CVZ.accent).frame(maxWidth: .infinity, minHeight: 54)
+                        .foregroundColor(CVZ.accent).frame(maxWidth: .infinity, minHeight: 44)
                         .background(CVZ.panel, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain).disabled(handoffRequested)
@@ -248,7 +247,7 @@ struct ContentView: View {
                     }
                 }
                     .foregroundColor(CVZ.accent)
-                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(CVZ.panel, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(CVZ.accent, lineWidth: 1.5))
             }

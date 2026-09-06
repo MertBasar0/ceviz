@@ -166,6 +166,32 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   sözleşmesine alındı; tekrar dokunma veya sabit uyku eklenmedi. **42/42** Watch
   yardımcı testi, **91/91** tüm Python testleri ve bağımsız inceleme geçti.
   Yeni native koşu yine beş senaryoyu ve sıkı görünürlük/süre kapılarını koruyacak.
+- Dokuzuncu doğrulama: `1033af0fa44810ef0074f0eea3508454cce31e11`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34000969048>.
+  Apple derlemesi/açılışı ve 40 mm normal yazı **2/2** geçti; açılış ve beş
+  normal ekran görüntüsü incelendi. Ayarlar'a varış düzeltmesi çalıştı.
+  Büyük yazıda süre tamamen görünür, ancak çevrimdışı satırı y=99…120,5 pt
+  iken kaydırma alanı 111 pt'de bitiyor, mikrofon 116,25 pt'de başlıyor.
+  Görüntü ve AX ağacı bu kalan kırpılmayı doğruladı. Aynı yerleşimde üç eylemin
+  minimum yüksekliği 54 → 44 pt yapılarak 10 pt alan geri kazanılıyor; dinamik
+  font, eşit düğme yüksekliği ve 12 pt yatay boşluk korunuyor. Bu, Apple'ın
+  en az 44×44 pt dokunma alanı rehberiyle uyumlu; yeni native kanıt bekleniyor.
+  Geri yükleme **geçmedi**: %29 değeri aynı olsa da Settings metni 89,5 → 67,5 pt,
+  Ceviz başlığı 19,5 → 18 pt oldu. Tek test-hatası özeti başarı kanıtı değil;
+  `text-size-restore-measurements` eki gerçek farkı gösteriyor. Video, gerçek
+  `Default` etiketinin ilk %29 konumunda değil sonraki basamakta olduğunu
+  gösterdi. İlk açılış seçimi ile çizilen boyut uyumsuz; iç nedeni bilinmiyor.
+  Büyük-yazı testinin başlangıcı gerçek Ayarlar'ın `Default` etiketiyle
+  kuruldu; boyuta göre yüzde varsayılmıyor. Yeni açılmış Settings/Ceviz
+  ölçümleri başlangıç; maksimum boyut ve sıkı geri yükleme kontrolleri
+  korunuyor. İlk ham seçim/görüntü ayrıca saklanıyor. Silme sonrası çevrimdışı
+  satırının görünürlüğü EN/TR'de de aynı kontrolü kullanıyor. **42/42** Watch
+  yardımcı testi ve **91/91** tüm Python testleri geçti; yeni native kanıt
+  bekleniyor. Tek geri alma sahibi ilk ayar değişikliğinden önce kaydoluyor;
+  başlangıç hazırlığı yarıda kalırsa da son doğrulanmış seçime dönüş denenip
+  kaydediliyor, bu yol yazı geometrisi başarısı sayılmıyor. Dokunulmamış normal
+  cihaz testi ayrıca kalıyor. 9/15 saniye ve
+  49 mm senaryolarına yine ulaşılmadı; yükleme yapılmadı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

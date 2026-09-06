@@ -110,7 +110,16 @@ final class WatchCaptureUITests: XCTestCase {
         return true
     }
 
-    private func setSettingsTextSize(_ target: CGFloat, in settings: XCUIApplication) -> Bool {
+    private enum SettingsTextSizeTarget {
+        case position(CGFloat)
+        case systemDefault
+    }
+
+    private func defaultTextSizeLabel(in settings: XCUIApplication) -> XCUIElement {
+        settings.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Default")).firstMatch
+    }
+
+    private func setSettingsTextSize(_ target: SettingsTextSizeTarget, in settings: XCUIApplication) -> Bool {
         // This native control exposes the AA buttons as one slider. Tap its
         // observed left/right letters; a best-effort drag restored the wrong step.
         for step in 0...8 {
@@ -127,9 +136,24 @@ final class WatchCaptureUITests: XCTestCase {
                 XCTFail("The actual Text Size control must be readable and fully reachable")
                 return false
             }
-            if abs(position - target) <= 0.01 { return true }
+            let increasing: Bool
+            switch target {
+            case .position(let value):
+                if abs(position - value) <= 0.01 { return true }
+                increasing = position < value
+            case .systemDefault:
+                let label = defaultTextSizeLabel(in: settings)
+                if label.waitForExistence(timeout: 8) {
+                    guard label.isHittable, settings.frame.contains(label.frame) else {
+                        captureSettings(settings, "settings-default-unreachable")
+                        XCTFail("The actual system Default label must be fully reachable")
+                        return false
+                    }
+                    return true
+                }
+                increasing = true
+            }
             guard step < 8 else { break }
-            let increasing = position < target
             slider.coordinate(withNormalizedOffset: CGVector(dx: increasing ? 0.85 : 0.15, dy: 0.5)).tap()
             let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 slider.exists && abs(slider.normalizedSliderPosition - position) > 0.01
@@ -140,8 +164,14 @@ final class WatchCaptureUITests: XCTestCase {
                 return false
             }
             let next = slider.normalizedSliderPosition
-            let movedTowardTarget = increasing ? (next > position && next <= target + 0.01)
-                                             : (next < position && next >= target - 0.01)
+            let movedTowardTarget: Bool
+            switch target {
+            case .position(let value):
+                movedTowardTarget = increasing ? (next > position && next <= value + 0.01)
+                                              : (next < position && next >= value - 0.01)
+            case .systemDefault:
+                movedTowardTarget = next > position
+            }
             guard movedTowardTarget else {
                 captureSettings(settings, "settings-text-size-wrong-step")
                 XCTFail("The Text Size value moved away from or past its target")
@@ -154,7 +184,7 @@ final class WatchCaptureUITests: XCTestCase {
     }
 
     private func useLargerSystemText() {
-        let originalAppText = checkReadyScreenEnglish("ready-before-larger")
+        let initialAppText = checkReadyScreenEnglish("ready-initial-device-default")
         // Bundle ID verified from this runtime's simctl listapps, not an app fixture.
         let settings = XCUIApplication(bundleIdentifier: "com.apple.NanoSettings")
         settings.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -166,23 +196,58 @@ final class WatchCaptureUITests: XCTestCase {
         settings.launch()
         captureSettings(settings, "settings-opened")
         guard openSettingsTextSize(in: settings) else { return }
-        captureSettings(settings, "settings-text-size-before")
+        captureSettings(settings, "settings-text-size-initial")
         // Display & Brightness also contains a slider. Never adjust it until the
         // Text Size page itself and its unique slider have been positively identified.
         XCTAssertTrue(settings.navigationBars["Text Size"].waitForExistence(timeout: 8),
                       "The Text Size page must be identified before changing its slider")
         XCTAssertEqual(settings.sliders.count, 1, "Expected one actual Text Size slider; inspect the attached Settings tree")
+        let initialPreview = settings.staticTexts["Apps that support Dynamic Type will adjust to your preferred reading size."]
+        XCTAssertTrue(initialPreview.waitForExistence(timeout: 8))
+        var recoveryPosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
+        let initialMeasurements = XCTAttachment(string: "initial position=\(recoveryPosition) preview=\(initialPreview.frame.size) app=\(initialAppText)")
+        initialMeasurements.name = "text-size-initial-device-measurements"
+        initialMeasurements.lifetime = .keepAlways
+        add(initialMeasurements)
+        // Register the one restoration owner before touching Settings. Upgrade it
+        // to full geometry verification only once the Default baseline exists.
+        var restoreTextSize: () -> Void = {
+            settings.activate()
+            guard self.openSettingsTextSize(in: settings),
+                  self.setSettingsTextSize(.position(recoveryPosition), in: settings) else { return }
+            self.captureSettings(settings, "settings-setup-recovery")
+            let recovery = XCTAttachment(string: "Setup did not establish a verified system-default baseline. Recovery target=\(recoveryPosition) observed=\(settings.sliders.element(boundBy: 0).normalizedSliderPosition); text-geometry restoration is unverified. A matching slider does not prove the original rendering.")
+            recovery.name = "text-size-setup-recovery-unverified"
+            recovery.lifetime = .keepAlways
+            self.add(recovery)
+        }
+        addTeardownBlock { restoreTextSize() }
+        // The fresh simulator rendered its default font with a non-Default slider
+        // step. Establish the actual Settings Default before taking this baseline.
+        guard setSettingsTextSize(.position(0), in: settings),
+              setSettingsTextSize(.systemDefault, in: settings) else { return }
+        let defaultPosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
+        recoveryPosition = defaultPosition
+        captureSettings(settings, "settings-system-default-selected")
+        settings.launch()
+        guard openSettingsTextSize(in: settings) else { return }
+        assertVisible(defaultTextSizeLabel(in: settings), in: settings, "The real system Default text-size label must be visible")
+        XCTAssertEqual(settings.sliders.count, 1)
         let slider = settings.sliders.element(boundBy: 0)
         let originalPosition = slider.normalizedSliderPosition
+        XCTAssertEqual(originalPosition, defaultPosition, accuracy: 0.01,
+                       "The selected system Default must survive a fresh Settings launch")
         let preview = settings.staticTexts["Apps that support Dynamic Type will adjust to your preferred reading size."]
         XCTAssertTrue(preview.waitForExistence(timeout: 8))
         let originalPreview = preview.frame.size
         XCTAssertGreaterThan(originalPreview.height, 0)
-        recordTestRunnerTextCategory("before-larger-settings")
-        addTeardownBlock {
+        captureSettings(settings, "settings-system-default-before-larger")
+        let originalAppText = checkReadyScreenEnglish("ready-system-default-before-larger")
+        recordTestRunnerTextCategory("system-default-before-larger-settings")
+        restoreTextSize = {
             settings.activate()
             self.captureSettings(settings, "settings-before-restore")
-            guard self.setSettingsTextSize(originalPosition, in: settings) else { return }
+            guard self.setSettingsTextSize(.position(originalPosition), in: settings) else { return }
             let livePosition = settings.sliders.element(boundBy: 0).normalizedSliderPosition
             let livePreview = preview.exists ? preview.frame.size : nil
             self.captureSettings(settings, "settings-restored-live")
@@ -203,29 +268,30 @@ final class WatchCaptureUITests: XCTestCase {
             self.captureSettings(settings, "settings-restored-cold")
             self.recordTestRunnerTextCategory("restored-settings")
             let restoredAppText = self.checkReadyScreenEnglish("ready-restored")
-            let measurements = XCTAttachment(string: "original position=\(originalPosition) preview=\(originalPreview) app=\(originalAppText)\nlive position=\(livePosition) preview=\(String(describing: livePreview))\ncold position=\(coldPosition) preview=\(String(describing: restoredPreview)) app=\(restoredAppText)")
+            let checks: [(String, Bool)] = [
+                ("live system-default position", abs(livePosition - originalPosition) <= 0.01),
+                ("cold system-default position", abs(coldPosition - originalPosition) <= 0.01),
+                ("cold Settings preview wait", restoreResult == .completed),
+                ("cold Settings preview width", restoredPreview.map { abs($0.width - originalPreview.width) <= 1 } ?? false),
+                ("cold Settings preview height", restoredPreview.map { abs($0.height - originalPreview.height) <= 1 } ?? false),
+                ("Ceviz title width", abs(restoredAppText.title.width - originalAppText.title.width) <= 1),
+                ("Ceviz title height", abs(restoredAppText.title.height - originalAppText.title.height) <= 1),
+                ("Ceviz limit width", abs(restoredAppText.limit.width - originalAppText.limit.width) <= 1),
+                ("Ceviz limit height", abs(restoredAppText.limit.height - originalAppText.limit.height) <= 1),
+            ]
+            let checkReport = checks.map { "\($0.0)=\($0.1)" }.joined(separator: "\n")
+            let measurements = XCTAttachment(string: "system-default position=\(originalPosition) preview=\(originalPreview) app=\(originalAppText)\nlive position=\(livePosition) preview=\(String(describing: livePreview))\ncold position=\(coldPosition) preview=\(String(describing: restoredPreview)) app=\(restoredAppText)\nrestoreResult=\(restoreResult)\n\(checkReport)")
             measurements.name = "text-size-restore-measurements"
             measurements.lifetime = .keepAlways
             self.add(measurements)
             // Capture both restored apps before an equality failure can halt teardown.
-            XCTAssertEqual(livePosition, originalPosition, accuracy: 0.01)
-            XCTAssertEqual(coldPosition, originalPosition, accuracy: 0.01)
-            XCTAssertEqual(restoreResult, .completed,
-                           "Fresh Settings must return to its original text geometry")
-            if let restoredPreview {
-                XCTAssertEqual(restoredPreview.width, originalPreview.width, accuracy: 1)
-                XCTAssertEqual(restoredPreview.height, originalPreview.height, accuracy: 1)
-            } else {
-                XCTFail("The fresh Settings preview must be present after restore")
+            for (name, passed) in checks {
+                XCTAssertTrue(passed, "Restore must match its measured system-default baseline: \(name)")
             }
-            XCTAssertEqual(restoredAppText.title.width, originalAppText.title.width, accuracy: 1)
-            XCTAssertEqual(restoredAppText.title.height, originalAppText.title.height, accuracy: 1)
-            XCTAssertEqual(restoredAppText.limit.width, originalAppText.limit.width, accuracy: 1)
-            XCTAssertEqual(restoredAppText.limit.height, originalAppText.limit.height, accuracy: 1,
-                           "Ceviz must return to its original text geometry after restoring Settings")
         }
         XCTAssertLessThan(originalPosition, 0.95, "The device is already at maximum text size; a larger scenario cannot be claimed")
-        guard setSettingsTextSize(1, in: settings) else { return }
+        settings.activate()
+        guard setSettingsTextSize(.position(1), in: settings) else { return }
         XCTAssertEqual(slider.normalizedSliderPosition, 1, accuracy: 0.01,
                                     "The actual Text Size slider must reach its maximum")
         let enlarged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -257,13 +323,18 @@ final class WatchCaptureUITests: XCTestCase {
         assertVisible(app.buttons["Start recording"], in: app, "Microphone must be reachable without scrolling")
         XCTAssertFalse(app.staticTexts["Up to 15 seconds"].frame.intersects(app.buttons["Start recording"].frame),
                        "The microphone action must not cover any part of the duration limit")
-        let offline = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Phone offline")).firstMatch
+        assertOfflineLabelIfPresent(in: app, language: "en", microphone: app.buttons["Start recording"])
+        return (app.staticTexts["Ready to listen"].frame.size, app.staticTexts["Up to 15 seconds"].frame.size)
+    }
+
+    private func assertOfflineLabelIfPresent(in app: XCUIApplication, language: String, microphone: XCUIElement) {
+        let label = language == "tr" ? "Telefon çevrimdışı" : "Phone offline"
+        let offline = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
         if offline.exists {
             assertVisible(offline, in: app, "A displayed Phone offline label must not be clipped by the microphone action")
-            XCTAssertFalse(offline.frame.intersects(app.buttons["Start recording"].frame),
+            XCTAssertFalse(offline.frame.intersects(microphone.frame),
                            "The microphone action must not cover the Phone offline label")
         }
-        return (app.staticTexts["Ready to listen"].frame.size, app.staticTexts["Up to 15 seconds"].frame.size)
     }
 
     private func checkRecordAndDiscardBothLanguages() {
@@ -295,6 +366,7 @@ final class WatchCaptureUITests: XCTestCase {
             XCTAssertFalse(discarded.frame.intersects(start.frame),
                            "The microphone action must not cover the discard confirmation")
             capture("discarded-\(language)", in: app)
+            assertOfflineLabelIfPresent(in: app, language: language, microphone: start)
         }
     }
 

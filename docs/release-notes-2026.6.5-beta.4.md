@@ -47,6 +47,17 @@ produced, and TestFlight remains unchanged. The same drag worked in the earlier
 green run; why it did not move Settings in this attempt remains unverified.
 No retry or weakened test gate was used to obtain a distribution result.
 
+Subsequent native investigation also captured an actual synthetic-touch
+cancellation in [run 34043752041](https://github.com/MertBasar0/ceviz/actions/runs/34043752041):
+the Apple test input service removed its virtual digitizer while a contact was
+still down, and BackBoard cancelled that contact in Ceviz's window. XCTest's
+completion notification did not mean the button action ran. No recording or
+hit-target behavior was changed to compensate. A supported Xcode 26.6 toolchain
+comparison is prepared with the same five scenarios and audio thresholds;
+its success is not assumed, and Apple does not document this specific bug as
+fixed. The proposed positive Crown navigation has not yet reached validation.
+No capture-correction build has been signed or uploaded.
+
 Before external distribution, verify both updated apps on a paired real device:
 manual send and automatic 15-second finish; no premature size error; readable
 counter and reachable Delete/Send with larger text; retained audio and correct

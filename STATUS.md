@@ -2,7 +2,7 @@
 
 Son güncelleme: **6 Eylül 2026**
 
-## Kayıt ve mikrofon ekranı — Ayarlar gezinmesi yeniden doğrulanıyor
+## Kayıt ve mikrofon ekranı — native dokunma iptali, iç dağıtım beklemede
 
 Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
@@ -54,8 +54,9 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
 - Kullanıcının engeli çözerek iç dağıtımı tamamlama onayıyla testin Ayarlar
   gezinme sahibi sadeleştirildi: koordinat sürüklemesi kaldırıldı, yerine
   Apple'ın belgeli `rotateDigitalCrown(delta:velocity:)` yöntemi kullanılıyor.
-  İlk Crown denemesinde yön **-0,25 tur**, hız açıkça **0,5 tur/sn**; piksel/sn olan sürükleme
-  hız sabiti taşınmadı. Öndeki Ayarlar ve tek gerçek liste doğrulanıyor;
+  İlk Crown denemesinde yön **-0,25 tur**, hız açıkça **0,5 tur/sn**.
+  Bu açık hız birimi, Apple'ın desteklediği hazır hız sabitlerinin hatalı
+  olduğunu göstermez. Öndeki Ayarlar ve tek gerçek liste doğrulanıyor;
   her adımın önce/sonra satırları kaydediliyor. İlk ilerlemesizlikte durma,
   sekiz adım sınırı, beş senaryonun sırası ve gerçek yazı/geri yükleme
   kontrolleri değişmedi. **45 yerel altyapı testi geçti**; bu, Crown hareketinin
@@ -68,18 +69,52 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   Önceki dokunmanın Apple içinde neden kaydırmadığı çözülmüş gösterilmiyor.
 - Crown yönü için önceki “negatif = listede ilerleme” yorumu yeterli değildi:
   Apple'ın [WWDC21 örneği](https://developer.apple.com/videos/play/wwdc2021/10208/)
-  pozitif dönüşü ileri, negatifi geri olarak gösteriyor. Tek gezinme yolu
+  özel hava durumu ekranında pozitif dönüşü ileri, negatifi geri gösteriyor;
+  bu, Ayarlar listesinin yönünü tek başına kanıtlamaz. Tek gezinme yolu
   **+0,25 tur / 0,5 tur/sn** olarak aday düzeltmeye alındı; ilk ilerlemesizlik
   hatası, adım sınırı ve tüm kabul kontrolleri korunuyor. Ayarlar'da gerçekten
   ilerleme sağladığı yeni native koşunun satır/görüntü kanıtıyla doğrulanacak;
   yalnız yön değişikliği başarı veya kesin kök neden kanıtı değildir.
+- Kaynak `c1d85bb8098b17a8b37cc0f661d5ffd0e2276ff4` ile
+  <https://github.com/MertBasar0/ceviz/actions/runs/34042776769> ekran testine
+  ulaşamadı: normal Ceviz açılışı ve görüntüsü doğrulandı; genel `simctl openurl`
+  çağrısı **60 saniyede, boş çıktı ile zaman aşımına uğradı**. Bu, izin verilen
+  115 istisnası değildir; kapı fatal kaldı, imzalama/yükleme başlamadı.
+  Kaynak/kapılar değiştirilmeden tek yeni ortam karşılaştırması başlatıldı:
+  <https://github.com/MertBasar0/ceviz/actions/runs/34043752041>.
+  Aynı SHA doğrulandı; bu kez açılış aşaması tamamlandı, yalnız bilinen 115
+  tanısı adayda korundu ve beşli UI kontrolüne geçildi. Ancak 40 mm normal
+  hazır ekranın ardından ilk mikrofon dokunuşu kayıt başlatmadı; test durdu.
+  Ayarlar'ın pozitif Crown hareketine ulaşılmadı; imzalama/yükleme yok.
+  Önceki URL zaman aşımının kök nedeni çözülmüş gösterilmiyor.
+- Son koşunun native OS arşivinde **16:08:52 UTC** için somut hata zinciri var:
+  Recap sanal dokunma aygıtını kaldırıyor; BackBoard hâlâ basılı teması Ceviz'in
+  gerçek pencere kimliğine (`0x795D6FE4`, PID 26173) **soft cancel** ile iptal
+  ediyor. XCTest yine de `TouchEventsCompleted` bildiriyor. Aynı aygıtın iki
+  temas durumu ve atlanan `pathIndex:2` olayları kaydedilmiş. Uygulama aktif,
+  düğme erişilebilir; `view_appeared` var, `primary_action` yok. İptal sonrası
+  UIKit olayı normal parmak kaldırma kanıtı değildir. İzin, kayıt süresi veya
+  `contentShape` kök neden diye sunulmuyor; bu gerekçeyle üretim kodu değişmedi.
+  Arşiv yalnız yerelde çözüldü; ayrıştırıcı bir firehose EOF uyarısı verdiği
+  için tüm kayıtların eksiksiz olduğu iddia edilmiyor.
+- Native olay üreticisini farklı desteklenen sürümde karşılaştırmak için
+  workflow **Xcode 26.6 (17F113)** üzerine sabitlendi; belirsiz en-son-sürüm
+  fallback'i kaldırıldı. Aynı runner imajının resmî envanterinde Xcode 26.6 ve
+  iOS/watchOS 26.5 simülatörleri mevcut. Uygulama, beş senaryo, dokunma API'leri,
+  süreler ve ses ölçüm eşikleri değişmedi. Apple sürüm notları bu özel Recap
+  hatasının giderildiğini söylemiyor; bu bir kontrollü ortam karşılaştırması,
+  henüz başarılı düzeltme/dağıtım değildir.
+  Yerel **45/45** test, workflow YAML ayrıştırması ve **21** komut bloğunun
+  Bash sözdizimi kontrolü geçti. Üretim kodu farkı **0**; workflow **+5/-9**.
+  Kaynaklar: [tam runner imajı](https://github.com/actions/runner-images/blob/macos-26-arm64/20260831.0337/images/macos/macos-26-arm64-Readme.md),
+  [Apple Xcode 26.6](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes).
 - Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
-  build'i değişmedi**. Açık engel: Ayarlar'ın tamamlanan dokunma hareketiyle
-  neden ilerlemediğini açıklayan native kanıt henüz yok. Sıradaki adım bu
+  build'i değişmedi**. Açık engel: native dokunma iptalinin güvenilir biçimde
+  giderilmesi ve pozitif Crown gezinmesinin gerçek kanıtı. Sıradaki adım bu
   otomasyon engelini çözerek tüm kapıları geçen iç adayın dağıtımını doğrulamak;
   ardından iki güncel uygulamayla fiziksel cihaz kabul kontrolü.
-  Bu adayın dış Beta dağıtımı beklemede. Eski ilk-dokunuş/kapanış sorunları bu turda görülmedi;
-  kök nedenleri onarılmış olarak sunulmuyor.
+  Bu adayın dış Beta dağıtımı beklemede. Son koşuda ilk-dokunuş belirtisi yeniden
+  görüldü; önceki koşuların aynı kök nedene sahip olduğu varsayılmıyor.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.

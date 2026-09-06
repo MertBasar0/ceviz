@@ -64,15 +64,11 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          PINNED=/Applications/Xcode_26.4.1.app
-          if [ -d "$PINNED" ]; then
-            sudo xcode-select -s "$PINNED/Contents/Developer"
-          else
-            LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-            [ -n "$LATEST" ] || { echo "Xcode bulunamadi"; ls /Applications | head -30; exit 1; }
-            echo "Sabitlenen Xcode yok, kullanilacak: $LATEST"
-            sudo xcode-select -s "$LATEST/Contents/Developer"
-          fi
+          # Keep simulator proof and the signed archive on one known toolchain.
+          # Never silently substitute an unverified release or beta if it is absent.
+          PINNED=/Applications/Xcode_26.6.app
+          [ -d "$PINNED" ] || { echo "Required Xcode 26.6 is not installed"; exit 1; }
+          sudo xcode-select -s "$PINNED/Contents/Developer"
           xcodebuild -version
 
       - name: Install XcodeGen

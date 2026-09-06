@@ -54,14 +54,25 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
 - Kullanıcının engeli çözerek iç dağıtımı tamamlama onayıyla testin Ayarlar
   gezinme sahibi sadeleştirildi: koordinat sürüklemesi kaldırıldı, yerine
   Apple'ın belgeli `rotateDigitalCrown(delta:velocity:)` yöntemi kullanılıyor.
-  Yön **-0,25 tur** (aşağı), hız açıkça **0,5 tur/sn**; piksel/sn olan sürükleme
+  İlk Crown denemesinde yön **-0,25 tur**, hız açıkça **0,5 tur/sn**; piksel/sn olan sürükleme
   hız sabiti taşınmadı. Öndeki Ayarlar ve tek gerçek liste doğrulanıyor;
   her adımın önce/sonra satırları kaydediliyor. İlk ilerlemesizlikte durma,
   sekiz adım sınırı, beş senaryonun sırası ve gerçek yazı/geri yükleme
   kontrolleri değişmedi. **45 yerel altyapı testi geçti**; bu, Crown hareketinin
-  veya gerçek ekranların native başarı kanıtı değildir. Apple derlemesi ve
-  aynı beşli senaryo henüz bekleniyor. Üretim uygulaması ve workflow değişmedi.
+  veya gerçek ekranların native başarı kanıtı değildir. Kaynak `76ca45e69f9e59a5632db2b0d70f26d6d803c330`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34040939355>:
+  derleme ve 40 mm normal ekran geçti; 40 mm büyük yazı hazırlığında ilk Crown
+  hareketinden sonra dört satırın konumu birebir aynı kaldı. Test durdu;
+  imzalama/yükleme başlamadı. Bu koşuda büyük yazı ve ses bitişi doğrulanmadı.
+  Üretim uygulaması ve workflow değişmedi.
   Önceki dokunmanın Apple içinde neden kaydırmadığı çözülmüş gösterilmiyor.
+- Crown yönü için önceki “negatif = listede ilerleme” yorumu yeterli değildi:
+  Apple'ın [WWDC21 örneği](https://developer.apple.com/videos/play/wwdc2021/10208/)
+  pozitif dönüşü ileri, negatifi geri olarak gösteriyor. Tek gezinme yolu
+  **+0,25 tur / 0,5 tur/sn** olarak aday düzeltmeye alındı; ilk ilerlemesizlik
+  hatası, adım sınırı ve tüm kabul kontrolleri korunuyor. Ayarlar'da gerçekten
+  ilerleme sağladığı yeni native koşunun satır/görüntü kanıtıyla doğrulanacak;
+  yalnız yön değişikliği başarı veya kesin kök neden kanıtı değildir.
 - Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
   build'i değişmedi**. Açık engel: Ayarlar'ın tamamlanan dokunma hareketiyle
   neden ilerlemediğini açıklayan native kanıt henüz yok. Sıradaki adım bu

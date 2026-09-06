@@ -81,11 +81,11 @@ final class WatchCaptureUITests: XCTestCase {
             }
             let list = settings.collectionViews.element(boundBy: 0)
             let rowsBefore = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
-            // Apple defines negative delta as down and Crown velocity in turns/s,
-            // not the pixels/s used by touch drags. Each step still must move the list.
-            XCUIDevice.shared.rotateDigitalCrown(delta: -0.25, velocity: XCUIGestureVelocity(rawValue: 0.5))
+            // Rotate forward to reveal later rows, not backward toward the list's top.
+            // Crown velocity is in turns/s; the row snapshots verify actual progress.
+            XCUIDevice.shared.rotateDigitalCrown(delta: 0.25, velocity: XCUIGestureVelocity(rawValue: 0.5))
             let rowsAfter = list.cells.allElementsBoundByIndex.map { "\($0.identifier):\($0.label):\($0.frame)" }
-            let movement = XCTAttachment(string: "delta=-0.25 velocity_turns_per_second=0.5\nbefore=\(rowsBefore)\nafter=\(rowsAfter)")
+            let movement = XCTAttachment(string: "delta=0.25 velocity_turns_per_second=0.5\nbefore=\(rowsBefore)\nafter=\(rowsAfter)")
             movement.name = "settings-crown-progress-\(title)-\(step)"
             movement.lifetime = .keepAlways
             add(movement)

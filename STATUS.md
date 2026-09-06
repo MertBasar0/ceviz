@@ -264,6 +264,26 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   kullanılıyor; hedef aralık, 15 sn bekleme ve gerçek dosya sınırları aynı.
   Tanı yükünün kalkması sonraki native günlükle doğrulanacak; üretim değişmedi.
   49 mm çalışmadı; dağıtım/yükleme yok.
+- On dördüncü doğrulama: `792f8f21e177635d7204f05e4ee6a74122a48ce4`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34008239012>.
+  Yerel **91/91**, Apple derlemesi ve üç yerel uygulama kimliği geçti.
+  Açılış PNG'sinde Ready, süre sınırı, Offline ve mikrofon şahsen görüldü;
+  native günlük de uygulamayı `ready` ve `running-active-Visible` gösterdi.
+  Sonrasında testin açtığı Watch simülatörünü kapatma komutu **60 sn** içinde
+  tamamlanmadı. UI testlerine hiç ulaşılmadı; sayaç beklemesi düzeltmesi henüz
+  native doğrulanmadı. Bu, kayıt süresi testinin başarısızlığı değildir.
+  Simülatörün neden kapanmadığı mevcut günlükte bulunmuyor. Ayrıca smoke
+  temizliğinde doğrulanmış sahiplik/raporlama kusuru var: ilk kapanış hatası
+  diğer sahip olunan cihazın temizliğini atlıyor ve sonuç dosyası temizliğin
+  öncesinde yazıldığından bu hatayı içermiyor. Aynı sınırın UI koşucusunda
+  mevcut olan ortak sahiplik akışıyla birleştirildi. Üç regresyon önce beklenen
+  nedenlerle başarısız oldu, ardından **94/94** Python testi geçti. Kapanışta
+  tüm sahip olunan cihazlar ele alınıyor, asıl hata korunuyor ve son rapora
+  temizlik hataları da yazılıyor. Ortak kodun altı yaşam döngüsü testi kendi
+  modülüne taşındı; net değişim test desteğinde +4, testlerde +56 satır,
+  üretimde 0. Zaman aşımı halen 60 sn; kapanış hatası halen durdurucu.
+  Bu düzeltme, işletim sisteminin kapanma takılmasının çözüldüğü iddiası değil.
+  Kayıt ve 49 mm kontrolleri çalışmadı; TestFlight yükleme/dağıtım yapılmadı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

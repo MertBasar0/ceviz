@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
-from watch_launch_smoke import choose_simulators, simctl
+from watch_launch_smoke import WatchSimulatorPair, choose_simulators, simctl
 
 WATCH_ID = "com.mertbasar.cevizwatch.watchkitapp"
 FINISH_TEST = "CevizWatchUITests/WatchCaptureUITests/testManualAndAutomaticFinishRetainRecording"
@@ -42,56 +42,6 @@ def test_selection(mode, size="device-default"):
         return ["-only-testing:CevizWatchUITests/WatchCaptureUITests/testReadyScreenEnglish",
                 "-only-testing:CevizWatchUITests/WatchCaptureUITests/testRecordAndDiscardBothLanguages"]
     raise ValueError(f"Unknown capture test mode: {mode}")
-
-
-class CaptureSimulatorPair:
-    """Keep one selected pair warm; app containers remain isolated per scenario."""
-    def __init__(self):
-        self.current = ()
-        self.started = []
-
-    @staticmethod
-    def device_states():
-        inventory = json.loads(simctl("list", "devices", "--json", capture=True))["devices"]
-        return {device["udid"]: device["state"] for devices in inventory.values() for device in devices}
-
-    def use(self, phone, watch):
-        selected = (phone["udid"], watch["udid"])
-        if selected != self.current:
-            previous = self.current
-            self.close()
-            states = self.device_states()
-            if any(states.get(udid) != "Shutdown" for udid in previous):
-                raise RuntimeError("Previous pair is not confirmed shut down; refusing a second concurrent pair outside this runner's ownership")
-            self.current = selected
-        for udid in selected:
-            state = self.device_states().get(udid)
-            if state is None:
-                raise RuntimeError(f"Simulator state is unknown: {udid}")
-            if state != "Booted":
-                # A timed-out boot may still start the device; retain cleanup ownership.
-                if udid not in self.started:
-                    self.started.append(udid)
-                simctl("boot", udid)
-            simctl("bootstatus", udid, "-b")
-
-    def close(self):
-        errors = []
-        for udid in reversed(self.started.copy()):
-            try:
-                state = self.device_states().get(udid)
-                if state is None:
-                    raise RuntimeError(f"Simulator state is unknown: {udid}")
-                if state != "Shutdown":
-                    subprocess.run(["xcrun", "simctl", "shutdown", udid], check=True, timeout=60)
-                    if self.device_states().get(udid) != "Shutdown":
-                        raise RuntimeError(f"Simulator shutdown was not confirmed: {udid}")
-                self.started.remove(udid)
-            except (RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                errors.append(f"Simulator shutdown failed for {udid}: {error}")
-        if errors:
-            raise RuntimeError("; ".join(errors))
-        self.current = ()
 
 
 def reinstall_watch(watch_udid, watch_app):
@@ -184,7 +134,7 @@ def main(project, baseline=False):
     subprocess.run(["xcodegen", "generate", "--spec", "project.watch-ui.yml"], cwd=project, check=True)
     evidence = []
     built = False
-    active_pair = CaptureSimulatorPair()
+    active_pair = WatchSimulatorPair()
     try:
         for screen, size, mode in capture_runs(baseline):
             # Re-read pair ownership: a previous run may have safely created a pair.

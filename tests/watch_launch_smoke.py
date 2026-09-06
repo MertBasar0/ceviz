@@ -4,6 +4,7 @@ import json
 import plistlib
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -31,6 +32,56 @@ def simctl(*args, capture=False):
             print("::warning::CoreSimulator reported a data migration failure with exit code zero. "
                   "This is not app readiness proof; installation, launch and UI checks remain required.", flush=True)
     return result.stdout
+
+
+class WatchSimulatorPair:
+    """Keep one selected pair warm; app containers remain isolated per scenario."""
+    def __init__(self):
+        self.current = ()
+        self.started = []
+
+    @staticmethod
+    def device_states():
+        inventory = json.loads(simctl("list", "devices", "--json", capture=True))["devices"]
+        return {device["udid"]: device["state"] for devices in inventory.values() for device in devices}
+
+    def use(self, phone, watch):
+        selected = (phone["udid"], watch["udid"])
+        if selected != self.current:
+            previous = self.current
+            self.close()
+            states = self.device_states()
+            if any(states.get(udid) != "Shutdown" for udid in previous):
+                raise RuntimeError("Previous pair is not confirmed shut down; refusing a second concurrent pair outside this runner's ownership")
+            self.current = selected
+        for udid in selected:
+            state = self.device_states().get(udid)
+            if state is None:
+                raise RuntimeError(f"Simulator state is unknown: {udid}")
+            if state != "Booted":
+                # A timed-out boot may still start the device; retain cleanup ownership.
+                if udid not in self.started:
+                    self.started.append(udid)
+                simctl("boot", udid)
+            simctl("bootstatus", udid, "-b")
+
+    def close(self):
+        errors = []
+        for udid in reversed(self.started.copy()):
+            try:
+                state = self.device_states().get(udid)
+                if state is None:
+                    raise RuntimeError(f"Simulator state is unknown: {udid}")
+                if state != "Shutdown":
+                    subprocess.run(["xcrun", "simctl", "shutdown", udid], check=True, timeout=60)
+                    if self.device_states().get(udid) != "Shutdown":
+                        raise RuntimeError(f"Simulator shutdown was not confirmed: {udid}")
+                self.started.remove(udid)
+            except (RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                errors.append(f"Simulator shutdown failed for {udid}: {error}")
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        self.current = ()
 
 
 def runtime_version(runtime):
@@ -190,20 +241,27 @@ def main(*, candidate_for_device_check=False):
     diagnostics = output / "diagnostics"
     diagnostics.mkdir(exist_ok=True)
     context = initial_context(candidate_for_device_check)
-    started = []
+    active_pair = WatchSimulatorPair()
     try:
-        run_smoke(output, diagnostics, context, started,
+        run_smoke(output, diagnostics, context, active_pair,
                   candidate_for_device_check=candidate_for_device_check)
     except Exception as error:
         context["failure"] = f"{type(error).__name__}: {error}"
         raise
     finally:
-        (output / "context.json").write_text(json.dumps(context, indent=2), encoding="utf-8")
-        for udid in reversed(started):
-            subprocess.run(["xcrun", "simctl", "shutdown", udid], check=False, timeout=60)
+        had_error = sys.exc_info()[0] is not None
+        try:
+            active_pair.close()
+        except RuntimeError as error:
+            context.setdefault("cleanup_errors", []).append(str(error))
+            if not had_error:
+                context["failure"] = f"{type(error).__name__}: {error}"
+                raise
+        finally:
+            (output / "context.json").write_text(json.dumps(context, indent=2), encoding="utf-8")
 
 
-def run_smoke(output, diagnostics, context, started, *, candidate_for_device_check=False):
+def run_smoke(output, diagnostics, context, active_pair, *, candidate_for_device_check=False):
     bridge = Path("build/validation/Build/Products/Release-iphonesimulator/CevizBridge.app")
     watch_id = "com.mertbasar.cevizwatch.watchkitapp"
     watches = [
@@ -245,11 +303,7 @@ def run_smoke(output, diagnostics, context, started, *, candidate_for_device_che
     if choice["needs_pair"]:
         simctl("pair", watch["udid"], phone["udid"])
 
-    for device in (phone, watch):
-        if device["state"] != "Booted":
-            simctl("boot", device["udid"])
-            started.append(device["udid"])
-        simctl("bootstatus", device["udid"], "-b")
+    active_pair.use(phone, watch)
     simctl("install", phone["udid"], str(bridge))
     simctl("install", watch["udid"], str(watches[0]))
     installed_path = simctl("get_app_container", watch["udid"], watch_id, "app", capture=True).strip()

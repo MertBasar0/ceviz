@@ -50,6 +50,111 @@ class SimulatorBootTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs["timeout"], 300)
 
 
+class SimulatorPairLifetimeTests(unittest.TestCase):
+    def test_same_pair_stays_warm_and_previous_pair_stops_before_next_boot(self):
+        owner = SMOKE.WatchSimulatorPair()
+        states = {udid: "Shutdown" for udid in ("phone40", "watch40", "phone49", "watch49")}
+        actions = []
+
+        def simctl(command, udid, *args):
+            actions.append((command, udid))
+            if command == "boot":
+                states[udid] = "Booted"
+
+        def shutdown(command, **kwargs):
+            self.assertEqual(kwargs, {"check": True, "timeout": 60})
+            actions.append(("shutdown", command[-1]))
+            states[command[-1]] = "Shutdown"
+
+        with patch.object(owner, "device_states", side_effect=lambda: states.copy()), \
+                patch.object(SMOKE, "simctl", side_effect=simctl), \
+                patch.object(SMOKE.subprocess, "run", side_effect=shutdown):
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            self.assertEqual([action for action in actions if action[0] != "bootstatus"],
+                             [("boot", "phone40"), ("boot", "watch40")])
+            warm_end = len(actions)
+            owner.use({"udid": "phone49"}, {"udid": "watch49"})
+            owner.close()
+        self.assertEqual(actions[warm_end:], [("shutdown", "watch40"), ("shutdown", "phone40"),
+                                      ("boot", "phone49"), ("bootstatus", "phone49"),
+                                      ("boot", "watch49"), ("bootstatus", "watch49"),
+                                      ("shutdown", "watch49"), ("shutdown", "phone49")])
+        self.assertTrue(all(state == "Shutdown" for state in states.values()))
+
+    def test_preexisting_pair_is_not_stopped_or_run_alongside_another_pair(self):
+        owner = SMOKE.WatchSimulatorPair()
+        with patch.object(owner, "device_states", return_value={"phone40": "Booted", "watch40": "Booted"}), \
+                patch.object(SMOKE, "simctl") as simctl, patch.object(SMOKE.subprocess, "run") as shutdown:
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            with self.assertRaisesRegex(RuntimeError, "outside this runner's ownership"):
+                owner.use({"udid": "phone49"}, {"udid": "watch49"})
+            owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual([call.args for call in simctl.call_args_list],
+                         [("bootstatus", "phone40", "-b"), ("bootstatus", "watch40", "-b")])
+
+    def test_partial_boot_timeout_keeps_cleanup_ownership(self):
+        owner = SMOKE.WatchSimulatorPair()
+        states = {"phone40": "Shutdown", "watch40": "Shutdown"}
+
+        def timeout(*args):
+            states["phone40"] = "Booted"
+            raise subprocess.TimeoutExpired("boot", 300)
+
+        def stopped(*args, **kwargs):
+            states["phone40"] = "Shutdown"
+
+        with patch.object(owner, "device_states", side_effect=lambda: states.copy()), \
+                patch.object(SMOKE, "simctl", side_effect=timeout), \
+                patch.object(SMOKE.subprocess, "run") as shutdown:
+            shutdown.side_effect = stopped
+            with self.assertRaises(subprocess.TimeoutExpired):
+                owner.use({"udid": "phone40"}, {"udid": "watch40"})
+            owner.close()
+        shutdown.assert_called_once_with(["xcrun", "simctl", "shutdown", "phone40"], check=True, timeout=60)
+
+    def test_failed_shutdown_prevents_booting_next_pair(self):
+        owner = SMOKE.WatchSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        with patch.object(owner, "device_states", return_value={"phone40": "Booted", "watch40": "Booted"}), \
+                patch.object(SMOKE, "simctl") as simctl, \
+                patch.object(SMOKE.subprocess, "run", side_effect=subprocess.TimeoutExpired("shutdown", 60)):
+            with self.assertRaisesRegex(RuntimeError, "shutdown failed"):
+                owner.use({"udid": "phone49"}, {"udid": "watch49"})
+        simctl.assert_not_called()
+        self.assertEqual(owner.started, ["phone40", "watch40"])
+
+    def test_same_pair_reboots_framework_stopped_device_without_duplicate_ownership(self):
+        owner = SMOKE.WatchSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        states = {"phone40": "Booted", "watch40": "Shutdown"}
+        with patch.object(owner, "device_states", return_value=states), patch.object(SMOKE, "simctl") as simctl:
+            owner.use({"udid": "phone40"}, {"udid": "watch40"})
+        self.assertEqual([call.args for call in simctl.call_args_list], [
+            ("bootstatus", "phone40", "-b"), ("boot", "watch40"), ("bootstatus", "watch40", "-b")])
+        self.assertEqual(owner.started, ["phone40", "watch40"])
+
+    def test_close_accepts_verified_shutdown_but_not_unknown_state(self):
+        owner = SMOKE.WatchSimulatorPair()
+        owner.current = ("phone40", "watch40")
+        owner.started = ["phone40", "watch40"]
+        with patch.object(owner, "device_states", return_value={"phone40": "Shutdown", "watch40": "Shutdown"}), \
+                patch.object(SMOKE.subprocess, "run") as shutdown:
+            owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual(owner.started, [])
+        owner.started = ["unknown-device"]
+        with patch.object(owner, "device_states", return_value={}), patch.object(SMOKE.subprocess, "run") as shutdown:
+            with self.assertRaisesRegex(RuntimeError, "state is unknown"):
+                owner.close()
+        shutdown.assert_not_called()
+        self.assertEqual(owner.started, ["unknown-device"])
+
+
 class SimulatorSelectionTests(unittest.TestCase):
     def setUp(self):
         self.sdks = {"watch": "26.4", "phone": "26.4"}
@@ -108,6 +213,62 @@ class SimulatorSelectionTests(unittest.TestCase):
 
 
 class GateReportingTests(unittest.TestCase):
+    def cleanup_failure(self, smoke_error=None):
+        import json
+        import os
+
+        states = {"fixture-phone": "Booted", "fixture-watch": "Booted"}
+        attempted = []
+
+        def smoke(output, diagnostics, context, active_pair, *, candidate_for_device_check=False):
+            active_pair.started.extend(states)
+            context["cold_launch"]["status"] = "succeeded"
+            if smoke_error:
+                raise smoke_error
+
+        def shutdown(command, **kwargs):
+            attempted.append(command[-1])
+            self.assertEqual(kwargs["timeout"], 60)
+            if command[-1] == "fixture-watch":
+                raise subprocess.TimeoutExpired(command, 60)
+            states[command[-1]] = "Shutdown"
+            return subprocess.CompletedProcess(command, 0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            previous = Path.cwd()
+            try:
+                os.chdir(directory)
+                with patch.object(SMOKE, "run_smoke", side_effect=smoke), \
+                        patch.object(SMOKE, "simctl", side_effect=lambda *args, **kwargs: json.dumps({
+                            "devices": {"fixture-runtime": [{"udid": udid, "state": state}
+                                                            for udid, state in states.items()]}})), \
+                        patch.object(SMOKE.subprocess, "run", side_effect=shutdown):
+                    with self.assertRaises(Exception) as raised:
+                        SMOKE.main()
+                context = json.loads(Path("build/watch-launch-smoke/context.json").read_text())
+                return attempted, context, raised.exception
+            finally:
+                os.chdir(previous)
+
+    def test_shutdown_timeout_still_attempts_second_owned_device(self):
+        attempted, _, _ = self.cleanup_failure()
+        self.assertEqual(attempted, ["fixture-watch", "fixture-phone"])
+
+    def test_cleanup_failure_is_fatal_and_written_to_final_context(self):
+        _, context, error = self.cleanup_failure()
+        self.assertIn("cleanup_errors", context)
+        self.assertIsInstance(error, RuntimeError)
+        self.assertEqual(context["cold_launch"]["status"], "succeeded")
+        self.assertIn("fixture-watch", context["cleanup_errors"][0])
+        self.assertIn("shutdown failed", context["failure"])
+
+    def test_cleanup_failure_does_not_replace_original_smoke_failure(self):
+        original = ValueError("original smoke failure")
+        _, context, error = self.cleanup_failure(original)
+        self.assertIs(error, original)
+        self.assertIn("original smoke failure", context["failure"])
+        self.assertIn("fixture-watch", context["cleanup_errors"][0])
+
     def test_failed_capture_route_is_not_changed_to_success_or_swallowed(self):
         import json
         import os

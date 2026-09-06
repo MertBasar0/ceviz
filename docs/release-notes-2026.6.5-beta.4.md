@@ -1,15 +1,15 @@
 # Ceviz 2026.6.5 Beta 4 — Reliable wrist flow
 
-Release candidate. Build, external TestFlight availability, and device checks
-must be recorded in `STATUS.md` before this is described as distributed.
+Internal release candidate. External distribution and physical device acceptance
+remain pending; exact evidence is recorded in `STATUS.md`.
 
-Signed candidate **2026.6.5 (1788570416)** is available to the **Mert** internal
+Signed candidate **2026.6.5 (1788715054)** is available to the **Mert** internal
 TestFlight group. Apple reports **VALID / internal IN_BETA_TESTING**; upload
 processing is complete without errors or warnings. External state is
 **READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
 distribution is held for the capture reliability and layout checks below.
 
-## Capture correction — internal upload blocked, not yet shipped
+## Capture correction — shipped to internal TestFlight
 
 The tester reported a successful physical complication-to-command flow, followed
 by a premature “recording too long” error and unreadable/clipped capture controls.
@@ -43,7 +43,7 @@ was stopped by the last scenario's real Settings navigation check: its first
 preceding four scenarios passed, with actual files of **9.468 / 14.908 seconds**;
 manual finish showed Queued and automatic finish showed a demo result, not a
 real gateway acknowledgement. Signing and upload were skipped, no IPA was
-produced, and TestFlight remains unchanged. The same drag worked in the earlier
+produced, and that attempt did not change TestFlight. The same drag worked in the earlier
 green run; why it did not move Settings in this attempt remains unverified.
 No retry or weakened test gate was used to obtain a distribution result.
 
@@ -52,11 +52,29 @@ cancellation in [run 34043752041](https://github.com/MertBasar0/ceviz/actions/ru
 the Apple test input service removed its virtual digitizer while a contact was
 still down, and BackBoard cancelled that contact in Ceviz's window. XCTest's
 completion notification did not mean the button action ran. No recording or
-hit-target behavior was changed to compensate. A supported Xcode 26.6 toolchain
-comparison is prepared with the same five scenarios and audio thresholds;
-its success is not assumed, and Apple does not document this specific bug as
-fixed. The proposed positive Crown navigation has not yet reached validation.
-No capture-correction build has been signed or uploaded.
+hit-target behavior was changed to compensate. The supported Xcode 26.6
+comparison kept the same five scenarios and audio thresholds. Apple does not
+document this specific bug as fixed; earlier intermittent failures are not
+all claimed resolved.
+
+The complete signed-candidate pipeline subsequently passed in
+[run 34046167349](https://github.com/MertBasar0/ceviz/actions/runs/34046167349),
+source `e156d252b25d57d9638edc820596718bc903ad70`, Xcode **26.6 / 17F113**,
+iOS/watchOS **26.5**. All five native scenarios passed, including actual positive
+Crown navigation, maximum system text, and **9/9** restoration on each size.
+Recorded files measured **9.916 seconds / 25,204 bytes** and
+**14.908 seconds / 25,516 bytes**, AAC, 16 kHz, mono. Manual finish showed
+Queued; automatic finish showed the app's demo Completed result, not a gateway
+acknowledgement. Recording controls were visually checked on 40 mm and 49 mm.
+Individual image reinspection confirmed the manual Queued result and the
+initial ready-screen microphone. Actual Default/max/restored screens and
+measurements provide the layout proof; physical acceptance remains separate.
+
+The signed package contains matching iPhone, Watch and widget versions.
+Apple accepted **1788715054** as **VALID**, upload **COMPLETE** without errors
+or warnings, internal **IN_BETA_TESTING**, assigned only to **Mert**.
+No external Beta assignment, main-branch update, or live service change was made.
+EN/TR TestFlight test notes are empty; this document records the release changes.
 
 Before external distribution, verify both updated apps on a paired real device:
 manual send and automatic 15-second finish; no premature size error; readable

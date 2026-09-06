@@ -2,9 +2,16 @@
 
 Son güncelleme: **6 Eylül 2026**
 
-## Kayıt ve mikrofon ekranı — native dokunma iptali, iç dağıtım beklemede
+## Kayıt ve mikrofon ekranı — iç TestFlight dağıtımı tamamlandı
 
-Kullanıcı, iç adayda kadrandan uygulamayı açıp komut göndermeyi hatasız
+**Güncel iç aday: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,
+build **VALID / internal IN_BETA_TESTING**; yalnız **Mert** grubuna atanmış.
+Dış durum **READY_FOR_BETA_SUBMISSION**, yeni build'in **Beta** üyeliği yok.
+Apple yüklemesinde hata/uyarı yok; EN/TR TestFlight test notları boş.
+Dağıtım erişimi doğrulandı, fiziksel cihazda kurulum/kabul henüz doğrulanmadı.
+`main`, dış Beta ve canlı gateway/servis yapılandırması değiştirilmedi.
+
+Kullanıcı, önceki **1788570416** iç adayında kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
 tüm kabul listesinin tamamlandığı anlamına gelmez. Aynı denemede 15 saniye
 dolmadan “kayıt çok uzun” hatası, küçük yazı ve ekran dışına taşan eylem bildirildi.
@@ -21,7 +28,7 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   hatasında sesin korunması; küçük isteklerde mevcut hızlı aktarım uygulandı.
 - Kayıt ekranında okunur sayaç ve görünür Sil/Gönder düğmeleri için ayrı alt
   alan ayrıldı. Önceki sonuç ve yardımcı başlıklar kayıt alanını sıkıştırmıyor.
-- Son tam başarılı doğrulama: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
+- Önceki tam başarılı, yalnız doğrulama koşusu: `4ca09062de9dfa7c5f4cf4aae71bf29abe267975`,
   <https://github.com/MertBasar0/ceviz/actions/runs/34021753131>.
   Python **94/94**, relay **3/3**, beş Swift regresyon programı, imzalama
   sözleşmeleri, iPhone/Watch/widget Release derlemesi ve gerçek açılış geçti.
@@ -73,7 +80,7 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   bu, Ayarlar listesinin yönünü tek başına kanıtlamaz. Tek gezinme yolu
   **+0,25 tur / 0,5 tur/sn** olarak aday düzeltmeye alındı; ilk ilerlemesizlik
   hatası, adım sınırı ve tüm kabul kontrolleri korunuyor. Ayarlar'da gerçekten
-  ilerleme sağladığı yeni native koşunun satır/görüntü kanıtıyla doğrulanacak;
+  ilerleme sağladığı aşağıdaki yeni native koşunun satır/görüntü kanıtıyla doğrulandı;
   yalnız yön değişikliği başarı veya kesin kök neden kanıtı değildir.
 - Kaynak `c1d85bb8098b17a8b37cc0f661d5ffd0e2276ff4` ile
   <https://github.com/MertBasar0/ceviz/actions/runs/34042776769> ekran testine
@@ -87,7 +94,7 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   hazır ekranın ardından ilk mikrofon dokunuşu kayıt başlatmadı; test durdu.
   Ayarlar'ın pozitif Crown hareketine ulaşılmadı; imzalama/yükleme yok.
   Önceki URL zaman aşımının kök nedeni çözülmüş gösterilmiyor.
-- Son koşunun native OS arşivinde **16:08:52 UTC** için somut hata zinciri var:
+- Başarısız `34043752041` koşusunun native OS arşivinde **16:08:52 UTC** için somut hata zinciri var:
   Recap sanal dokunma aygıtını kaldırıyor; BackBoard hâlâ basılı teması Ceviz'in
   gerçek pencere kimliğine (`0x795D6FE4`, PID 26173) **soft cancel** ile iptal
   ediyor. XCTest yine de `TouchEventsCompleted` bildiriyor. Aynı aygıtın iki
@@ -102,25 +109,57 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   fallback'i kaldırıldı. Aynı runner imajının resmî envanterinde Xcode 26.6 ve
   iOS/watchOS 26.5 simülatörleri mevcut. Uygulama, beş senaryo, dokunma API'leri,
   süreler ve ses ölçüm eşikleri değişmedi. Apple sürüm notları bu özel Recap
-  hatasının giderildiğini söylemiyor; bu bir kontrollü ortam karşılaştırması,
-  henüz başarılı düzeltme/dağıtım değildir.
+  hatasının giderildiğini söylemiyor; bu bir kontrollü ortam karşılaştırmasıdır,
+  tüm önceki aralıklı hataların kök nedeninin giderildiği iddia edilmiyor.
   Yerel **45/45** test, workflow YAML ayrıştırması ve **21** komut bloğunun
   Bash sözdizimi kontrolü geçti. Üretim kodu farkı **0**; workflow **+5/-9**.
   Kaynaklar: [tam runner imajı](https://github.com/actions/runner-images/blob/macos-26-arm64/20260831.0337/images/macos/macos-26-arm64-Readme.md),
   [Apple Xcode 26.6](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes).
-- Düzeltme yalnız `codex/watch-capture-repair` dalında; **main ve son TestFlight
-  build'i değişmedi**. Açık engel: native dokunma iptalinin güvenilir biçimde
-  giderilmesi ve pozitif Crown gezinmesinin gerçek kanıtı. Sıradaki adım bu
-  otomasyon engelini çözerek tüm kapıları geçen iç adayın dağıtımını doğrulamak;
-  ardından iki güncel uygulamayla fiziksel cihaz kabul kontrolü.
-  Bu adayın dış Beta dağıtımı beklemede. Son koşuda ilk-dokunuş belirtisi yeniden
-  görüldü; önceki koşuların aynı kök nedene sahip olduğu varsayılmıyor.
+  Bağımsız kaynak incelemesinde engelleyici bulgu yok. Kaynak
+  `e156d252b25d57d9638edc820596718bc903ad70` ile yeni tam kapılı iç aday:
+  <https://github.com/MertBasar0/ceviz/actions/runs/34046167349>.
+  Çalışma **başarılı**: gerçek Xcode **26.6 / 17F113**, SDK ile eşleşen
+  iOS/watchOS **26.5**. Python **94/94**, relay **3/3**, beş Swift programı,
+  imzalama sözleşmeleri, üç hedefin Release derlemesi ve normal açılış geçti.
+  **Beş native senaryo** geçti: 40/49 mm normal ve gerçek maksimum sistem
+  yazısında EN/TR hazır/kayıt/silme, iki cihazda varsayılana dönüş **9/9**,
+  manuel/otomatik kayıt bitişi. Pozitif Crown hareketi gerçek Ayarlar
+  satırlarını ilerletti; maksimum değer **100%** ve uygulama yazı geometrisi
+  doğrulandı. Senaryo atlama, yeniden deneme veya süre artırımı uygulanmadı.
+  Genel dış URL yoklamasının bilinen **115** tanısı iç aday sınırında kaldı;
+  bu, fiziksel WidgetKit dokunuşunun kanıtı değildir.
+  Gerçek iki ses dosyası **9,916 sn / 25.204 bayt** ve
+  **14,908 sn / 25.516 bayt**, **AAC / 16 kHz / mono**.
+  Manuel sonuç `Queued`, otomatik sonuç uygulamanın **demo Completed** kartı;
+  bunlar gerçek gateway teslimi veya fiziksel mikrofon kalitesi kanıtı değildir.
+  Ekranlar ana ajan ve bağımsız incelemeyle kontrol edildi. Çoklu görsel
+  sunumunda şüpheli görünen manuel-sonuç ve 49 mm ilk-hazır PNG'leri tekil
+  yeniden açıldı; gerçek dosyalarda `Queued`/mikrofon ve hazır ekran/mikrofon
+  tam görünüyor. Eksik veya siyah artefakt bulgusu doğrulanmadı. Kayıt sayacı
+  ve EN/TR Sil/Gönder düğmeleri normal ve maksimum yazıda görünür; 49 mm
+  maksimum hazır ekranda son açıklama ile mikrofon arasında **28,75 pt** var.
+  Geri yüklenen 49 mm karede bağlantı satırı yok; bu kare Offline kanıtı olarak
+  kullanılmıyor. Tam soğuk-açılış Default ve gerçek **9/9** geri yükleme
+  ölçümleri sistem yazısının geri döndüğünü doğruluyor.
+  İmzalı IPA **17:18:59 UTC**, başarılı Apple yüklemesi **17:20:39 UTC**.
+  Paket denetiminde iPhone/Watch/widget kimlikleri ve sürümleri eşleşti;
+  üç hedefte de profil ve imza kaynakları var. Bu ZIP denetimi kriptografik
+  doğrulama değildir; Apple ayrıca build'i **VALID** kabul etti.
+  IPA SHA-256: `b46bd2dda99787cd164dcaf944e8002543fd895f60cf5325d30c7eb12693a390`.
+  Yeni build **1788715054**, Apple kimliği `8a10c8ae-6b2f-4740-ac03-95a52bc05079`;
+  yükleme **COMPLETE**, hata/uyarı yok; yalnız iç **Mert / IN_BETA_TESTING**.
+  Dış dağıtım işi atlandı ve **Beta** üyeliği yok; grup ayarı değiştirilmedi.
+- Düzeltme yalnız `codex/watch-capture-repair` dalında; **main değişmedi**.
+  İç dağıtım tamamlandı. Sıradaki adım iPhone ve Watch'u **1788715054** sürümüne
+  birlikte güncelleyip fiziksel kabulü yapmak: sayaçta 6 saniye kalırken Gönder,
+  15 saniyede otomatik bitiş, büyük yazıda düğmeler, bağlantı kesilmesinde sesin
+  korunması ve yeniden bağlanınca eşleşen teslim makbuzu. Dış Beta beklemede.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
 - Recorder/UI/transport bağımsız kaynak incelemesi tamamlandı; reset sonrası
   gecikmiş dosya/makbuz ve farklı telefon-saat sürümü bulguları kapatıldı.
-  Native dosya aktarımı ve monoton kayıt sahibi için ek üretim kodu gerekli;
+  Native dosya aktarımı ve monoton kayıt sahibi için gereken üretim kodu eklendi;
   küçük mesajların hızlı yolu ve mevcut backend kimliği korunuyor.
 
 ### Doğrulama geçmişi
@@ -446,12 +485,13 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   `validation_only=true`: sertifika, ASC anahtarı, IPA üretimi/yüklemesi ve
   dış dağıtım atlandı. Başarısızlık tanı adımı da doğal olarak çalışmadı;
   yeni artifact yolunun gerçek başarısız koşudaki üretimi henüz görülmedi.
-- Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
+- Bu yalnız-doğrulama koşusu yeni build üretmedi. Daha sonra yüklenen güncel
+  kayıt düzeltmesi **1788715054**, en üst bölümde kayıtlıdır.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede
   değiştirilmedi; değişiklik Apple Watch/iPhone uygulama katmanında.
 
-## İç test adayı — Beta 4
+## Önceki iç test adayı — Beta 4, kayıt düzeltmesinden önce
 
 **2026.6.5 (1788570416)**, Apple tarafından **VALID** olarak işlendi ve
 **Mert** iç test grubunda **IN_BETA_TESTING** durumu API ile doğrulandı.

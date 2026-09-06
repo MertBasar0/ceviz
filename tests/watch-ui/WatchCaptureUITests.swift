@@ -328,8 +328,10 @@ final class WatchCaptureUITests: XCTestCase {
 
     private func assertOfflineLabelIfPresent(in app: XCUIApplication, language: String, microphone: XCUIElement) {
         let label = language == "tr" ? "Telefon çevrimdışı" : "Phone offline"
-        let offline = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
+        let offline = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ OR label == %@", "capture.connection", label)).firstMatch
         if offline.exists {
+            XCTAssertEqual(offline.label, label, "The compact connection caption must retain its complete phone accessibility label")
             assertVisible(offline, in: app, "A displayed Phone offline label must not be clipped by the microphone action")
             XCTAssertFalse(offline.frame.intersects(microphone.frame),
                            "The microphone action must not cover the Phone offline label")

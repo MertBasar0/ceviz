@@ -129,8 +129,11 @@ struct ContentView: View {
                                     followUpCaption(at: context.date)
                                 }
                                 if !sessionManager.isReachable {
-                                    Label("Phone offline", systemImage: "iphone").font(.caption)
-                                        .foregroundColor(CVZ.textSub)
+                                    Label {
+                                        Text("Offline").accessibilityLabel(Text("Phone offline"))
+                                            .accessibilityIdentifier("capture.connection")
+                                    } icon: { Image(systemName: "iphone") }
+                                    .font(.caption).foregroundColor(CVZ.textSub)
                                 }
                             case .preparing:
                                 ProgressView("Preparing microphone…").font(.body).tint(CVZ.accent)

@@ -205,6 +205,23 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   yeni açılmış Settings/Ceviz ölçümü ve sıkı geri yükleme kapıları korunuyor.
   %14 veya başka bir yüzde varsayımı eklenmiyor. Bu koşuda maksimum yazı,
   9/15 saniye ve 49 mm senaryoları çalışmadı; yükleme yapılmadı.
+- On birinci doğrulama: `c66b2b41b5e0aa8dc1ef1641f600df38370f2c38`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34004091583>.
+  Kod/Apple derlemesi/açılışı ve 40 mm normal yazı **2/2** geçti. Gerçek
+  `Default` seçimi ve maksimum yazıya geçiş bu kez çalıştı. İngilizce büyük
+  hazır/silme ve EN/TR kayıt ekranlarına ulaşıldı. Türkçe silme sonrası
+  `Telefon çevrimdışı` iki satır: y=99…141 pt; kaydırma alanı 121 pt'de biterken
+  mikrofon y=126,25…171,75 pt. Görüntü ve AX aynı kırpılmayı gösterdi;
+  native test bunu reddetti. Bağlantı satırı mevcut telefon simgesi ile kısa
+  `Offline` / `Çevrimdışı` metnini kullanıyor; ekran okuyucuda tam telefon
+  açıklaması korunuyor. Dinamik font, görünür durum bilgisi ve eylem alanı
+  küçültülmüyor. Native kontrol yeni sabit kimlikle tam erişilebilirlik
+  etiketini de doğrulayacak; eski etikete dayalı regresyon kapsamı korunuyor.
+  Geri yükleme bu kez **doğrulandı**: dokuz sayısal kontrol true; Default/live/cold
+  seçim 0,428571, Settings önizlemesi 143×89,5, Ceviz başlığı 113×19,5 ve süre
+  71,5×19,5 pt ile başlangıca eşit. Bu yalnız geri yükleme alt akışının kanıtı;
+  test bütünü başarısız. Yeni kısa bağlantı metni native kontrol bekliyor;
+  9/15 saniye ve 49 mm henüz çalışmadı. İmza/yükleme adımı atlandı.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

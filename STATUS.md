@@ -310,6 +310,32 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   gerçek süre penceresini koruduğu sonraki native turda doğrulanacak. Üretim değişmedi;
   9/15 sn ve 49 mm çalışmadı.
   Sayaç predicate düzeltmesinin native kanıtı halen eksik; yükleme yok.
+- On altıncı doğrulama: `2b0d75fe4c2236fface125eaf5d571b80ddba5b4`,
+  <https://github.com/MertBasar0/ceviz/actions/runs/34010467856>.
+  94 Python testi, Apple derlemesi ve açılış geçti. 40 mm normal **2/2**,
+  gerçek maksimum yazı **1/1** ve varsayılan yazıya dönüş **9/9** geçti.
+  EN/TR kayıt ve silindi ekranları şahsen incelendi; maksimum TR Çevrimdışı
+  ile mikrofon arasında 5,75 pt boşluk var. Gönder okunuyor, kenarı dar.
+  Geri dönüş ölçümleri ve AX eşleşiyor; `ready-restored` PNG'si siyah/saat
+  içerdiğinden tek başına tam uygulama görsel kanıtı sayılmıyor.
+  Manuel + otomatik kayıt testi **57,259 sn** içinde geçti: canlı olay günlüğü
+  aynı süreçte manuel durdurmayı ve ikinci kaydın native bitişini doğruladı.
+  Tam iki gerçek dosya: **9,788 sn / 25.196 bayt**, **14,908 sn / 25.516 bayt**;
+  AAC, 16 kHz, mono. Sayaç sorguları artık 4…6 aralığını yakalıyor; önceki
+  beş saniyelik ayrıntılı AX gecikmesi yok. İki bitiş PNG'sinde istek `Queued`
+  olarak korunuyor. Bu, fiziksel mikrofon kalitesi veya iPhone'a teslim kanıtı değil.
+  49 mm normal hazır testi geçti; EN/TR kayıt/silme/görünürlük kontrolleri de
+  tamamlandı ve beş PNG incelendi. Fakat son `app.terminate()` çağrısı
+  **60,91 sn** sonra hata verdi; normal senaryo bu yüzden başarısız sayıldı.
+  49 mm maksimum yazı çalışmadı. Kapanış hatasının kök nedeni mevcut dışa
+  aktarılmış günlükte yok; `:0` süreç eki, uygulamanın zaten kapalı olduğu
+  kanıtı değil. Kapatma kaldırılmadı, hata yok sayılmadı veya süre uzatılmadı.
+  İş akışına yalnız başarısızlıkta özgün `.xcresult` tanı paketlerini 7 gün
+  saklama eklendi: test/ürün davranışı değişmeden eksik native kanıt korunacak.
+  Aynı beşli sıra yeniden doğrulanacak; geçmesi tek başına kapanış kök nedeninin
+  onarıldığı anlamına gelmeyecek. Üretim/test kodu net 0, CI metadata +9 satır.
+  İlk dokunuş sorununun eski koşudaki kök nedeni de halen bilinmiyor.
+  Main, TestFlight ve dış Beta değiştirilmedi.
 - Henüz yeni build/yükleme yok. Aşağıdaki iç aday halen son yüklü build.
   Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede

@@ -1,15 +1,46 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **6 Eylül 2026**
+Son güncelleme: **8 Eylül 2026**
 
-## Kayıt ve mikrofon ekranı — iç TestFlight dağıtımı tamamlandı
+## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 
-**Güncel iç aday: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,
-build **VALID / internal IN_BETA_TESTING**; yalnız **Mert** grubuna atanmış.
-Dış durum **READY_FOR_BETA_SUBMISSION**, yeni build'in **Beta** üyeliği yok.
-Apple yüklemesinde hata/uyarı yok; EN/TR TestFlight test notları boş.
-Dağıtım erişimi doğrulandı, fiziksel cihazda kurulum/kabul henüz doğrulanmadı.
-`main`, dış Beta ve canlı gateway/servis yapılandırması değiştirilmedi.
+**Güncel dış Beta: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,
+build **VALID**, iç ve dış durum **IN_BETA_TESTING**; **Mert** ve **Beta**
+gruplarına atanmış. İnceleme **APPROVED**, otomatik test bildirimi açık.
+Mevcut [TestFlight bağlantısı](https://testflight.apple.com/join/nEdn2Np2) korundu.
+Apple yüklemesinde hata/uyarı yok; EN/TR test notları eklendi ve birebir geri
+okunarak doğrulandı. Kullanıcı 8 Eylül'de sürüm testlerinde sorun görmediğini
+bildirdi ve yeni build'in dış Beta'ya açılmasını açıkça onayladı. Bu, kullanıcı
+bildirimidir; her ayrıntılı cihaz kabul maddesi bağımsız gözlenmiş sayılmıyor.
+Dağıtım için yeniden build alınmadı; test edilen aynı imzalı paket kullanıldı.
+`main`, canlı gateway/servis yapılandırması, test kullanıcıları, eski build'ler
+ve grubun mevcut açık bağlantı ayarları değiştirilmedi.
+
+### 8 Eylül dış dağıtım kanıtı
+
+- Hedef Apple build kimliği: `8a10c8ae-6b2f-4740-ac03-95a52bc05079`;
+  sürüm **2026.6.5**, build **1788715054**, **APP_STORE_ELIGIBLE**, süresi dolmamış.
+- EN/TR “What to Test” alanları **200**, mevcut dış **Beta** grubuna tek build
+  ekleme **204**, beta incelemesine gönderme **201** döndü. İlk inceleme yanıtı
+  **WAITING_FOR_REVIEW** idi; ardından ayrı GET'ler **APPROVED** ve dış
+  **IN_BETA_TESTING** döndürdü. Yalnız grup üyeliği başarı kanıtı sayılmadı.
+- Son durum **8 Eylül 02:47 Türkiye saati** civarında doğrulandı; Apple'ın
+  `submittedDate` alanı boş, başvuru zamanı bu alandan uydurulmuyor.
+- Mevcut iç **Mert** erişimi ve dış **Beta** bağlantısı korundu. Yeni kullanıcı
+  daveti, genel App Store yayını, GitHub release/tag veya sosyal paylaşım yapılmadı.
+- İlk test-notu isteğinde yazma yöntemine eklenen isteğe bağlı JWT `scope`
+  Apple tarafından **405** ile reddedildi; notların değişmediği okundu.
+  Apple'ın [token belgesi](https://developer.apple.com/documentation/appstoreconnectapi/generating-tokens-for-api-requests)
+  bu kapsam biçimini GET için tanımlıyor. Belgeli standart yazma tokenıyla,
+  mevcut anahtar rolü ve 60 saniyelik yalnız-bellek yetkilendirmesiyle işlem
+  tamamlandı; hesap/anahtar yetkisi değiştirilmedi. Anahtar/token loglanmadı.
+- Yayın aracı takip işi: `fastlane/testflight-distribution.json` eski
+  **1788552567** hedefini içeriyor; Ruby yardımcı yalnız grup üyeliğini
+  `DISTRIBUTION_VERIFIED` sayıyor. Bu koşuda çalıştırılmadı. Gelecekte otomatik
+  dağıtım kullanılmadan önce hedef seçimi ve gerçek dış Testing doğrulaması
+  tek yayın akışında düzeltilmeli. Bu dağıtım doğrudan Apple API ile doğrulandı.
+
+### Kayıt düzeltmesinin geliştirme ve iç dağıtım geçmişi
 
 Kullanıcı, önceki **1788570416** iç adayında kadrandan uygulamayı açıp komut göndermeyi hatasız
 tamamladığını bildirdi. Bu, bildirilen kısa akışın fiziksel cihaz kontrolüdür;
@@ -147,13 +178,14 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   doğrulama değildir; Apple ayrıca build'i **VALID** kabul etti.
   IPA SHA-256: `b46bd2dda99787cd164dcaf944e8002543fd895f60cf5325d30c7eb12693a390`.
   Yeni build **1788715054**, Apple kimliği `8a10c8ae-6b2f-4740-ac03-95a52bc05079`;
-  yükleme **COMPLETE**, hata/uyarı yok; yalnız iç **Mert / IN_BETA_TESTING**.
-  Dış dağıtım işi atlandı ve **Beta** üyeliği yok; grup ayarı değiştirilmedi.
+  6 Eylül'deki yükleme **COMPLETE**, hata/uyarı yok; o aşamada yalnız iç
+  **Mert / IN_BETA_TESTING**. Dış dağıtım işi atlandı; o tarihte **Beta**
+  üyeliği yoktu. 8 Eylül dış dağıtımı en üst bölümde kayıtlıdır.
 - Düzeltme yalnız `codex/watch-capture-repair` dalında; **main değişmedi**.
-  İç dağıtım tamamlandı. Sıradaki adım iPhone ve Watch'u **1788715054** sürümüne
-  birlikte güncelleyip fiziksel kabulü yapmak: sayaçta 6 saniye kalırken Gönder,
-  15 saniyede otomatik bitiş, büyük yazıda düğmeler, bağlantı kesilmesinde sesin
-  korunması ve yeniden bağlanınca eşleşen teslim makbuzu. Dış Beta beklemede.
+  İç dağıtım sonrası kullanıcı kendi sürüm testlerinde sorun görmediğini
+  bildirdi; açık onayıyla dış dağıtım tamamlandı. Dış testlerde iPhone ve Watch
+  birlikte güncellenmeli. Manuel/otomatik kayıt, büyük yazı, bağlantı kesilmesinde
+  sesin korunması ve eşleşen teslim makbuzu geri bildirimde izlenecek konular.
 - Repo yönergesinde adı geçen `autoreview` / `test-audit` becerileri bu oturumda
   mevcut değil; bağımsız ajan incelemesi ve doğrudan kaynak/test kontrolleri
   kullanılıyor. Bu araçların çalıştırıldığı iddia edilmiyor.
@@ -487,7 +519,8 @@ bu bildirim kendiliğinden 9 saniyede duran bir kayıt değildir.
   yeni artifact yolunun gerçek başarısız koşudaki üretimi henüz görülmedi.
 - Bu yalnız-doğrulama koşusu yeni build üretmedi. Daha sonra yüklenen güncel
   kayıt düzeltmesi **1788715054**, en üst bölümde kayıtlıdır.
-  Dış Beta, kayıt ve ekran cihaz kontrolünü bekliyor.
+  O aşamada dış Beta, kayıt ve ekran cihaz kontrolünü bekliyordu; sonraki
+  8 Eylül dağıtımı en üst bölümde kayıtlıdır.
 - OpenClaw gateway/model/ayarlar ve çalışan Ceviz servisleri bu düzeltmede
   değiştirilmedi; değişiklik Apple Watch/iPhone uygulama katmanında.
 
@@ -616,13 +649,14 @@ OpenClaw gateway/model/bağlantı yapılandırması değiştirilmeyecek.
   systemd durumunun aynı kaldığı ölçüldü, gateway çalışma sağlığı iddiası yok.
 - Sürüm notları ve fiziksel kabul listesi:
   [Beta 4 aday notları](docs/release-notes-2026.6.5-beta.4.md).
-- Beta 4 şimdilik yalnız iç test adayıdır. Aşağıdaki Beta 3, fiziksel kontrol
-  ve yeni dış dağıtım API ile doğrulanana kadar geçerli dış Beta sürümüdür.
+- Bu önceki iç adayın ardından **1788715054** kayıt düzeltmesi test edildi;
+  kullanıcı onayıyla **8 Eylül'de dış Beta** dağıtımı doğrulandı. Aşağıdaki
+  Beta 3 bilgileri önceki dış sürümün tarihsel kaydıdır.
 - Sonraki dilim: açık devam bağlamı, kişisel kısa yollar ve uygulama içi Doctor.
 - Mevcut iş dosyası eşzamanlı yazma ve cihaz bazlı bildirim yeniden denemesi
   ayrıca ele alınmalı; garantili teslimat/uzak işte exactly-once iddiası yok.
 
-## Güncel dış Beta sürümü
+## Önceki dış Beta sürümü — Beta 3 dağıtım geçmişi
 
 - Sürüm: **Ceviz 2026.6.5 Beta 3**
 - TestFlight build: **1788552567**
@@ -672,7 +706,7 @@ başarıyla tamamlandı:
 - Workflow: <https://github.com/MertBasar0/ceviz/actions/runs/32657599799>
 
 Bu build repo/secret/signing migration doğrulaması içindir; kullanıcıya dönük
-kod değişikliği içermediğinden public external gruba eklenmedi. Güncel public
+kod değişikliği içermediğinden public external gruba eklenmedi. O dönemin public
 Beta 2 build'i `1787684689` olmuştur.
 
 ## Tamamlananlar
@@ -786,9 +820,9 @@ sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
   Policy URL ve User Privacy Choices URL olarak canlı Ceviz gizlilik sayfası
   kaydedildi.
 
-## Sıradaki işler
+## Ürün hedefleri ve sıradaki işler
 
-### Beta 3 — güven ve onboarding
+### Önceki Beta 3 hedefleri — tarihsel plan
 
 1. İngilizce arayüzde kalan Türkçe metinleri ve backend fallback çıktılarını
    temizle; iki dilin anahtar eşitliğini otomatik testle koru.
@@ -799,10 +833,12 @@ sonuç katmanıdır**. Ürün ilkeleri ve ölçülebilir büyüme döngüsü
 4. Bu üç değişikliği test edip Beta 3 TestFlight build'i olarak yayımla ve ilk
    dış kullanıcıdan yeniden doğrulama iste.
 
-### Beta 4 adayı — bilekten en hızlı erişim
+### Beta 4 — yayımlanan dilim ve ek cihaz kapsamı
 
-5. Doğrudan ses yakalama ekranını açan Watch komplikasyonu/widget'ı geliştir.
-6. Farklı Watch boyutunda ve bağımsız kurulumda ilk komut akışını doğrula.
+5. Doğrudan ses yakalama ekranını açan Watch komplikasyonu/widget'ı ve kayıt
+   düzeltmesi, **1788715054** ile dış Beta'da; dağıtım kanıtı en üst bölümde.
+6. 40/49 mm simülatör kontrolleri ve kullanıcının sorun görmediği cihaz testi
+   mevcut. Başka cihazlar ve bağımsız kurulumlarda ilk komut geri bildirimini topla.
 
 ### Büyüme ve kapsam doğrulaması
 

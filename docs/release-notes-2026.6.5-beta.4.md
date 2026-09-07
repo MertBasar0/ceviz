@@ -1,15 +1,19 @@
 # Ceviz 2026.6.5 Beta 4 — Reliable wrist flow
 
-Internal release candidate. External distribution and physical device acceptance
-remain pending; exact evidence is recorded in `STATUS.md`.
+External TestFlight beta. Exact release and validation evidence is recorded in
+`STATUS.md`.
 
-Signed candidate **2026.6.5 (1788715054)** is available to the **Mert** internal
-TestFlight group. Apple reports **VALID / internal IN_BETA_TESTING**; upload
-processing is complete without errors or warnings. External state is
-**READY_FOR_BETA_SUBMISSION**, with no **Beta** group assignment. External Beta
-distribution is held for the capture reliability and layout checks below.
+Signed build **2026.6.5 (1788715054)** is available to the **Mert** internal and
+**Beta** external TestFlight groups. Apple reports **VALID**, review **APPROVED**,
+and both internal and external **IN_BETA_TESTING**. Upload processing is complete
+without errors or warnings. Automatic tester notification is enabled; the existing
+[TestFlight invitation](https://testflight.apple.com/join/nEdn2Np2) is unchanged.
+EN/TR test notes include updating both apps and recording, layout, result and
+reconnection checks. The owner reported no problems in device testing on
+8 September and explicitly approved external distribution. This is a reported
+device check, not independent observation of every acceptance scenario below.
 
-## Capture correction — shipped to internal TestFlight
+## Capture correction — available in external TestFlight
 
 The tester reported a successful physical complication-to-command flow, followed
 by a premature “recording too long” error and unreadable/clipped capture controls.
@@ -71,17 +75,18 @@ initial ready-screen microphone. Actual Default/max/restored screens and
 measurements provide the layout proof; physical acceptance remains separate.
 
 The signed package contains matching iPhone, Watch and widget versions.
-Apple accepted **1788715054** as **VALID**, upload **COMPLETE** without errors
-or warnings, internal **IN_BETA_TESTING**, assigned only to **Mert**.
-No external Beta assignment, main-branch update, or live service change was made.
-EN/TR TestFlight test notes are empty; this document records the release changes.
+Apple initially accepted **1788715054** as **VALID**, upload **COMPLETE** without
+errors or warnings, assigned only to **Mert** on 6 September. On 8 September,
+the same build was assigned to external **Beta**, submitted and approved; actual
+external **IN_BETA_TESTING** was read back. No rebuild, main-branch update or live
+service change was made. EN/TR TestFlight notes were added and verified.
 
-Before external distribution, verify both updated apps on a paired real device:
+External testers should check both updated apps on a paired real device:
 manual send and automatic 15-second finish; no premature size error; readable
 counter and reachable Delete/Send with larger text; retained audio and correct
 receipt after a connection interruption. Simulator UI and pure state tests are
 not proof of microphone quality, physical file transfer, or remote exactly-once
-effects. Executed checks and the next exact build belong in `STATUS.md`.
+effects. Executed checks and the exact distributed build belong in `STATUS.md`.
 
 ## What's new
 
@@ -129,7 +134,7 @@ The Watch focuses one result at a time; Jobs is the full backend-owned list.
 An interrupted connection does not prove the remote task failed or was
 cancelled. Check the recorded result before resubmitting a consequential task.
 
-## Device acceptance checks (not yet claimed as passed)
+## Device acceptance checks (not all independently observed)
 
 1. Add the complication, cold-open it, and open it from the Jobs tab. It must
    land on capture-ready without recording or claiming the gateway is ready.
@@ -162,7 +167,8 @@ CI keeps the strict probe. An explicitly selected internal device-check candidat
 may retain that specific failure as diagnostic evidence while producing a signed
 TestFlight build for physical validation. Other native smoke failures still stop
 the build. Neither a successful generic URL probe nor navigation unit tests prove
-WidgetKit delivery. Keep external Beta distribution pending the device check.
+WidgetKit delivery. External distribution followed the owner's reported device
+test success and explicit approval; the generic simulator probe remains unresolved.
 
 Next product slice: explicit follow-up/new-task context, personal quick actions,
 and in-app Doctor guidance. Existing backend file-write concurrency and

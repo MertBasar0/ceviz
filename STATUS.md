@@ -20,7 +20,7 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - İlk WSL test kabuğunun PATH'i yanlışlıkla Windows npm CLI'ını seçti ve zaman
   aşımına uğradı. Çalışan kurulumun Linux OCM CLI yoluyla aynı kontrol geçti;
   üretim yapılandırması veya zaman aşımı büyütülmedi.
-- Yerel 135 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
+- Yerel 139 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
   ekranlar arasında korunması, kontrol metni normalizasyonu, terminal durumun
   gerilememesi ve izole test temizliği bağımsız son incelemeden geçti.
   Apple derlemesi ve gerçek ekran kontrolleri için yalnız geliştirme dalına
@@ -31,6 +31,24 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
   değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
   bağımsız ajan incelemesi ve kaynak/sözleşme/regresyon kontrolleri kullanılıyor.
+
+### İlk Apple doğrulaması ve taşınabilirlik düzeltmesi
+
+- Geliştirme dalı `codex/phone-conversations`; ilk commit `21c8a5f`.
+  [İlk doğrulama](https://github.com/MertBasar0/ceviz/actions/runs/34297909715)
+  Python aşamasında durdu: izole telefon servisi hazır olamadı; aşırı büyük
+  istek gövdesinde bağlantı sıfırlanması görüldü. Native testler çalışmadı;
+  imza/anahtar/TestFlight ve dağıtım adımları **skipped**.
+- Konuşma HTTP yanıtlarına açık bayt uzunluğu eklendi. Reddedilen gövdenin
+  tüketimi hem bayt hem toplam süreyle sınırlandı; eksik/yavaş veri gönderimi
+  sonrasında servisin başka isteği karşılayabildiği gerçek soketle test edildi.
+- Yalnız izole test servisi için ters DNS gereksinimi kaldırıldı. DNS yokluğu
+  regresyonu önce üretildi; başlangıç aşaması ve takılma günlüğü eklendi.
+  İlk macOS gecikmesinin kesin nedeni eski günlükten kanıtlanamadı; yeniden
+  doğrulama gerekli. 10/15 saniyelik test-hazırlık sınırları büyütülmedi.
+- İlk özellik commit'i: üretim kodu **+1.554 / -110**, testler **+1.489**;
+  doğrulama tanımları **+52**, dokümantasyon **+128 / -1** satır. Bu ölçüm
+  sonraki taşınabilirlik düzeltmesini içermez.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

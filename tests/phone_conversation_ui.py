@@ -103,6 +103,12 @@ def main():
                 subprocess.run(common + ["test-without-building", "-parallel-testing-enabled", "NO",
                                          "-resultBundlePath", str(result_path)],
                                stdout=log, stderr=subprocess.STDOUT, check=True, timeout=900)
+        except Exception:
+            # The fixture emits startup phases and a stalled-thread traceback;
+            # retain the full artifact and surface its bounded tail in CI logs.
+            fixture_log.flush()
+            print((output / "fixture.log").read_text(encoding="utf-8", errors="replace")[-8000:], file=sys.stderr)
+            raise
         finally:
             had_error = sys.exc_info()[0] is not None
             cleanup_errors = []

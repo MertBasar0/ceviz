@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack, nullcontext
+import faulthandler
 import json
 import os
 from pathlib import Path
 import sys
+from socketserver import TCPServer
 import tempfile
 import time
 from unittest.mock import patch
@@ -113,6 +115,11 @@ def main() -> None:
     args = parser.parse_args()
     state = nullcontext(str(args.state_dir)) if args.state_dir else tempfile.TemporaryDirectory(prefix="ceviz-phone-ui-")
     with state as temporary, ExitStack() as scope:
+        # Capture an actual stack if a clean-machine startup stalls; do not
+        # replace a missing ready signal with a larger sleep or deadline.
+        faulthandler.dump_traceback_later(5)
+        scope.callback(faulthandler.cancel_dump_traceback_later)
+        print("Phone UI fixture: importing isolated backend", file=sys.stderr, flush=True)
         scope.enter_context(patch.dict(os.environ, {
             "WATCH_CEVIZ_STATE_DIR": temporary, "OPENCLAW_WATCH_RUNTIME_DIR": str(Path(temporary) / "runtime"),
             "WATCH_CEVIZ_AUTH_TOKEN": TOKEN,
@@ -120,6 +127,7 @@ def main() -> None:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
         import main as backend
         import session_api
+        print("Phone UI fixture: binding numeric loopback", file=sys.stderr, flush=True)
         fake = PhoneFixtureGateway()
         scope.enter_context(patch.object(session_api, "call_gateway", fake))
         scope.enter_context(patch.object(backend.openclaw_client, "invoke_watch_command",
@@ -147,7 +155,15 @@ def main() -> None:
                     return
                 super()._do_GET_impl()
 
-        server = backend.HTTPServer(("127.0.0.1", args.port), FixtureHandler)
+        class NumericLoopbackHTTPServer(backend.HTTPServer):
+            def server_bind(self):
+                # HTTPServer otherwise reverse-resolves its address before it
+                # starts listening. This isolated numeric endpoint needs no DNS.
+                TCPServer.server_bind(self)
+                self.server_name, self.server_port = self.server_address[:2]
+
+        server = NumericLoopbackHTTPServer(("127.0.0.1", args.port), FixtureHandler)
+        faulthandler.cancel_dump_traceback_later()
         print(f"Phone UI fixture ready at http://127.0.0.1:{server.server_port}; no real Gateway", flush=True)
         try:
             server.serve_forever()

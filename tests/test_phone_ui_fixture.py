@@ -7,8 +7,10 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from urllib import error, request
 
+import phone_ui_fixture
 from phone_ui_fixture import TOKEN, MAIN_KEY, BUSY_KEY
 
 
@@ -21,31 +23,41 @@ class PhoneUIFixtureTests(unittest.TestCase):
         cls.base = f"http://127.0.0.1:{port}"
         cls.state = tempfile.TemporaryDirectory(prefix="ceviz-phone-fixture-test-")
         cls.addClassCleanup(cls.state.cleanup)
+        cls.log_path = Path(cls.state.name) / "fixture.log"
+        cls.log = cls.log_path.open("w")
+        cls.addClassCleanup(cls.log.close)
         cls.process = subprocess.Popen(
             [sys.executable, str(Path(__file__).with_name("phone_ui_fixture.py")), "--port", str(port),
              "--state-dir", cls.state.name],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            stdout=cls.log, stderr=subprocess.STDOUT,
         )
         cls.addClassCleanup(cls.stop_fixture)
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             if cls.process.poll() is not None:
-                raise RuntimeError(cls.process.communicate()[1])
+                raise cls.startup_error("exited before readiness")
             try:
-                cls.http("/__fixture/state")
+                if cls.http("/__fixture/state")["pid"] != cls.process.pid:
+                    raise cls.startup_error("reached a different process")
                 return
             except error.URLError:
                 time.sleep(0.05)
-        raise RuntimeError("Isolated phone fixture did not become ready")
+        raise cls.startup_error("did not become ready")
+
+    @classmethod
+    def startup_error(cls, reason):
+        diagnostics = cls.log_path.read_text(encoding="utf-8", errors="replace")[-8000:]
+        return RuntimeError(f"Isolated phone fixture {reason}\n{diagnostics}")
 
     @classmethod
     def stop_fixture(cls):
-        cls.process.terminate()
+        if cls.process.poll() is None:
+            cls.process.terminate()
         try:
-            cls.process.communicate(timeout=5)
+            cls.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             cls.process.kill()
-            cls.process.communicate(timeout=5)
+            cls.process.wait(timeout=5)
 
     @classmethod
     def http(cls, path, payload=None):
@@ -88,6 +100,25 @@ class PhoneUIFixtureTests(unittest.TestCase):
                 self.assertEqual(rejected.exception.code, status)
                 self.assertEqual(json.loads(rejected.exception.read())["delivery_uncertain"], uncertain)
                 self.assertEqual(len(self.http("/__fixture/state")["send_calls"]), count)
+
+
+class PhoneUIFixtureStartupTests(unittest.TestCase):
+    def test_numeric_loopback_fixture_does_not_depend_on_reverse_dns(self):
+        with tempfile.TemporaryDirectory(prefix="ceviz-phone-startup-test-") as state, \
+                patch.object(sys, "argv", ["phone_ui_fixture.py", "--port", "0", "--state-dir", state]), \
+                patch("socket.getfqdn", side_effect=AssertionError("Reverse DNS is unavailable")), \
+                patch("http.server.HTTPServer.serve_forever") as serve:
+            phone_ui_fixture.main()
+        serve.assert_called_once_with()
+
+    def test_startup_failure_reports_bounded_child_diagnostics(self):
+        with tempfile.TemporaryDirectory(prefix="ceviz-phone-log-test-") as state:
+            path = Path(state) / "fixture.log"
+            path.write_text("x" * 9000 + "\nStalled in fixture bind\n", encoding="utf-8")
+            with patch.object(PhoneUIFixtureTests, "log_path", path, create=True):
+                failure = PhoneUIFixtureTests.startup_error("did not become ready")
+            self.assertIn("Stalled in fixture bind", str(failure))
+            self.assertLess(len(str(failure)), 8100)
 
 
 if __name__ == "__main__":

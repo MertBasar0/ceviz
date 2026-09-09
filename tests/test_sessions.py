@@ -1,10 +1,13 @@
 """Gateway conversation boundary tests; no real model or user Gateway calls."""
 import io
+import http.client
 import json
+import socket
 import subprocess
 import sys
 import unittest
 import threading
+import time
 from urllib import request, error
 from pathlib import Path
 from types import SimpleNamespace
@@ -280,7 +283,14 @@ class ConversationHTTPTests(unittest.TestCase):
         except error.HTTPError as exc:
             response = exc
         with response:
-            return response.status, json.load(response)
+            if authorized:
+                self.assertIsNotNone(response.headers.get("Content-Length"),
+                                     "Bounded responses must not rely on EOF after rejecting an unread body")
+                self.assertEqual(response.headers.get("Connection"), "close")
+            data = response.read()
+            if authorized:
+                self.assertEqual(int(response.headers["Content-Length"]), len(data))
+            return response.status, json.loads(data)
 
     def test_all_conversation_endpoints_share_the_existing_bearer_boundary(self):
         with patch.object(session_api, "call_gateway") as rpc:
@@ -309,6 +319,54 @@ class ConversationHTTPTests(unittest.TestCase):
                     self.assertEqual(status, 400)
                     self.assertFalse(result["delivery_uncertain"])
                     self.assertIn("code", result)
+            rpc.assert_not_called()
+
+    def test_incomplete_oversized_body_cannot_hold_the_service_open(self):
+        with patch.object(session_api, "call_gateway") as rpc:
+            with socket.create_connection(self.server.server_address, timeout=3) as client:
+                client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
+                               b"Host: localhost\r\nAuthorization: Bearer ceviz-test-only\r\n"
+                               b"Content-Type: application/json\r\nContent-Length: 96001\r\n\r\n")
+                # Keep the sending socket open without its declared body.
+                with http.client.HTTPResponse(client) as response:
+                    response.begin()
+                    self.assertEqual(response.status, 400)
+                    self.assertEqual(response.headers.get("Connection"), "close")
+                    self.assertEqual(json.load(response)["code"], "invalid_request")
+                status, _ = self.http("/api/v1/sessions/not-a-route")
+                self.assertEqual(status, 404, "The single-threaded server can handle its next request")
+            rpc.assert_not_called()
+
+    def test_trickling_oversized_body_has_a_total_drain_deadline(self):
+        with patch.object(session_api, "call_gateway") as rpc:
+            with socket.create_connection(self.server.server_address, timeout=2) as client:
+                client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
+                               b"Host: localhost\r\nAuthorization: Bearer ceviz-test-only\r\n"
+                               b"Content-Length: 96001\r\n\r\n")
+                stop = threading.Event()
+
+                def trickle():
+                    while not stop.wait(0.05):
+                        try:
+                            client.sendall(b"x")
+                        except OSError:
+                            return
+
+                sender = threading.Thread(target=trickle, daemon=True)
+                sender.start()
+                started = time.monotonic()
+                try:
+                    with http.client.HTTPResponse(client) as response:
+                        response.begin()
+                        self.assertEqual(response.status, 400)
+                        self.assertEqual(json.load(response)["code"], "invalid_request")
+                    self.assertLess(time.monotonic() - started, 1.5,
+                                    "Incoming bytes must not renew the rejected body's drain budget")
+                finally:
+                    stop.set()
+                    sender.join(timeout=1)
+                status, _ = self.http("/api/v1/sessions/not-a-route")
+                self.assertEqual(status, 404)
             rpc.assert_not_called()
 
 

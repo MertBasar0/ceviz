@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import subprocess
+import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -359,7 +360,29 @@ def handle_session_request(handler: BaseHTTPRequestHandler, method: str, path: s
         elif method == "POST" and path == "/api/v1/sessions/message":
             try:
                 length = int(handler.headers.get("Content-Length", "0"))
-                if not 0 < length <= 96_000:
+                if length <= 0:
+                    raise ValueError("request size")
+                if length > 96_000:
+                    # Drain only a bounded prefix before closing, so a small
+                    # oversized request can receive its framed error. Never
+                    # wait indefinitely for a rejected/incomplete body.
+                    previous_timeout = handler.connection.gettimeout()
+                    try:
+                        deadline = time.monotonic() + 0.5
+                        remaining = min(length, 96_001)
+                        while remaining:
+                            budget = deadline - time.monotonic()
+                            if budget <= 0:
+                                break
+                            handler.connection.settimeout(budget)
+                            chunk = handler.rfile.read1(remaining)
+                            if not chunk:
+                                break
+                            remaining -= len(chunk)
+                    except OSError:
+                        pass
+                    finally:
+                        handler.connection.settimeout(previous_timeout)
                     raise ValueError("request size")
                 body = json.loads(handler.rfile.read(length))
             except (TypeError, ValueError, UnicodeDecodeError) as exc:
@@ -371,8 +394,14 @@ def handle_session_request(handler: BaseHTTPRequestHandler, method: str, path: s
     except SessionError as exc:
         status = exc.status
         payload = {"error": str(exc), "code": exc.code, "delivery_uncertain": exc.uncertain}
+    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
+    # Especially on rejected oversized bodies, EOF may be a TCP reset rather
+    # than a graceful close. Frame the response by its exact UTF-8 byte count.
+    handler.send_header("Content-Length", str(len(encoded)))
+    handler.send_header("Connection", "close")
     handler.end_headers()
-    handler.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    handler.close_connection = True
+    handler.wfile.write(encoded)

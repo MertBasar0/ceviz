@@ -118,7 +118,7 @@ struct ContentView: View {
                 if voicePhase == .recording {
                     recordingArea
                 } else {
-                    TimelineView(.periodic(from: .now, by: 10)) { context in
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
                         let content = VStack(alignment: .leading, spacing: 4) {
                             switch voicePhase {
                             case .idle:
@@ -201,8 +201,7 @@ struct ContentView: View {
     @ViewBuilder
     private func followUpCaption(at date: Date) -> some View {
         // An absent/expired caption must not leave a TimelineView row in the stack.
-        if !sessionManager.isSending, let last = sessionManager.lastResultAt,
-           date.timeIntervalSince(last) < WatchSessionManager.continuationWindow {
+        if sessionManager.continuationJobID(for: displayedJobID, at: date) != nil {
             Text("↩ follow-up").font(.caption).foregroundColor(CVZ.accent)
         }
     }
@@ -269,6 +268,7 @@ struct ContentView: View {
     private func start() {
         guard !sessionManager.isCapturing && !sessionManager.isSending else { return }
         AudioRecorderManager.logger.info("Capture event: view_start accepted")
+        sessionManager.beginCaptureContinuation(displayedJobID: displayedJobID)
         recordingWasCancelled = false
         requestedResult = nil
         captureReady = false
@@ -292,6 +292,7 @@ struct ContentView: View {
         AudioRecorderManager.logger.info("Capture event: view_cancel preparing=\(preparingCapture, privacy: .public) tab=\(selectedTab, privacy: .public) resume_queue=\(resumeQueue, privacy: .public)")
         preparingCapture = false
         recorder.cancelRecording()
+        sessionManager.cancelCaptureContinuation()
         sessionManager.isCapturing = false
         sessionManager.stopExtendedSession()
         recordingWasCancelled = true

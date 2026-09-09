@@ -1,0 +1,30 @@
+include:
+  - project.yml
+
+targets:
+  CevizPhoneUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: tests/phone-ui
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CevizBridge
+        PRODUCT_BUNDLE_IDENTIFIER: com.mertbasar.cevizwatch.phoneuitests
+    dependencies:
+      - target: CevizBridge
+
+schemes:
+  CevizPhoneUI:
+    build:
+      targets:
+        CevizBridge: all
+        CevizPhoneUITests: [test]
+    test:
+      config: Release
+      targets:
+        - CevizPhoneUITests
+      gatherCoverageData: false
+      deleteScreenshotsWhenEachTestSucceeds: false

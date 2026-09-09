@@ -101,8 +101,7 @@ struct CVZContinuationCard: View {
 /// Telefondan komut yazma alani.
 ///
 /// STT bozuk cozdugunde saate donup tekrar konusmak yerine klavyeyle
-/// duzeltmeyi saglar; `continue_job_id` ile gittigi icin ajan onceki
-/// isin baglamini korur (konusmanin devami sayilir).
+/// duzeltmeyi saglar. Devam mesaji, bir oneriyi uygulama onayi degildir.
 struct CVZCommandInput: View {
     let jobId: String
     let needsInput: Bool
@@ -111,6 +110,7 @@ struct CVZCommandInput: View {
 
     @State private var text: String = ""
     @State private var sending = false
+    @State private var deliveryUnconfirmed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -126,6 +126,11 @@ struct CVZCommandInput: View {
                     .font(.system(size: 12))
                     .foregroundColor(CVZ.textDim)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if deliveryUnconfirmed {
+                Text("Delivery is not confirmed. Check RECENT JOBS before sending again.")
+                    .font(.caption).foregroundColor(CVZ.warn)
             }
 
             HStack(spacing: 8) {
@@ -153,12 +158,12 @@ struct CVZCommandInput: View {
     }
 
     private var canSend: Bool {
-        !sending && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !sending && !deliveryUnconfirmed && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func send() {
         let payload = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !payload.isEmpty, !sending else { return }
+        guard canSend else { return }
         if DemoMode.isActive {
             text = ""
             onFeedback(NSLocalizedString("Demo mode — sample data", comment: ""))
@@ -168,19 +173,18 @@ struct CVZCommandInput: View {
 
         var request = BackendConfig.request("/api/v1/shortcuts/command", method: "POST")
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["text": payload, "locale": Locale.current.identifier]
-        if !jobId.isEmpty { body["continue_job_id"] = jobId }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try? JSONEncoder().encode(PhoneJobCommand.followUp(
+            jobId: jobId, text: payload, locale: Locale.current.identifier
+        ))
 
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                sending = false
-                if let error {
-                    onFeedback(String(format: NSLocalizedString("✕ Could not send: %@", comment: ""), error.localizedDescription))
-                    return
-                }
+        Task { @MainActor in
+            defer { sending = false }
+            do {
+                let (data, response) = try await BackendTransport.shared.data(for: request, requiring: .continuation)
                 guard let http = response as? HTTPURLResponse,
                       (200...299).contains(http.statusCode) else {
+                    let status = (response as? HTTPURLResponse)?.statusCode
+                    deliveryUnconfirmed = ![400, 401, 403, 404, 409, 422].contains(status ?? 0)
                     onFeedback(NSLocalizedString("✕ Server error", comment: ""))
                     return
                 }
@@ -190,14 +194,16 @@ struct CVZCommandInput: View {
                 // Yeni ise gec: kullanici zincirin devamini takip etsin,
                 // eski raporda kalip "yeni is nerede?" demesin.
                 if let router,
-                   let data,
                    let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let newJobId = payload["job_id"] as? String,
                    let url = URL(string: "ceviz://job/\(newJobId)") {
                     _ = router.open(url: url, source: .deepLink, presentImmediately: true)
                 }
+            } catch {
+                deliveryUnconfirmed = !(error is BackendCapabilityError)
+                onFeedback(String(format: NSLocalizedString("✕ Could not send: %@", comment: ""), error.localizedDescription))
             }
-        }.resume()
+        }
     }
 }
 
@@ -325,29 +331,28 @@ struct CVZActionsView: View {
             performApiCall(action)
         case "agent_command":
             // Ajanin calistirabilecegi oneri: baglamla birlikte OpenClaw'a gider.
-            sendSuggestionAsCommand(action.label)
+            sendSuggestionAsCommand(action)
         default:
             onFeedback("→ \(action.label)")
         }
     }
 
-    private func sendSuggestionAsCommand(_ text: String) {
+    private func sendSuggestionAsCommand(_ action: NextActionPayload) {
         if DemoMode.isActive {
             onFeedback(NSLocalizedString("Demo mode — sample data", comment: ""))
             return
         }
         var request = BackendConfig.request("/api/v1/shortcuts/command", method: "POST")
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        // continue_job_id: backend onceki isin baglamini prompt'a ekler;
-        // oneri metni tek basina anlamsiz kalmasin.
-        var body: [String: Any] = ["text": text, "locale": Locale.current.identifier]
-        if !jobId.isEmpty { body["continue_job_id"] = jobId }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        // The server resolves the exact stored suggestion, not its shortened label.
+        request.httpBody = try? JSONEncoder().encode(PhoneJobCommand.approveSuggestion(
+            jobId: jobId, actionId: action.id, locale: Locale.current.identifier
+        ))
         onFeedback(NSLocalizedString("→ Sending to OpenClaw…", comment: ""))
 
         Task {
             do {
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (_, response) = try await BackendTransport.shared.data(for: request, requiring: .suggestionApproval)
                 guard let http = response as? HTTPURLResponse,
                       (200...299).contains(http.statusCode) else {
                     throw URLError(.badServerResponse)
@@ -357,6 +362,7 @@ struct CVZActionsView: View {
                 }
             } catch {
                 await MainActor.run {
+                    if error is BackendCapabilityError { usedActionIds.remove(action.id) }
                     onFeedback(String(format: NSLocalizedString("✕ Could not send: %@", comment: ""), error.localizedDescription))
                 }
             }

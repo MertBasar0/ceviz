@@ -11,6 +11,9 @@ struct WatchTransportTests {
             precondition(WatchCommandTransport.needsFile(Data(count: count)) == file)
         }
         precondition(WatchCommandTransport.supportsFiles(["audio_file_v1": true]))
+        precondition(WatchCommandTransport.supportsContinuation(["continuation_v1": true]))
+        precondition(!WatchCommandTransport.supportsContinuation(["audio_file_v1": true]))
+        precondition(!WatchCommandTransport.supportsContinuation(["continuation_v1": "true"]))
         let unsupportedReplies: [[String: Any]] = [[:], ["error": "Unknown action"], ["audio_file_v1": false], ["audio_file_v1": "true"]]
         for reply in unsupportedReplies {
             precondition(!WatchCommandTransport.supportsFiles(reply), "An older phone must not silently accept an unsupported file")
@@ -40,6 +43,22 @@ struct WatchTransportTests {
         var differentLocale = large
         differentLocale.locale = "tr_TR"
         precondition(WatchCommandTransport.identity(commandID: commandID, request: differentLocale) == identity)
+
+        var continuation = large
+        continuation.continueJobId = "selected-job"
+        let continuationIdentity = WatchCommandTransport.identity(commandID: commandID, request: continuation)
+        precondition(continuationIdentity != identity, "Request identity must bind its selected context")
+        let continuationBytes = try WatchCommandTransport.encode(continuation, commandID: commandID)
+        let continuationRead = try WatchCommandTransport.decode(continuationBytes, now: now)
+        precondition(continuationRead.request.continueJobId == "selected-job")
+        var changedParent = try JSONSerialization.jsonObject(with: continuationBytes) as! [String: Any]
+        changedParent["continue_job_id"] = "different-job"
+        try mustReject { _ = try WatchCommandTransport.decode(JSONSerialization.data(withJSONObject: changedParent), now: now) }
+        changedParent.removeValue(forKey: "continue_job_id")
+        try mustReject { _ = try WatchCommandTransport.decode(JSONSerialization.data(withJSONObject: changedParent), now: now) }
+        let standaloneReceipt = try WatchCommandTransport.receipt(responseData: response(), identity: identity)
+        precondition(WatchCommandTransport.receivedReceipt(standaloneReceipt, matching: continuationIdentity) == nil,
+                     "A standalone receipt cannot acknowledge a linked capture")
 
         try mustReject { _ = try WatchCommandTransport.decode(encoded, metadata: [:], now: now) }
         var wrongMetadata = identity.fileMetadata

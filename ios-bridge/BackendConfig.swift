@@ -138,4 +138,27 @@ final class BackendTransport {
         lock.unlock()
         previous.invalidateAndCancel()
     }
+
+    private func currentSession() -> URLSession {
+        lock.lock()
+        defer { lock.unlock() }
+        return session
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try await currentSession().data(for: request)
+    }
+
+    func data(for request: URLRequest, requiring capability: BackendCapability) async throws -> (Data, URLResponse) {
+        let selectedSession = currentSession()
+        let capabilityRequest = BackendConfig.request("/api/v1/capabilities")
+        guard request.url?.absoluteString.hasPrefix(BackendConfig.baseURLString + "/api/v1/") == true,
+              request.value(forHTTPHeaderField: "Authorization") == capabilityRequest.value(forHTTPHeaderField: "Authorization") else {
+            throw BackendCapabilityError.connectionChanged
+        }
+        return try await BackendCapabilityGate.send(
+            request, capabilityRequest: capabilityRequest, requiring: capability,
+            session: selectedSession, isCurrent: { self.currentSession() === selectedSession }
+        )
+    }
 }

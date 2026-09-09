@@ -137,6 +137,20 @@ class EndpointContractTests(unittest.TestCase):
             "open-on-phone",
         ])
 
+    def test_continuation_capabilities_share_the_existing_auth_boundary(self) -> None:
+        with mock.patch.object(main, "AUTH_TOKEN", "fixture-token"):
+            with self.assertRaises(request.HTTPError) as rejected:
+                self._get_json("/api/v1/capabilities")
+            self.assertEqual(rejected.exception.code, 401)
+            req = request.Request(f"{self.base_url}/api/v1/capabilities",
+                                  headers={"Authorization": "Bearer fixture-token"})
+            with request.urlopen(req) as response:
+                capabilities = json.loads(response.read())
+                self.assertEqual(response.status, 200)
+            self.assertEqual(capabilities, {
+                "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
+            })
+
     def test_job_report_response_matches_contract_with_full_section_shape(self) -> None:
         main.jobs_db["job-contract"] = {
             "id": "job-contract",
@@ -611,6 +625,117 @@ class EndpointContractTests(unittest.TestCase):
             request.urlopen(req)
 
         self.assertEqual(ctx.exception.code, 400)
+
+    def test_follow_up_text_never_approves_a_suggestion(self) -> None:
+        parent = main.jobs_db["job-102"]
+        parent.update(conversation_id="selected", next_action_actor="agent")
+        for intent in (None, "follow_up"):
+            with self.subTest(intent=intent):
+                payload = {"text": "Do not apply this. Explain the risk.", "continue_job_id": parent["id"]}
+                if intent is not None:
+                    payload["intent"] = intent
+                with mock.patch.object(main.openclaw_client, "invoke_watch_command",
+                                       side_effect=main.OpenClawUnavailable("Test boundary")) as invoke:
+                    status, result = self._post_json("/api/v1/shortcuts/command", payload)
+                self.assertEqual(status, 200)
+                sent = invoke.call_args.args[0]
+                self.assertEqual(sent["transcript"], payload["text"])
+                self.assertNotIn("ONAYLADI", sent["_continuation_context"])
+                self.assertNotIn("tekrar teyit isteme", sent["_continuation_context"])
+                self.assertEqual(main.jobs_db[result["job_id"]]["conversation_id"], "selected")
+
+    def test_suggestion_approval_uses_full_server_owned_action(self) -> None:
+        parent = main.jobs_db["job-102"]
+        suggestion = "Review the failing tests and apply the bounded correction. " * 3
+        parent.update(next_action_actor="agent", next_action=suggestion)
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command",
+                               side_effect=main.OpenClawUnavailable("Test boundary")) as invoke:
+            status, result = self._post_json("/api/v1/shortcuts/command", {
+                "intent": "approve_suggestion", "continue_job_id": parent["id"],
+                "next_action_id": "suggested-next-action",
+            })
+        self.assertEqual(status, 200)
+        self.assertEqual(invoke.call_args.args[0]["transcript"], suggestion.strip())
+        self.assertIn("ONAYLADI", invoke.call_args.args[0]["_continuation_context"])
+        self.assertNotIn("tekrar teyit isteme", invoke.call_args.args[0]["_continuation_context"])
+
+    def test_command_intent_rejects_invalid_or_unavailable_targets_before_invocation(self) -> None:
+        cases = [
+            [], {"text": "check", "intent": "anything"},
+            {"text": "check", "continue_job_id": "missing"},
+            {"text": "check", "continue_job_id": 102},
+            {"text": "check", "continue_job_id": "job-101"},
+            {"text": "check", "intent": "approve_suggestion"},
+            {"text": "check", "intent": "approve_suggestion", "continue_job_id": "job-102"},
+            {"text": "check", "intent": "approve_suggestion", "continue_job_id": "job-102", "next_action_id": "suggested-next-action"},
+            {"text": "check", "intent": "follow_up", "continue_job_id": "job-102", "next_action_id": "suggested-next-action"},
+        ]
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command") as invoke:
+            for payload in cases:
+                with self.subTest(payload=payload), self.assertRaises(request.HTTPError) as rejected:
+                    self._post_json("/api/v1/shortcuts/command", payload)
+                self.assertEqual(rejected.exception.code, 400)
+            invoke.assert_not_called()
+
+    def test_new_commands_do_not_inherit_a_recent_unrelated_job(self) -> None:
+        for path, payload in [
+            ("/api/v1/shortcuts/command", {"text": "new request"}),
+            ("/api/v1/watch/command", {"audio_data": "bmV3", "format": "aac"}),
+        ]:
+            with self.subTest(path=path), mock.patch.object(
+                main.openclaw_client, "invoke_watch_command", side_effect=main.OpenClawUnavailable("Test boundary")
+            ) as invoke, mock.patch.object(main.stt_client, "transcribe_watch_payload",
+                                          return_value=TranscriptionResult(transcript="new request", source="test", error="")):
+                self._post_json(path, payload)
+                self.assertNotIn("_continuation_context", invoke.call_args.args[0])
+
+    def test_watch_continuation_names_observed_result_not_newest_created_job(self) -> None:
+        parent = main.jobs_db["job-102"]
+        parent.update(conversation_id="long-finished-job", created_at=main.time.time() - 600)
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command",
+                               side_effect=main.OpenClawUnavailable("Test boundary")) as invoke, mock.patch.object(
+            main.stt_client, "transcribe_watch_payload",
+            return_value=TranscriptionResult(transcript="explain this", source="test", error="")
+        ):
+            _, result = self._post_json("/api/v1/watch/command", {
+                "audio_data": "ZXhwbGFpbg==", "format": "aac", "continue_job_id": parent["id"],
+            })
+        self.assertEqual(main.jobs_db[result["job_id"]]["conversation_id"], "long-finished-job")
+        self.assertIn(parent["transcript"], invoke.call_args.args[0]["_continuation_context"])
+        self.assertNotIn("ONAYLADI", invoke.call_args.args[0]["_continuation_context"])
+
+    def test_watch_retries_keep_same_parent_receipt_but_different_parents_are_distinct(self) -> None:
+        parent = main.jobs_db["job-102"]
+        other = {**parent, "id": "other-parent", "conversation_id": "other-chain"}
+        main.jobs_db[other["id"]] = other
+        payload = {"audio_data": "c2FtZSBhdWRpbw==", "format": "aac", "continue_job_id": parent["id"]}
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command",
+                               side_effect=main.OpenClawUnavailable("Test boundary")) as invoke, mock.patch.object(
+            main.stt_client, "transcribe_watch_payload",
+            return_value=TranscriptionResult(transcript="explain this", source="test", error="")
+        ) as transcribe:
+            _, first = self._post_json("/api/v1/watch/command", payload)
+            # A receipt remains recoverable after restart/retention removed its parent.
+            main.jobs_db.pop(parent["id"])
+            _, retry = self._post_json("/api/v1/watch/command", payload)
+            _, different = self._post_json("/api/v1/watch/command", {**payload, "continue_job_id": other["id"]})
+        self.assertEqual(first["job_id"], retry["job_id"])
+        self.assertNotEqual(first["job_id"], different["job_id"])
+        self.assertEqual(invoke.call_count, 2)
+        self.assertEqual(transcribe.call_count, 2)
+        self.assertEqual(main.jobs_db[different["job_id"]]["conversation_id"], "other-chain")
+
+    def test_watch_invalid_parent_and_suggestion_intent_never_transcribe_or_invoke(self) -> None:
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command") as invoke, mock.patch.object(
+            main.stt_client, "transcribe_watch_payload"
+        ) as transcribe:
+            for context in ({"continue_job_id": "missing"}, {"continue_job_id": "job-101"},
+                            {"continue_job_id": None}, {"continue_job_id": "job-102", "intent": "approve_suggestion"}):
+                with self.subTest(context=context), self.assertRaises(request.HTTPError) as rejected:
+                    self._post_json("/api/v1/watch/command", {"audio_data": "aW52YWxpZA==", "format": "aac", **context})
+                self.assertEqual(rejected.exception.code, 400)
+            invoke.assert_not_called()
+            transcribe.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ enum WatchCommandTransport {
     static let capabilitiesAction = "audio_command_capabilities"
 
     static func supportsFiles(_ reply: [String: Any]) -> Bool { reply["audio_file_v1"] as? Bool == true }
+    static func supportsContinuation(_ reply: [String: Any]) -> Bool { reply["continuation_v1"] as? Bool == true }
 
     struct Identity: Equatable {
         let commandID: String
@@ -34,7 +35,8 @@ enum WatchCommandTransport {
     static func identity(commandID: String, request: WatchCommandRequest) -> Identity {
         // Match both the saved audio bytes and their original capture timestamp.
         // Locale and JSON key order may differ after an app upgrade/retry.
-        let material = (request.clientTimestamp ?? "") + "\n" + request.audioData
+        var material = (request.clientTimestamp ?? "") + "\n" + request.audioData
+        if let parent = request.continueJobId { material += "\ncontinue_job_id=" + parent }
         let digest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
         return Identity(commandID: commandID, digest: digest)
     }

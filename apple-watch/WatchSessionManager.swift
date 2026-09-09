@@ -4,13 +4,6 @@ import Combine
 import WatchKit
 import UserNotifications
 
-struct QueuedCommand: Codable, Identifiable { 
-    let id: String 
-    let audioData: String 
-    let timestamp: Date 
-    var retryCount: Int 
-} 
-
 class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExtendedRuntimeSessionDelegate {
     static let shared = WatchSessionManager()
 
@@ -26,11 +19,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     @Published private(set) var resultPresentationRequest = UUID()
     @Published private var resultTracking = WatchResultTracking()
     var isCapturing = false
-    /// Son sonucun geldigi an. Backend, 180 sn icindeki yeni komutu ayni
-    /// konusmanin devami sayiyor; saat bunu rozetle gosterir.
-    @Published var lastResultAt: Date?
-
-    static let continuationWindow: TimeInterval = 180
+    @Published private var continuation = WatchContinuationSelection()
+    private var captureParentJobID: String?
     @Published var handoffState: HandoffState = .idle
     private var isDrainingCommandQueue = false
     @Published var handoffPreview: HandoffPreview? = nil
@@ -277,7 +267,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         responseText = (summary?.isEmpty == false)
             ? summary!
             : NSLocalizedString(state.titleKey, comment: "job state")
-        lastResultAt = Date()
+        continuation.observe(jobId)
         handoffUrl = deepLink?.isEmpty == false ? deepLink : "ceviz://job/\(jobId)"
         handoffJobId = jobId
         handoffState = .ready
@@ -314,6 +304,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     }
 
     private func resetConnectionState(configuredAt: TimeInterval) {
+        continuation.reset()
+        captureParentJobID = nil
         let removedIDs = Set(pendingCommands.filter { $0.timestamp.timeIntervalSince1970 <= configuredAt }.map(\.id))
         let invalidatedAttempt = deliveryTracking.invalidate(removedCommandIDs: removedIDs)
         if invalidatedAttempt {
@@ -353,6 +345,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     }
 
     func showCaptureError(_ message: String) {
+        captureParentJobID = nil
         responseText = message
         resultState = nil
         handoffUrl = nil
@@ -413,7 +406,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             outcome: reply["outcome"] as? String ?? reportMeta?.outcome
         )
         if self.resultState != .running && self.resultState != .queued {
-            self.lastResultAt = Date()
+            self.continuation.observe(jobId)
         }
         self.handoffUrl = handoffUrl
         self.handoffJobId = jobId
@@ -631,11 +624,26 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         processQueue()
     }
 
+    func continuationJobID(for displayedJobID: String?, at date: Date = Date()) -> String? {
+        guard !isSending, pendingCommands.isEmpty else { return nil }
+        return continuation.parent(for: displayedJobID, at: date)
+    }
+
+    func beginCaptureContinuation(displayedJobID: String?) {
+        captureParentJobID = continuationJobID(for: displayedJobID)
+    }
+
+    func cancelCaptureContinuation() {
+        captureParentJobID = nil
+        continuation.reset()
+    }
+
     private func request(for command: QueuedCommand) -> WatchCommandRequest {
         WatchCommandRequest(
             audioData: command.audioData,
             format: "m4a",
-            clientTimestamp: ISO8601DateFormatter().string(from: command.timestamp)
+            clientTimestamp: ISO8601DateFormatter().string(from: command.timestamp),
+            continueJobId: command.continueJobId
         )
     }
 
@@ -674,55 +682,59 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             self?.failQueueAttempt(commandID: command.id, generation: generation)
         }
 
-        if needsFile {
-            // Reopening/reconnecting while WC already owns this file must not
-            // enqueue it again. Retries later reuse the original backend identity.
+        // Mixed app versions must not drop a selected parent or a large file.
+        if needsFile || request.continueJobId != nil {
+            session.sendMessage(["action": WatchCommandTransport.capabilitiesAction], replyHandler: { reply in
+                DispatchQueue.main.async {
+                    guard self.deliveryTracking.isCurrentAttempt(command.id, generation: generation),
+                          self.isSending, self.pendingCommands.contains(where: { $0.id == command.id }) else { return }
+                    guard session.activationState == .activated, WatchCommandTransport.isCurrent(request) else {
+                        self.failQueueAttempt(commandID: command.id, generation: generation)
+                        return
+                    }
+                    guard (!needsFile || WatchCommandTransport.supportsFiles(reply)),
+                          (request.continueJobId == nil || WatchCommandTransport.supportsContinuation(reply)) else {
+                        self.failQueueAttempt(commandID: command.id, generation: generation)
+                        self.responseText = NSLocalizedString("Update Ceviz on iPhone to send this recording. It remains saved on Watch.", comment: "")
+                        return
+                    }
+                    self.deliverQueuedCommand(command, data: data, identity: identity, generation: generation)
+                }
+            }, errorHandler: { _ in
+                DispatchQueue.main.async { self.failQueueAttempt(commandID: command.id, generation: generation) }
+            })
+            return
+        }
+        deliverQueuedCommand(command, data: data, identity: identity, generation: generation)
+    }
+
+    private func deliverQueuedCommand(_ command: QueuedCommand, data: Data,
+                                      identity: WatchCommandTransport.Identity, generation: Int) {
+        let session = WCSession.default
+        if WatchCommandTransport.needsFile(data) {
+            // A retry reuses an outstanding transfer and its immutable parent.
             let alreadyQueued = session.outstandingFileTransfers.contains {
                 $0.file.metadata?["action"] as? String == WatchCommandTransport.fileAction &&
                 $0.file.metadata?["command_id"] as? String == identity.commandID &&
                 $0.file.metadata?["audio_digest"] as? String == identity.digest
             }
-            if !alreadyQueued {
-                // Phone and Watch updates need not install together. An old
-                // bridge has no file receiver, so confirm support before enqueue.
-                session.sendMessage(["action": WatchCommandTransport.capabilitiesAction], replyHandler: { reply in
-                    DispatchQueue.main.async {
-                        guard self.deliveryTracking.isCurrentAttempt(command.id, generation: generation),
-                              self.isSending, self.pendingCommands.contains(where: { $0.id == command.id }) else { return }
-                        guard session.activationState == .activated, WatchCommandTransport.isCurrent(request) else {
-                            self.failQueueAttempt(commandID: command.id, generation: generation)
-                            return
-                        }
-                        guard WatchCommandTransport.supportsFiles(reply) else {
-                            self.failQueueAttempt(commandID: command.id, generation: generation)
-                            self.responseText = NSLocalizedString("Update Ceviz on iPhone to send this recording. It remains saved on Watch.", comment: "")
-                            return
-                        }
-                        do {
-                            let file = try self.commandFiles.stage(data, commandID: command.id)
-                            session.transferFile(file, metadata: identity.fileMetadata)
-                            self.responseText = NSLocalizedString("Recording saved. Transferring to iPhone in the background…", comment: "")
-                        } catch {
-                            self.failQueueAttempt(commandID: command.id, generation: generation)
-                        }
-                    }
-                }, errorHandler: { _ in
-                    DispatchQueue.main.async { self.failQueueAttempt(commandID: command.id, generation: generation) }
-                })
-            }
-            if alreadyQueued {
+            do {
+                if !alreadyQueued {
+                    let file = try commandFiles.stage(data, commandID: command.id)
+                    session.transferFile(file, metadata: identity.fileMetadata)
+                }
                 responseText = NSLocalizedString("Recording saved. Transferring to iPhone in the background…", comment: "")
-            }
+            } catch { failQueueAttempt(commandID: command.id, generation: generation) }
             return
         }
-
         session.sendMessageData(data, replyHandler: { replyData in
             DispatchQueue.main.async {
-                if let response = try? JSONDecoder().decode(WatchCommandResponse.self, from: replyData),
-                   WatchCommandTransport.isReceipt(response) {
+                let response = try? JSONDecoder().decode(WatchCommandResponse.self, from: replyData)
+                if let response, WatchCommandTransport.isReceipt(response) {
                     self.acceptCommandReceipt(replyData, commandID: command.id, digest: identity.digest)
                 } else {
-                    self.failQueueAttempt(commandID: command.id, generation: generation)
+                    self.failQueueAttempt(commandID: command.id, generation: generation,
+                                          message: response?.status == "error" ? response?.summaryText : nil)
                 }
             }
         }, errorHandler: { _ in
@@ -732,11 +744,11 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         })
     }
 
-    private func failQueueAttempt(commandID: String, generation: Int) {
+    private func failQueueAttempt(commandID: String, generation: Int, message: String? = nil) {
         guard deliveryTracking.isCurrentAttempt(commandID, generation: generation), isSending else { return }
         isSending = false
         resultState = .queued
-        responseText = NSLocalizedString("Receipt not confirmed. Request saved; reconnect to check before retrying.", comment: "")
+        responseText = message ?? NSLocalizedString("Receipt not confirmed. Request saved; reconnect to check before retrying.", comment: "")
         stopExtendedSession()
         finishQueueAttempt(commandID: commandID, acknowledged: false)
     }
@@ -764,7 +776,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         responseText = response.summaryText
         resultState = CVZJobState.resolve(status: response.status, outcome: response.outcome ?? response.reportMeta?.outcome)
         let terminal = response.status == "completed" || response.status == "failed"
-        if terminal { lastResultAt = Date() }
+        if terminal { continuation.observe(jobId) }
         let needsPhone = response.reportMeta?.requiresPhoneHandoff ?? response.requiresPhoneHandoff
         handoffUrl = response.handoffUrl ?? response.deepLink ?? "ceviz://job/\(jobId)"
         handoffJobId = jobId
@@ -805,10 +817,13 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 id: UUID().uuidString,
                 audioData: audioBase64,
                 timestamp: Date(),
-                retryCount: 0
+                retryCount: 0,
+                continueJobId: captureParentJobID
             ))
             persistPendingCommands()
         }
+        captureParentJobID = nil
+        continuation.reset()
         resultState = .queued
         responseText = NSLocalizedString("Request saved on Watch. Waiting for iPhone.", comment: "")
         stopExtendedSession()

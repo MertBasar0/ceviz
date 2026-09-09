@@ -7,12 +7,79 @@ struct WatchCommandRequest: Codable {
     let clientTimestamp: String?
     /// Saatten gelir; gelmezse telefonun dili kullanilir.
     var locale: String? = Locale.current.identifier
+    /// Frozen by the Watch when recording starts; the phone never chooses a target.
+    var continueJobId: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case audioData = "audio_data"
         case format
         case clientTimestamp = "client_timestamp"
         case locale
+        case continueJobId = "continue_job_id"
+    }
+}
+
+/// Continuing a report is not approval to execute its suggested action.
+enum PhoneJobCommand: Encodable {
+    case followUp(jobId: String, text: String, locale: String)
+    case approveSuggestion(jobId: String, actionId: String, locale: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case intent, text, locale
+        case continueJobId = "continue_job_id"
+        case nextActionId = "next_action_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .followUp(jobId, text, locale):
+            try values.encode("follow_up", forKey: .intent)
+            try values.encode(jobId, forKey: .continueJobId)
+            try values.encode(text, forKey: .text)
+            try values.encode(locale, forKey: .locale)
+        case let .approveSuggestion(jobId, actionId, locale):
+            try values.encode("approve_suggestion", forKey: .intent)
+            try values.encode(jobId, forKey: .continueJobId)
+            try values.encode(actionId, forKey: .nextActionId)
+            try values.encode(locale, forKey: .locale)
+        }
+    }
+}
+
+enum BackendCapability {
+    case continuation
+    case suggestionApproval
+}
+
+struct BackendCapabilities: Decodable {
+    let continuationV1: Bool
+    let suggestionApprovalV1: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case continuationV1 = "continuation_v1"
+        case suggestionApprovalV1 = "suggestion_approval_v1"
+    }
+
+    func supports(_ capability: BackendCapability) -> Bool {
+        continuationV1 && (capability == .continuation || suggestionApprovalV1)
+    }
+}
+
+enum BackendCapabilityError: LocalizedError {
+    case updateRequired
+    case connectionChanged
+    case verificationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .updateRequired:
+            return NSLocalizedString("Update the Ceviz helper service before continuing this job.", comment: "")
+        case .connectionChanged:
+            return NSLocalizedString("The connection changed. Review the target before sending again.", comment: "")
+        case let .verificationFailed(message):
+            return message
+        }
     }
 }
 

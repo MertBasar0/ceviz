@@ -1,6 +1,36 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **8 Eylül 2026**
+Son güncelleme: **9 Eylül 2026**
+
+## Geliştirme adayı — güvenli devam ve telefon konuşmaları
+
+Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
+
+- Devam mesajı ile öneri onayı ayrıldı; açık iş/eylem kimliği kullanılıyor.
+  Saat kayıt başlangıcında seçili bağlamı sabitliyor; son gelen ilgisiz işe
+  otomatik bağlanma kaldırıldı. Eski yardımcı servis/telefon için yetenek
+  kontrolü var; destek yoksa metin veya ses korunuyor.
+- Telefonda gerçek OpenClaw konuşmaları, asistan filtresi, arama, eski kayıtlar,
+  geçmiş ve açık hedefli gönderim eklendi. Ceviz iş zincirinden ayrı; saat hedefini
+  değiştirmiyor. Ayrıntı ve sınırlar: [konuşmalar](docs/conversations.md).
+- Yeni katmanla canlı Gateway'de yalnız okuma doğrulandı: varsayılan son-yedi-gün
+  listesinde 6 oturum, 4 yapılandırılmış asistan; iki asistanın geçmişinde ilk
+  sayfalar 51/49 okunabilir mesaj ve gönderim için oturum/mesaj-dalı bilgisi var.
+  Bu kontrolde canlı komut veya model çağrısı yapılmadı.
+- İlk WSL test kabuğunun PATH'i yanlışlıkla Windows npm CLI'ını seçti ve zaman
+  aşımına uğradı. Çalışan kurulumun Linux OCM CLI yoluyla aynı kontrol geçti;
+  üretim yapılandırması veya zaman aşımı büyütülmedi.
+- Yerel 135 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
+  ekranlar arasında korunması, kontrol metni normalizasyonu, terminal durumun
+  gerilememesi ve izole test temizliği bağımsız son incelemeden geçti.
+  Apple derlemesi ve gerçek ekran kontrolleri için yalnız geliştirme dalına
+  commit/push ve `validation_only` çalışma izni var; native sonuç henüz
+  doğrulanmış sayılmıyor.
+- Kalıcı, yalnız metadata içeren yerel gönderim kaydı için ayrıca kullanıcı
+  kararı bekleniyor; SQLite/OpenClaw veritabanı değişikliği yapılmadı.
+- Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
+  değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
+  bağımsız ajan incelemesi ve kaynak/sözleşme/regresyon kontrolleri kullanılıyor.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

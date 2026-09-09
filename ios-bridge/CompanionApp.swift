@@ -240,6 +240,9 @@ final class AppRouter: ObservableObject {
 struct CompanionApp: App {
     @UIApplicationDelegateAdaptor(CevizAppDelegate.self) private var appDelegate
     @StateObject private var router = AppRouter.shared
+    @StateObject private var conversationStore = ConversationSessionStore(
+        baseURL: BackendConfig.baseURLString, token: BackendConfig.token
+    )
 
     init() {
         // Ensure the bridge coordinator starts immediately
@@ -284,6 +287,10 @@ struct CompanionApp: App {
                     _ = router.open(url: url, source: .deepLink, presentImmediately: true)
                 }
                 .onAppear(perform: applyLaunchRouteIfNeeded)
+            }
+            .environmentObject(conversationStore)
+            .onReceive(NotificationCenter.default.publisher(for: BackendConfig.connectionDidChange)) { _ in
+                conversationStore.synchronizeConnection(baseURL: BackendConfig.baseURLString, token: BackendConfig.token)
             }
         }
     }
@@ -331,6 +338,26 @@ struct HomeView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    NavigationLink {
+                        ConversationsView()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Conversations").font(.headline)
+                                Text("Continue a conversation from OpenClaw")
+                                    .font(.subheadline).foregroundColor(CVZ.textSub)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .foregroundColor(CVZ.accent)
+                        .padding(14)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(CVZ.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("conversations.open")
+
                     if let pending = router.pendingContinuation {
                         CVZContinuationCard(
                             metaText: pending.badgeText,

@@ -1,0 +1,94 @@
+"""Prove the native fixture serves real authenticated routes without a Gateway."""
+import json
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from urllib import error, request
+
+from phone_ui_fixture import TOKEN, MAIN_KEY, BUSY_KEY
+
+
+class PhoneUIFixtureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with socket.socket() as reserved:
+            reserved.bind(("127.0.0.1", 0))
+            port = reserved.getsockname()[1]
+        cls.base = f"http://127.0.0.1:{port}"
+        cls.state = tempfile.TemporaryDirectory(prefix="ceviz-phone-fixture-test-")
+        cls.addClassCleanup(cls.state.cleanup)
+        cls.process = subprocess.Popen(
+            [sys.executable, str(Path(__file__).with_name("phone_ui_fixture.py")), "--port", str(port),
+             "--state-dir", cls.state.name],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        cls.addClassCleanup(cls.stop_fixture)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if cls.process.poll() is not None:
+                raise RuntimeError(cls.process.communicate()[1])
+            try:
+                cls.http("/__fixture/state")
+                return
+            except error.URLError:
+                time.sleep(0.05)
+        raise RuntimeError("Isolated phone fixture did not become ready")
+
+    @classmethod
+    def stop_fixture(cls):
+        cls.process.terminate()
+        try:
+            cls.process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            cls.process.kill()
+            cls.process.communicate(timeout=5)
+
+    @classmethod
+    def http(cls, path, payload=None):
+        req = request.Request(cls.base + path,
+                              data=json.dumps(payload).encode() if payload is not None else None,
+                              headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
+        with request.urlopen(req, timeout=3) as response:
+            return json.loads(response.read())
+
+    def test_native_fixture_uses_canonical_list_history_and_guarded_send(self):
+        self.assertEqual(self.http("/__fixture/reset?scenario=normal")["pid"], self.process.pid)
+        page = self.http("/api/v1/sessions")
+        self.assertEqual([row["title"] for row in page["sessions"]], ["Weekend plan", "Build review", "untitled-thread"])
+        self.assertTrue(page["has_more"])
+        older = self.http("/api/v1/sessions?offset=3")
+        self.assertEqual(older["sessions"][0]["title"], "Earlier notes")
+        history = self.http("/api/v1/sessions/history?session_key=" + MAIN_KEY)
+        self.assertEqual(history["session"]["session_id"], "planner-session")
+        payload = {"session_key": MAIN_KEY, "session_id": "planner-session", "expected_leaf_entry_id": "planner-leaf",
+                   "text": "Check route", "request_id": "a3f743fd-1c15-4140-a3e7-714a1b6314cd"}
+        sent = self.http("/api/v1/sessions/message", payload)
+        self.assertTrue(sent["delivery_confirmed"])
+        result = self.http("/api/v1/sessions/run?session_key=" + MAIN_KEY + "&run_id=" + sent["run_id"])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(len(self.http("/__fixture/state")["send_calls"]), 1)
+
+    def test_native_fixture_exercises_queued_reset_and_uncertain_boundaries(self):
+        payload = {"session_key": BUSY_KEY, "session_id": "builder-session", "expected_leaf_entry_id": "builder-leaf",
+                   "text": "Check build", "request_id": "a3f743fd-1c15-4140-a3e7-714a1b6314cd"}
+        self.http("/__fixture/reset?scenario=queued")
+        sent = self.http("/api/v1/sessions/message", payload)
+        self.assertEqual(sent["status"], "pending")
+        result = self.http("/api/v1/sessions/run?session_key=" + BUSY_KEY + "&run_id=" + sent["run_id"])
+        self.assertEqual(result["status"], "queued")
+        for scenario, status, count, uncertain in [("reset", 409, 0, False), ("uncertain", 503, 1, True)]:
+            with self.subTest(scenario=scenario):
+                self.http("/__fixture/reset?scenario=" + scenario)
+                with self.assertRaises(error.HTTPError) as rejected:
+                    self.http("/api/v1/sessions/message", payload)
+                self.assertEqual(rejected.exception.code, status)
+                self.assertEqual(json.loads(rejected.exception.read())["delivery_uncertain"], uncertain)
+                self.assertEqual(len(self.http("/__fixture/state")["send_calls"]), count)
+
+
+if __name__ == "__main__":
+    unittest.main()

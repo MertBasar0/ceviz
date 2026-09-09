@@ -1,5 +1,35 @@
 import Foundation
 
+struct QueuedCommand: Codable, Identifiable {
+    let id: String
+    let audioData: String
+    let timestamp: Date
+    var retryCount: Int
+    var continueJobId: String? = nil
+}
+
+/// The selection window starts when a result is first shown, not when its job
+/// started. Captures freeze this parent so delayed delivery cannot retarget it.
+struct WatchContinuationSelection {
+    static let window: TimeInterval = 180
+    private var jobID: String?
+    private var observedAt: Date?
+
+    mutating func observe(_ jobID: String, at date: Date = Date()) {
+        guard self.jobID != jobID else { return }
+        self.jobID = jobID
+        observedAt = date
+    }
+
+    func parent(for displayedJobID: String?, at date: Date = Date()) -> String? {
+        guard let jobID, jobID == displayedJobID, let observedAt,
+              (0..<Self.window).contains(date.timeIntervalSince(observedAt)) else { return nil }
+        return jobID
+    }
+
+    mutating func reset() { self = Self() }
+}
+
 /// A capture link only navigates; recording remains owned by the mic action.
 enum WatchCaptureRoute: Equatable {
     case ready

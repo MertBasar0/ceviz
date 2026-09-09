@@ -4,6 +4,7 @@ import Foundation
 struct WatchResultTests {
     static func main() {
         testCaptureRoutes()
+        testContinuationSelection()
         var tracking = WatchResultTracking()
         precondition(tracking.jobID == nil)
 
@@ -79,5 +80,32 @@ struct WatchResultTests {
                              "Unrelated or malformed capture links must not navigate: \(link)")
             }
         }
+    }
+
+    private static func testContinuationSelection() {
+        let observed = Date(timeIntervalSince1970: 10_000)
+        var selection = WatchContinuationSelection()
+        precondition(selection.parent(for: "long-job", at: observed) == nil)
+        selection.observe("long-job", at: observed)
+        precondition(selection.parent(for: "long-job", at: observed) == "long-job",
+                     "A long-running job can be continued when its result first becomes visible")
+        precondition(selection.parent(for: "another-job", at: observed) == nil,
+                     "A caption cannot advertise another displayed job's context")
+        let frozenParent = selection.parent(for: "long-job", at: observed.addingTimeInterval(179))
+        let captured = QueuedCommand(id: "command", audioData: "YXVkaW8=", timestamp: observed,
+                                     retryCount: 0, continueJobId: frozenParent)
+        let restored = try! JSONDecoder().decode(QueuedCommand.self, from: JSONEncoder().encode(captured))
+        precondition(restored.continueJobId == "long-job", "Queue restoration must retain the captured parent")
+        let legacyQueue = Data(#"{"id":"old","audioData":"YXVkaW8=","timestamp":0,"retryCount":1}"#.utf8)
+        let old = try! JSONDecoder().decode(QueuedCommand.self, from: legacyQueue)
+        precondition(old.continueJobId == nil, "Old queued commands remain standalone, never guess a new parent")
+        selection.observe("long-job", at: observed.addingTimeInterval(179))
+        precondition(selection.parent(for: "long-job", at: observed.addingTimeInterval(180)) == nil,
+                     "Repeated push/poll replies must not extend the selection window")
+        selection.observe("newer-job", at: observed.addingTimeInterval(181))
+        precondition(frozenParent == "long-job", "A newer result cannot retarget an already captured request")
+        precondition(selection.parent(for: "newer-job", at: observed.addingTimeInterval(181)) == "newer-job")
+        selection.reset()
+        precondition(selection.parent(for: "newer-job", at: observed.addingTimeInterval(182)) == nil)
     }
 }

@@ -8,12 +8,14 @@ struct WatchCommandRequest: Codable {
     /// Cihaz dili ("en-US", "tr-TR"). Backend hem konusma tanimayi hem de
     /// ajanin cevap dilini buna gore secer.
     var locale: String? = Locale.current.identifier
+    var continueJobId: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case audioData = "audio_data"
         case format
         case clientTimestamp = "client_timestamp"
         case locale
+        case continueJobId = "continue_job_id"
     }
 }
 

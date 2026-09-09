@@ -13,6 +13,10 @@
       "enum": ["m4a", "aac"],
       "description": "The format of the audio data. Preferred is m4a or aac for bandwidth efficiency between Watch and iPhone."
     },
+    "continue_job_id": {
+      "type": "string",
+      "description": "Explicit completed-result parent selected on Watch at capture time. Omit for a new job; it never grants suggestion approval."
+    },
     "client_timestamp": {
       "type": "string",
       "format": "date-time",

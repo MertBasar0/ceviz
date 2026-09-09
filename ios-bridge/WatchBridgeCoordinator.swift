@@ -253,7 +253,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     /// Handles dictionary messages for fetching data like active jobs.
     func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
         if message["action"] as? String == WatchCommandTransport.capabilitiesAction {
-            replyHandler(["audio_file_v1": true])
+            replyHandler(["audio_file_v1": true, "continuation_v1": true])
             return
         }
         if message["action"] as? String == "register_watch_push",
@@ -475,12 +475,12 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             return
         }
         
-        let task = BackendTransport.shared.dataTask(with: urlRequest) { [weak self] data, response, error in
+        let completion: (Data?, URLResponse?, Error?) -> Void = { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {
                 self.logger.error("Backend request failed: \(error.localizedDescription)")
-                self.replyWithError(message: "Backend unavailable", replyHandler: replyHandler)
+                self.replyWithError(message: error is BackendCapabilityError ? error.localizedDescription : "Backend unavailable", replyHandler: replyHandler)
                 return
             }
             
@@ -512,7 +512,16 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             replyHandler(responseData)
         }
         
-        task.resume()
+        if request.continueJobId != nil {
+            Task {
+                do {
+                    let (data, response) = try await BackendTransport.shared.data(for: urlRequest, requiring: .continuation)
+                    completion(data, response, nil)
+                } catch { completion(nil, nil, error) }
+            }
+        } else {
+            BackendTransport.shared.dataTask(with: urlRequest, completionHandler: completion).resume()
+        }
     }
     
     @MainActor

@@ -1,5 +1,45 @@
 /* Watch Ceviz — auto-maintained; English is the source language. */
 
+/* OpenClaw conversation discovery and explicit continuation */
+"Delivery is not confirmed. Check RECENT JOBS before sending again." = "Delivery is not confirmed. Check RECENT JOBS before sending again.";
+"Conversations" = "Conversations";
+"Conversation" = "Conversation";
+"Continue a conversation from OpenClaw" = "Continue a conversation from OpenClaw";
+"Continue an OpenClaw conversation here. Your watch keeps its current behavior." = "Continue an OpenClaw conversation here. Your watch keeps its current behavior.";
+"Assistant" = "Assistant";
+"All assistants" = "All assistants";
+"Include older conversations" = "Include older conversations";
+"Pair with your Ceviz service to see your OpenClaw conversations." = "Pair with your Ceviz service to see your OpenClaw conversations.";
+"Loading conversations…" = "Loading conversations…";
+"No conversations in this view. Try another assistant or include older conversations." = "No conversations in this view. Try another assistant or include older conversations.";
+"No matching conversations. Try another assistant or include older conversations." = "No matching conversations. Try another assistant or include older conversations.";
+"Archived" = "Archived";
+"Load more conversations" = "Load more conversations";
+"Search conversations" = "Search conversations";
+"Try again" = "Try again";
+"Load earlier messages" = "Load earlier messages";
+"Loading conversation…" = "Loading conversation…";
+"Refresh conversation" = "Refresh conversation";
+"No readable messages yet." = "No readable messages yet.";
+"You" = "You";
+"Attachments or other content are available in OpenClaw." = "Attachments or other content are available in OpenClaw.";
+"THIS CONVERSATION" = "THIS CONVERSATION";
+"This conversation is busy. Your message will wait its turn." = "This conversation is busy. Your message will wait its turn.";
+"Archived conversation — read only." = "Archived conversation — read only.";
+"This conversation is read only. Its current message target could not be verified." = "This conversation is read only. Its current message target could not be verified.";
+"Delivery is not confirmed. Check the conversation before sending again." = "Delivery is not confirmed. Check the conversation before sending again.";
+"Check status" = "Check status";
+"Message this conversation" = "Message this conversation";
+"Send message" = "Send message";
+"Run finished — review the conversation." = "Run finished — review the conversation.";
+"The response could not be completed." = "The response could not be completed.";
+"The response was stopped." = "The response was stopped.";
+"Request received — status unavailable." = "Request received — status unavailable.";
+"Update the Ceviz helper service to use conversations." = "Update the Ceviz helper service to use conversations.";
+"Update the Ceviz helper service before continuing this job." = "Update the Ceviz helper service before continuing this job.";
+"The connection changed. Review the target before sending again." = "The connection changed. Review the target before sending again.";
+"conversation.error.unsupported_control" = "This screen is for regular messages. Manage or reset sessions in OpenClaw.";
+
 "SETTINGS" = "SETTINGS";
 "CLOSE ✕" = "CLOSE ✕";
 "SAVE" = "SAVE";

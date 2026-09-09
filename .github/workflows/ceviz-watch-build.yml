@@ -88,6 +88,12 @@ jobs:
           build/tests/phone-transport-tests
           swiftc job-state/CVZJobState.swift apple-watch/Models.swift watch-transport/WatchCommandTransport.swift tests/swift/WatchTransportTests.swift -o build/tests/watch-transport-tests
           build/tests/watch-transport-tests
+          swiftc job-state/CVZJobState.swift ios-bridge/Models.swift tests/swift/PhoneCommandTests.swift -o build/tests/phone-command-tests
+          build/tests/phone-command-tests
+          swiftc ios-bridge/ConversationModels.swift ios-bridge/ConversationSessionStore.swift tests/swift/ConversationTests.swift -o build/tests/conversation-tests
+          build/tests/conversation-tests
+          swiftc job-state/CVZJobState.swift ios-bridge/Models.swift ios-bridge/BackendCapabilityGate.swift tests/swift/BackendCapabilityTests.swift -o build/tests/backend-capability-tests
+          build/tests/backend-capability-tests
 
       - name: Install Fastlane
         run: gem install fastlane --no-document
@@ -175,6 +181,22 @@ jobs:
         with:
           name: ceviz-watch-ui-failure-results
           path: build/watch-capture-ui/**/*.xcresult/**
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Validate actual iPhone conversation UI
+        run: python3 tests/phone_conversation_ui.py
+
+      - name: Upload iPhone conversation UI proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceviz-phone-conversation-ui
+          path: |
+            build/phone-conversation-ui/**/context.json
+            build/phone-conversation-ui/**/*.log
+            build/phone-conversation-ui/**/attachments/**
+            build/phone-conversation-ui/**/*.xcresult/**
           retention-days: 7
           if-no-files-found: warn
 

@@ -1,5 +1,45 @@
 /* Watch Ceviz — auto-maintained; English is the source language. */
 
+/* OpenClaw conversation discovery and explicit continuation */
+"Delivery is not confirmed. Check RECENT JOBS before sending again." = "İletildiği doğrulanamadı. Yeniden göndermeden önce SON İŞLER'i kontrol et.";
+"Conversations" = "Konuşmalar";
+"Conversation" = "Konuşma";
+"Continue a conversation from OpenClaw" = "OpenClaw’daki bir konuşmaya devam et";
+"Continue an OpenClaw conversation here. Your watch keeps its current behavior." = "OpenClaw konuşmana buradan devam et. Saatindeki komutların hedefi değişmez.";
+"Assistant" = "Asistan";
+"All assistants" = "Tüm asistanlar";
+"Include older conversations" = "Eski konuşmaları da göster";
+"Pair with your Ceviz service to see your OpenClaw conversations." = "OpenClaw konuşmalarını görmek için Ceviz servisinle eşleş.";
+"Loading conversations…" = "Konuşmalar yükleniyor…";
+"No conversations in this view. Try another assistant or include older conversations." = "Bu görünümde konuşma yok. Başka bir asistan seç veya eski konuşmaları da göster.";
+"No matching conversations. Try another assistant or include older conversations." = "Eşleşen konuşma yok. Başka bir asistan seç veya eski konuşmaları da göster.";
+"Archived" = "Arşivlenmiş";
+"Load more conversations" = "Daha fazla konuşma yükle";
+"Search conversations" = "Konuşmalarda ara";
+"Try again" = "Tekrar dene";
+"Load earlier messages" = "Önceki mesajları yükle";
+"Loading conversation…" = "Konuşma yükleniyor…";
+"Refresh conversation" = "Konuşmayı yenile";
+"No readable messages yet." = "Henüz görüntülenebilir mesaj yok.";
+"You" = "Sen";
+"Attachments or other content are available in OpenClaw." = "Ekler veya diğer içerikler OpenClaw’da görüntülenebilir.";
+"THIS CONVERSATION" = "BU KONUŞMA";
+"This conversation is busy. Your message will wait its turn." = "Bu konuşmada işlem sürüyor. Mesajın sırasını bekleyecek.";
+"Archived conversation — read only." = "Arşivlenmiş konuşma — yalnızca okunabilir.";
+"This conversation is read only. Its current message target could not be verified." = "Bu konuşma yalnızca okunabilir. Güncel mesaj hedefi doğrulanamadı.";
+"Delivery is not confirmed. Check the conversation before sending again." = "İletildiği doğrulanamadı. Yeniden göndermeden önce konuşmayı kontrol et.";
+"Check status" = "Durumu kontrol et";
+"Message this conversation" = "Bu konuşmaya mesaj yaz";
+"Send message" = "Mesajı gönder";
+"Run finished — review the conversation." = "Çalışma sona erdi — konuşmayı incele.";
+"The response could not be completed." = "Yanıt tamamlanamadı.";
+"The response was stopped." = "Yanıt durduruldu.";
+"Request received — status unavailable." = "İstek alındı — durumu henüz bilinmiyor.";
+"Update the Ceviz helper service to use conversations." = "Konuşmaları kullanmak için Ceviz yardımcı servisini güncelle.";
+"Update the Ceviz helper service before continuing this job." = "Bu işe devam etmeden önce Ceviz yardımcı servisini güncelle.";
+"The connection changed. Review the target before sending again." = "Bağlantı değişti. Yeniden göndermeden önce hedefi kontrol et.";
+"conversation.error.unsupported_control" = "Bu ekran normal mesajlar içindir. Oturumu sıfırlama veya durdurma gibi komutları OpenClaw’dan kullan.";
+
 "SETTINGS" = "AYARLAR";
 "CLOSE ✕" = "KAPAT ✕";
 "SAVE" = "KAYDET";

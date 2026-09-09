@@ -32,6 +32,7 @@ from openclaw_client import OpenClawClient, OpenClawUnavailable, TaskResult
 from job_outcome import normalize_job_outcome
 from push_notifier import PushNotifier
 from stt import WatchSTT
+from session_api import handle_session_request
 
 openclaw_client = OpenClawClient()
 stt_client = WatchSTT()
@@ -309,7 +310,7 @@ def get_explicit_next_actions(job: dict) -> list[dict[str, str | None]]:
 
         normalized.append({
             "id": action_id,
-            "label": trim_watch_text(label, max_len=80),
+            "label": label,
             "kind": kind,
             "target": target,
         })
@@ -543,6 +544,7 @@ def build_next_actions(job: dict) -> list[dict[str, str | None]]:
     status = clean_text(job.get("status")).lower()
 
     def append_action(action: dict[str, str | None]) -> None:
+        action = {**action, "label": trim_watch_text(action["label"], max_len=80)}
         key = (action["kind"] or "", action.get("target"), action["label"] or "")
         if key in seen:
             return
@@ -981,13 +983,13 @@ def build_continuation_context(prev_job: dict, *, approved_suggestion: bool) -> 
     prev_summary = trim_watch_text(prev_job.get("watch_summary") or prev_job.get("canned_result") or "", 220)
     if approved_suggestion:
         directive = (
-            "Kullanıcı, önceki işin raporundaki öneriyi UYGULAMANI ONAYLADI; transkript o önerinin metnidir. "
-            "Bağlamı kullanarak istenen işlemi ŞİMDİ gerçekleştir; tekrar teyit isteme."
+            "Kullanıcı, rapordaki seçili öneriyi UYGULAMANI ONAYLADI; transkript yalnızca o önerinin metnidir. "
+            "Onay bu işlemle sınırlıdır; farklı işlemler ve gerekli güvenlik onayları için yeniden sor."
         )
     else:
         directive = (
-            "Bu komut muhtemelen az önceki işin devamı. Yeni komut önceki bağlamla İLİŞKİLİYSE bağlamı kullan; "
-            "ilişkisizse bağımsız yeni komut olarak ele al. Transkript bozuksa işlem yapma, onay iste."
+            "Kullanıcı bu işe devam mesajı gönderdi. Bu bağlantı önceki önerilerin uygulanmasına onay değildir. "
+            "Yeni mesajdaki isteği yanıtla; kapsamı belirsiz veya transkript bozuksa işlem yapma, açıklama iste."
         )
     return (
         "BAĞLAM (devam eden konuşma):\n"
@@ -1009,14 +1011,9 @@ def create_openclaw_job(
 ) -> dict:
     effective_transcript = transcript.strip()
 
-    # Konusma surekliligi: acik devam (oneri onayi) veya son isten 180 sn
-    # icinde gelen komut ayni konusmanin devami sayilir; onceki isin
-    # baglami prompt'a eklenir ki ajan ipin ucunu kaybetmesin.
+    # The caller owns the selected parent. A newer job, delayed delivery, or
+    # long-running task must never silently change that choice.
     conversation_id = uuid.uuid4().hex[:8]
-    if continue_job is None and jobs_db:
-        last_job = max(jobs_db.values(), key=lambda j: j["created_at"])
-        if time.time() - last_job["created_at"] < 180:
-            continue_job = last_job
     if continue_job is not None:
         conversation_id = continue_job.get("conversation_id", conversation_id)
 
@@ -1158,6 +1155,42 @@ def parse_shortcut_text(payload: dict | str) -> tuple[str, str | None]:
     return "", payload.get("client_timestamp")
 
 
+def resolve_command_context(payload: dict | str, *, allow_approval: bool = False) -> tuple[dict | None, str | None]:
+    """Resolve a named parent and, only for an explicit action, its full text."""
+    if isinstance(payload, str):
+        return None, None
+    if not isinstance(payload, dict):
+        raise ValueError("Expected a command object or text.")
+    intent = payload.get("intent", "follow_up")
+    if intent not in ("follow_up", "approve_suggestion"):
+        raise ValueError("Unknown command intent.")
+    parent_id = payload.get("continue_job_id")
+    parent = None
+    if "continue_job_id" in payload:
+        if not isinstance(parent_id, str) or not parent_id.strip():
+            raise ValueError("Invalid continuation job. Open the report and try again.")
+        parent = jobs_db.get(parent_id)
+        if parent is None:
+            raise ValueError("Continuation job is unavailable. Open Jobs and choose an existing report.")
+        sync_job_status(parent)
+        if parent.get("status") not in {"completed", "failed"}:
+            raise ValueError("The selected job is still running. Wait for its result before continuing.")
+    if intent == "follow_up":
+        if "next_action_id" in payload:
+            raise ValueError("An action selection requires explicit suggestion approval.")
+        return parent, None
+    if not allow_approval or parent is None or parent.get("status") != "completed":
+        raise ValueError("Suggestion approval requires a completed job report.")
+    action_id = payload.get("next_action_id")
+    actions = get_explicit_next_actions(parent)
+    if parent.get("next_action_actor") == "agent" and not is_no_op_next_action(parent.get("next_action") or ""):
+        actions.append({"id": "suggested-next-action", "kind": "agent_command", "label": parent["next_action"]})
+    selected = [action for action in actions if action["id"] == action_id and action["kind"] == "agent_command"]
+    if len(selected) != 1:
+        raise ValueError("This suggestion is unavailable or cannot be applied by the agent. Refresh the report.")
+    return parent, clean_text(selected[0]["label"])
+
+
 def parse_wait_seconds(payload: dict | str, query: dict[str, list[str]]) -> float:
     raw_value = None
     if isinstance(payload, dict):
@@ -1224,6 +1257,17 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         if self._reject_unauthorized(path):
+            return
+        if path == "/api/v1/capabilities":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
+            }).encode("utf-8"))
+            return
+        if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):
+            handle_session_request(self, "GET", path, parse_qs(parsed_url.query))
             return
         if path in {"/", "/shortcuts", "/api/v1/shortcuts/command"}:
             self.send_response(200)
@@ -1393,6 +1437,9 @@ Content-Type: application/json
         query = parse_qs(parsed_url.query)
         if self._reject_unauthorized(path):
             return
+        if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):
+            handle_session_request(self, "POST", path, query)
+            return
         if path == "/api/v1/push/register":
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
@@ -1508,7 +1555,17 @@ Content-Type: application/json
             else:
                 payload = body.decode("utf-8", errors="replace")
 
+            try:
+                continue_job, approved_text = resolve_command_context(payload, allow_approval=True)
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(exc), "shortcut_text": str(exc)}).encode("utf-8"))
+                return
             transcript, client_timestamp = parse_shortcut_text(payload)
+            if approved_text is not None:
+                transcript = approved_text
             if not transcript:
                 request_locale = str(payload.get("locale") or "") if isinstance(payload, dict) else ""
                 self.send_response(400)
@@ -1520,18 +1577,12 @@ Content-Type: application/json
                 }).encode("utf-8"))
                 return
 
-            continue_job = None
-            approved_suggestion = False
-            if isinstance(payload, dict):
-                continue_job = jobs_db.get(str(payload.get("continue_job_id") or ""))
-                approved_suggestion = continue_job is not None
-
             job = create_openclaw_job(
                 transcript=transcript,
                 source="shortcut",
                 client_timestamp=client_timestamp,
                 continue_job=continue_job,
-                approved_suggestion=approved_suggestion,
+                approved_suggestion=approved_text is not None,
                 locale=str(payload.get("locale") or "") if isinstance(payload, dict) else "",
             )
             wait_for_job_completion(job, parse_wait_seconds(payload, query))
@@ -1560,7 +1611,10 @@ Content-Type: application/json
                 self.wfile.write(json.dumps({"error": "Validation failed", "details": errors}).encode("utf-8"))
                 return
 
-            audio_fingerprint = hashlib.sha256(payload["audio_data"].encode("utf-8")).hexdigest()
+            fingerprint_material = payload["audio_data"]
+            if "continue_job_id" in payload:
+                fingerprint_material += "\ncontinue_job_id=" + payload["continue_job_id"]
+            audio_fingerprint = hashlib.sha256(fingerprint_material.encode("utf-8")).hexdigest()
             duplicate_job = next(
                 (
                     candidate
@@ -1577,6 +1631,14 @@ Content-Type: application/json
                 sync_job_status(duplicate_job)
                 resp_payload = build_watch_command_response(duplicate_job)
             else:
+                try:
+                    continue_job, _ = resolve_command_context(payload)
+                except ValueError as exc:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+                    return
                 stt_result = stt_client.transcribe_watch_payload(payload)
                 effective_transcript = stt_result.transcript.strip()
                 job = create_openclaw_job(
@@ -1584,6 +1646,7 @@ Content-Type: application/json
                     source=stt_result.source,
                     client_timestamp=payload.get("client_timestamp"),
                     stt_error=stt_result.error or "",
+                    continue_job=continue_job,
                     locale=str(payload.get("locale") or ""),
                 )
                 job["audio_fingerprint"] = audio_fingerprint

@@ -1,6 +1,6 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **9 Eylül 2026**
+Son güncelleme: **10 Eylül 2026**
 
 ## Geliştirme adayı — güvenli devam ve telefon konuşmaları
 
@@ -23,12 +23,16 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - Yerel 139 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
   ekranlar arasında korunması, kontrol metni normalizasyonu, terminal durumun
   gerilememesi ve izole test temizliği bağımsız son incelemeden geçti.
-  Apple derlemesi ve gerçek ekran kontrolleri için yalnız geliştirme dalına
-  commit/push ve `validation_only` çalışma izni var; native sonuç henüz
-  doğrulanmış sayılmıyor.
-- Kalıcı, yalnız metadata içeren yerel gönderim kaydı için ayrıca kullanıcı
-  kararı bekleniyor; SQLite/OpenClaw veritabanı değişikliği yapılmadı.
-- Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
+  Yalnız geliştirme dalına commit/push ve `validation_only` çalışma izniyle
+  Apple derlemesi ve otomatik ekran kontrolleri de geçti. Son görsel inceleme
+  telefonda kontrast kusuru buldu; görsel kabul ve dağıtım hâlâ açık.
+- 10 Eylül'de kullanıcı telefon ve Ceviz yardımcı servisinde yalnız gönderim/
+  hedef kimliği ve durum tutan yerel SQLite kayıtlarını açıkça onayladı.
+  Uygulama yapılıyor; konuşma metni/erişim anahtarı kaydedilmiyor ve
+  OpenClaw veritabanına dokunulmuyor. Güncel Apple kanıtı henüz alınmadı.
+- Yeni TestFlight build'i iç test için onaylandı; dış Beta otomatik açılmayacak.
+  Ceviz servisini kısa süre yeniden başlatma onayı ayrıca bekleniyor.
+  Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
   değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
   bağımsız ajan incelemesi ve kaynak/sözleşme/regresyon kontrolleri kullanılıyor.
 
@@ -49,6 +53,52 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - İlk özellik commit'i: üretim kodu **+1.554 / -110**, testler **+1.489**;
   doğrulama tanımları **+52**, dokümantasyon **+128 / -1** satır. Bu ölçüm
   sonraki taşınabilirlik düzeltmesini içermez.
+
+### İkinci Apple doğrulaması — testler geçti, görsel düzeltme kaldı
+
+- Kod commit'i `110dca837bb1650d0f8f971715efdfec14d988c4`;
+  [yalnız doğrulama çalışması](https://github.com/MertBasar0/ceviz/actions/runs/34298580583).
+  Python/sözleşme, bildirim, Ruby, sekiz Swift regresyon programı ve
+  iPhone/Watch/widget simülatör derlemesi geçti. `validation_only=true`;
+  TestFlight dağıtımı istenmedi.
+- Xcode **26.6**, iOS/watchOS SDK **26.5**. 42 mm Watch normal açılış görüntüsü
+  incelendi: hazır başlığı, 15 saniye bilgisi ve mikrofon düğmesi görünür.
+  Üç uygulama paketinin yerel ad-hoc kimlik/imza kontrolü geçti.
+- Genel simülatör URL yoklaması yine **115** döndü; kaynak artefaktında
+  `capture_url.status=failed` ve `widget_tap.status=not_tested` korunuyor.
+  Bu kadran dokunuşu başarısı veya dağıtım onayı değildir.
+- Çalışma **9 Eylül 05:04 Türkiye saati** civarında başarıyla tamamlandı;
+  önceki oturumda sonuç takibi ve son görsel inceleme yarım kalmıştı.
+  Sertifika içe aktarma, ASC anahtarı, TestFlight yüklemesi ve dağıtım **skipped**.
+- **7 Watch XCTest / 5 koşu**, 40 mm ve 49 mm, sıfır hata; **6 telefon XCTest**,
+  sıfır hata. 10 Eylül'de 36 Watch görüntüsü bağımsız incelendi; 10 telefon
+  görüntüsü ana incelemede açıldı. Watch kontrolleri görünür; 40 mm en büyük
+  yazıda Türkçe Gönder düğmesinin iç boşluğu dar. İki cihazda yazı büyütme ve
+  özgün ayara dönüş geometrisi doğrulandı.
+- Gerçek kayıt dosyaları: manuel **9,788 sn / 25.196 bayt**, otomatik
+  **14,908 sn / 25.516 bayt**, mono 16 kHz. Watch bitiş ekranındaki Deploy #8841
+  sonucu eşleşmemiş telefonun demo içeriğidir; gerçek Gateway komut yürütme
+  kanıtı değildir. Telefon senaryoları da izole Gateway test verisiyle çalıştı.
+- **Görsel kabul tamamlanmış sayılmıyor:** telefon konuşma detayındaki sistem
+  başlığı/durum çubuğu ve boş mesaj alanı yazısı koyu zeminde çok düşük
+  kontrastlı. Liste ekranları EN/TR okunabilir; detayın açık/koyu görünüm
+  tutarlılığı düzeltilip yeni ekran kanıtı alınmalı. Otomatik testlerin geçmesi
+  bu kusuru kapatmıyor. 10 Eylül'deki yeni düzeltme kök uygulama görünümünü
+  mevcut sabit koyu tasarımla eşledi; eski görüntü yeni başlık kontrast
+  hesabında 1,0 ile 4,5 eşiğinin altında kaldı. Yeni native koşu bekleniyor.
+- Kalıcılık onayı alındı. Yeni yardımcı servis testlerinde aynı kimliğin
+  yeniden gönderilmesi ve terminal durumun restart'ta kaybolması önce
+  üretildi, sonra düzeltmeyle geçti. Windows **146** Python testi, Linux
+  **31** oturum + **5** fixture testi geçti. Telefonun disk/restart ve
+  kullanıcı kontrollü belirsizlikten çıkış kanıtı henüz Apple'da çalışmadı.
+- Kalıcı helper kaydının 512 kimlik sınırı görünür hata ile korunuyor;
+  kimlik silerek yeniden gönderim açılmıyor. Sürdürülebilir kapasite yönetimi
+  ayrı takip maddesi. Fiziksel cihaz kabulü de açık.
+- Yeni kod için yerel tam test yeniden çalıştırıldı: **146 Python / 3 Node**
+  testi geçti; iş akışı, installer ve Doctor kabuk sözdizimi temiz. Dokuz
+  telefon ekranı testi yazıldı; Apple'da çalışmadan geçmiş sayılmıyor.
+  Saat ve telefon kanıtları bağımsız paralel işlere ayrıldı; aynı kod
+  kimliğindeki iki iş de başarılı olmadıkça imza/yükleme işi çalışamaz.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

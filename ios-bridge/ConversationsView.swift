@@ -158,6 +158,7 @@ private struct ConversationDetailView: View {
     @State private var showingEarlierMessages = false
     @State private var shouldScrollToLatest = true
     @State private var latestScrollRevision = 0
+    @State private var reviewingDelivery: (delivery: ConversationDelivery, scope: ConversationSessionScope)?
 
     private var scope: ConversationSessionScope { conversationStore.scope(for: selected.sessionKey) }
     private var sessionState: ConversationSessionState { conversationStore.state(for: scope) }
@@ -165,12 +166,13 @@ private struct ConversationDetailView: View {
     private var submission: ConversationSubmission { sessionState.submission }
     private var submissionError: String? { sessionState.error }
     private var draftBinding: Binding<String> {
-        Binding(get: { draft }, set: { value in conversationStore.update(scope) { $0.draft = value } })
+        Binding(get: { draft }, set: { conversationStore.updateDraft($0, in: scope) })
     }
     private var target: OpenClawConversation { history?.session ?? selected }
     private var canSend: Bool {
         history?.session.sessionKey == selected.sessionKey && history?.session.sessionId != nil &&
-            target.canSend && !target.archived && error == nil && !submission.preventsNewMessage &&
+            target.canSend && !target.archived && error == nil && conversationStore.storageError == nil &&
+            !submission.preventsNewMessage &&
             !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -234,6 +236,18 @@ private struct ConversationDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(submission.isSending)
         .toolbar(.visible, for: .navigationBar)
+        .confirmationDialog("Start a new message after reviewing?", isPresented: Binding(
+            get: { reviewingDelivery != nil }, set: { if !$0 { reviewingDelivery = nil } }
+        ), titleVisibility: .visible) {
+            if let review = reviewingDelivery {
+                Button("I reviewed it — start a new message") {
+                    conversationStore.finishReview(review.delivery, in: review.scope)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message.")
+        }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             if history == nil || !showingEarlierMessages { await loadHistory() }
@@ -271,6 +285,10 @@ private struct ConversationDetailView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let storageError = conversationStore.storageError {
+                Text(storageError).font(.caption).foregroundColor(CVZ.warn)
+                    .accessibilityIdentifier("conversation.storageError")
+            }
             if let submissionError {
                 Text(submissionError).font(.caption).foregroundColor(CVZ.warn)
                     .accessibilityIdentifier("conversation.submissionError")
@@ -281,13 +299,19 @@ private struct ConversationDetailView: View {
                 Text("This conversation is read only. Its current message target could not be verified.")
                     .font(.subheadline).foregroundColor(CVZ.warn)
             } else {
-                if case let .tracking(_, _, run) = submission {
+                if case let .tracking(delivery, run) = submission {
                     Text(LocalizedStringKey(run?.statusKey ?? "Delivery is not confirmed. Check the conversation before sending again."))
                         .font(.caption).foregroundColor(CVZ.warn)
                         .accessibilityIdentifier("conversation.status")
                     Button("Check status") { Task { await checkRun(); await loadHistory() } }
                         .font(.subheadline)
                         .accessibilityIdentifier("conversation.check")
+                    if run == nil || run?.status == "unconfirmed" {
+                        Button("Continue after reviewing") { reviewingDelivery = (delivery, scope) }
+                            .font(.subheadline)
+                            .disabled(conversationStore.storageError != nil)
+                            .accessibilityIdentifier("conversation.review")
+                    }
                 }
                 HStack(alignment: .bottom, spacing: 10) {
                     TextField("Message this conversation", text: draftBinding, axis: .vertical)
@@ -360,57 +384,42 @@ private struct ConversationDetailView: View {
             expectedLeafEntryId: history?.session.activeLeafEntryId
         )
         let requestScope = scope
-        conversationStore.update(requestScope) {
-            $0.submission = .sending(payload)
-            $0.error = nil
-        }
         do {
-            let receipt = try await ConversationClient.send(payload)
+            // Freeze the URL and credential before suspension, alongside the
+            // delivery owner. A later pairing change must not retarget this send.
+            let request = try ConversationClient.messageRequest(payload)
+            guard conversationStore.beginSend(payload.delivery, in: requestScope) else { return }
+            let receipt = try await ConversationClient.load(request, as: OpenClawConversationReceipt.self)
             guard conversationStore.isCurrent(requestScope) else { return }
-            // An HTTP response acknowledges delivery, not success of the user's task.
-            let status: String
-            switch receipt.status {
-            case "started", "in_flight": status = "running"
-            case "pending": status = "queued"
-            default: status = "unknown"
-            }
-            let run = OpenClawConversationRun(
-                runId: receipt.runId, status: receipt.deliveryConfirmed ? status : "unconfirmed", detail: nil
-            )
-            conversationStore.update(requestScope) {
-                $0.submission = .tracking(payload, runId: receipt.runId, run: run)
-                if receipt.deliveryConfirmed { $0.draft = "" }
-            }
+            guard receipt.runId == payload.requestId else { throw URLError(.badServerResponse) }
+            conversationStore.acknowledge(receipt, delivery: payload.delivery, in: requestScope)
             shouldScrollToLatest = true
             await loadHistory()
         } catch {
             guard conversationStore.isCurrent(requestScope) else { return }
-            conversationStore.update(requestScope) { $0.error = error.localizedDescription }
-            if let serviceError = error as? ConversationServiceError, !serviceError.deliveryUncertain {
-                conversationStore.update(requestScope) { $0.submission = .idle }
-                await loadHistory()
-            } else {
-                // Never resend automatically: an interrupted response may already be accepted.
-                conversationStore.update(requestScope) { $0.submission = .tracking(payload, runId: payload.requestId, run: nil) }
-            }
+            let rejected = (error as? ConversationServiceError)?.deliveryUncertain == false
+            conversationStore.recordError(error.localizedDescription, in: requestScope)
+            conversationStore.rejectSend(error.localizedDescription, delivery: payload.delivery,
+                                         definitelyNotSent: rejected, in: requestScope)
+            if rejected { await loadHistory() }
         }
     }
 
     @MainActor
     private func checkRun() async {
-        guard case let .tracking(payload, runId, prior) = submission, prior?.isTerminal != true else { return }
+        guard case let .tracking(delivery, prior) = submission, prior?.isTerminal != true else { return }
         let requestScope = scope
         do {
             let request = try ConversationClient.request("/run", query: [
-                URLQueryItem(name: "session_key", value: payload.sessionKey), URLQueryItem(name: "run_id", value: runId),
+                URLQueryItem(name: "session_key", value: delivery.sessionKey), URLQueryItem(name: "run_id", value: delivery.requestId),
             ])
             let run = try await ConversationClient.load(request, as: OpenClawConversationRun.self)
             guard !Task.isCancelled,
-                  conversationStore.recordRun(run, request: payload, in: requestScope) else { return }
+                  conversationStore.recordRun(run, delivery: delivery, in: requestScope) else { return }
             if run.isTerminal { shouldScrollToLatest = true }
         } catch {
             guard !Task.isCancelled, conversationStore.isCurrent(requestScope) else { return }
-            conversationStore.update(requestScope) { $0.error = error.localizedDescription }
+            conversationStore.recordError(error.localizedDescription, in: requestScope)
         }
     }
 }

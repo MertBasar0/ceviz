@@ -153,3 +153,10 @@
 "RESET CONNECTION" = "BAĞLANTIYI SIFIRLA";
 "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere." = "Aynı Wi-Fi relay trafiği şifrelenmez. Yalnızca güvendiğiniz yerel ağda kullanın; diğer ağlarda Tailscale'i tercih edin.";
 "Use HTTPS, or choose Same Wi-Fi with a local relay address." = "HTTPS kullanın veya yerel relay adresiyle Aynı Wi-Fi seçeneğini seçin.";
+"Message tracking is unavailable. Restart Ceviz and check the conversation before sending again." = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce Ceviz'i yeniden başlatıp konuşmayı kontrol edin.";
+"Continue after reviewing" = "Kontrol ettikten sonra devam et";
+"conversation.error.tracking_unavailable" = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce konuşmayı kontrol edin.";
+"conversation.error.request_capacity" = "Gönderim takibi dolu. Hiçbir komut gönderilmedi. Ceviz desteğiyle iletişime geçin; tekrar denemek için takip verisini silmeyin.";
+"Start a new message after reviewing?" = "Kontrol ettikten sonra yeni mesaja geçilsin mi?";
+"I reviewed it — start a new message" = "Kontrol ettim — yeni mesaja geç";
+"The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message." = "Önceki mesaj hâlâ işlenebilir. Bu adım onu tekrar göndermez veya iptal etmez. Yeni mesaja geçmeden önce konuşmayı kontrol edin.";

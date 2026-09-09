@@ -34,15 +34,30 @@ uses the normal text keyboard, including system dictation when available.
 - The phone generates one UUID per attempted message. Acknowledgment is not
   task success. The UI separately shows queued, running, finished, stopped,
   failed and unconfirmed states.
-- A timeout never triggers automatic resubmission. The draft and exact request
-  identity remain available for status checks during the current app session.
+- A timeout never triggers automatic resubmission. The draft stays in memory
+  during the current app session. Local SQLite metadata preserves the exact
+  delivery identity and status across phone/helper restarts, without storing
+  conversation text or credentials in those journals.
 - The helper records the message's owner before submission and checks only
   matching run results. A bare `agent.wait` timeout is unknown, not failure;
   a terminal result stays terminal after Gateway result-cache expiry.
-- The current candidate keeps helper receipt metadata in memory, capped at
-  512 submissions. Capacity exhaustion rejects new submissions instead of
-  evicting request identities. Restart-safe local persistence is pending an
-  explicit operator decision and must be resolved before distribution.
+- The helper commits ownership before dispatch in `conversations.sqlite`
+  under its existing `WATCH_CEVIZ_STATE_DIR`. It retains at most 512 request
+  identities without automatic eviction. Capacity exhaustion visibly rejects
+  new messages; restarting does not reset this limit. A safe capacity/retention
+  management flow is a named follow-up, not permission to delete replay guards.
+- The phone keeps its last delivery per conversation and pairing in its private
+  Application Support SQLite journal, excluded from device backup. A hashed
+  pairing identifier separates connections; switching back restores that
+  pairing's guard. Late callbacks from a previous pairing are ignored.
+- A disk failure prevents a new send. Once dispatch is possible, missing
+  evidence remains **unconfirmed**: no timeout or restart proves non-execution.
+  A result never observed before upstream retention expires may stay unknown.
+- **Continue after reviewing** is available only for an unconfirmed delivery.
+  Its confirmation explains that the earlier message may still run. It records
+  an operator-reviewed state, clears the old draft and opens an empty composer;
+  it neither retries nor cancels the old request, nor removes the helper's
+  deduplication record. Queued/running messages cannot use this action.
 - Neither opening a conversation nor choosing an assistant changes the
   Watch's destination. Gateway model and permission settings remain in force.
 
@@ -93,5 +108,11 @@ Python tests cover real local HTTP routes and injected Gateway calls without
 running a model. Native phone tests pair the real app normally with an isolated
 helper/Gateway fixture, then navigate, read history and submit test messages.
 Simulator screenshots must be inspected before calling UI verification complete.
-Live production sends, physical Watch continuation, app/helper restart recovery
-and mixed-version device delivery remain separate acceptance checks.
+Python tests exercise real SQLite reopen, competing helpers, child-process
+crash after dispatch, corruption and write failure. Native tests include app
+termination/helper reconstruction, explicit review without a second send,
+and light/dark system appearance against Ceviz's fixed dark palette. Current
+test results and native proof are recorded in `STATUS.md`; test definitions
+alone are not evidence that a candidate passed.
+Live production sends, physical Watch continuation and mixed-version device
+delivery remain separate acceptance checks.

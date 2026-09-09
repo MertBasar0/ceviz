@@ -47,11 +47,11 @@ enum ConversationClient {
         return try JSONDecoder().decode(type, from: data)
     }
 
-    static func send(_ payload: OpenClawConversationRequest) async throws -> OpenClawConversationReceipt {
+    static func messageRequest(_ payload: OpenClawConversationRequest) throws -> URLRequest {
         var request = try request("/message")
         request.httpMethod = "POST"
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-        return try await load(request, as: OpenClawConversationReceipt.self)
+        return request
     }
 }

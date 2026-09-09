@@ -3,8 +3,10 @@ import io
 import http.client
 import json
 import socket
+import sqlite3
 import subprocess
 import sys
+import tempfile
 import unittest
 import threading
 import time
@@ -33,7 +35,10 @@ def snapshot(**changes):
 
 class ConversationTests(unittest.TestCase):
     def setUp(self):
-        self.api = session_api.OpenClawSessions()
+        self.temporary = tempfile.TemporaryDirectory(prefix="ceviz-session-test-")
+        self.addCleanup(self.temporary.cleanup)
+        self.state_path = Path(self.temporary.name) / "conversations.sqlite"
+        self.api = session_api.OpenClawSessions(self.state_path)
 
     def test_roster_reuses_tui_window_titles_and_gateway_order(self):
         rows = [
@@ -198,6 +203,108 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(result["status"], "unconfirmed")
         rpc.assert_not_called()
 
+    def test_recreated_helper_does_not_dispatch_same_identity_again(self):
+        original = self.accept()
+        self.api = session_api.OpenClawSessions(self.state_path)
+        with patch.object(session_api, "call_gateway", side_effect=[snapshot(), {"runId": RUN, "status": "started"}]) as rpc:
+            self.assertEqual(self.api.send_message(self.message()), original)
+        rpc.assert_not_called()
+
+    def test_recreated_helper_retains_terminal_evidence_after_gateway_expiry(self):
+        self.accept()
+        with patch.object(session_api, "call_gateway", side_effect=[snapshot(), {"runId": RUN, "status": "ok", "endedAt": 100}]):
+            completed = self.api.run_status({"session_key": [KEY], "run_id": [RUN]})
+        self.api = session_api.OpenClawSessions(self.state_path)
+        with patch.object(session_api, "call_gateway", return_value=snapshot()) as rpc:
+            self.assertEqual(self.api.run_status({"session_key": [KEY], "run_id": [RUN]}), completed)
+        rpc.assert_not_called()
+
+    def test_process_crash_after_dispatch_keeps_ambiguous_identity_without_message_text(self):
+        code = """
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+import session_api
+payload, snapshot = json.loads(sys.argv[3]), json.loads(sys.argv[4])
+def gateway(method, params):
+    if method == 'chat.history': return snapshot
+    print('chat.send entered', flush=True)
+    os._exit(0)
+session_api.call_gateway = gateway
+session_api.OpenClawSessions(__import__('pathlib').Path(sys.argv[2])).send_message(payload)
+"""
+        result = subprocess.run([sys.executable, "-B", "-c", code,
+                                 str(Path(session_api.__file__).parent), str(self.state_path),
+                                 json.dumps(self.message()), json.dumps(snapshot())],
+                                capture_output=True, text=True, timeout=5, check=True)
+        self.assertEqual(result.stdout.strip(), "chat.send entered")
+        self.assertNotIn(self.message()["text"].encode(), self.state_path.read_bytes())
+        with patch.object(session_api, "call_gateway") as rpc:
+            replay = self.api.send_message(self.message())
+            self.assertEqual(replay["status"], "unconfirmed")
+            self.assertFalse(replay["delivery_confirmed"])
+            with self.assertRaises(session_api.SessionError) as conflict:
+                self.api.send_message(self.message(text="Different action"))
+            self.assertEqual(conflict.exception.code, "message_identity_conflict")
+        rpc.assert_not_called()
+
+    def test_unavailable_or_corrupt_tracking_fails_closed_before_gateway(self):
+        for target in [Path(self.temporary.name), self.state_path]:
+            if target == self.state_path:
+                target.write_bytes(b"not a SQLite database")
+            api = session_api.OpenClawSessions(target)
+            with self.subTest(target=target.name), patch.object(session_api, "call_gateway") as rpc:
+                with self.assertRaises(session_api.SessionError) as failure:
+                    api.send_message(self.message())
+                self.assertEqual(failure.exception.code, "tracking_unavailable")
+                self.assertFalse(failure.exception.uncertain)
+                rpc.assert_not_called()
+
+    def test_readonly_ack_write_after_admission_is_uncertain_and_cannot_replay(self):
+        original_connect = sqlite3.connect
+        readonly = patch.object(session_api.sqlite3, "connect", side_effect=lambda *_args, **_kwargs:
+                                original_connect(self.state_path.as_uri() + "?mode=ro", uri=True))
+
+        def gateway(method, _params):
+            if method == "chat.history":
+                return snapshot()
+            readonly.start()
+            return {"runId": RUN, "status": "started"}
+
+        try:
+            with patch.object(session_api, "call_gateway", side_effect=gateway):
+                with self.assertRaises(session_api.SessionError) as failure:
+                    self.api.send_message(self.message())
+                self.assertTrue(failure.exception.uncertain)
+                self.assertEqual(failure.exception.code, "tracking_unavailable")
+        finally:
+            readonly.stop()
+        self.api = session_api.OpenClawSessions(self.state_path)
+        with patch.object(session_api, "call_gateway") as rpc:
+            self.assertEqual(self.api.send_message(self.message())["status"], "unconfirmed")
+        rpc.assert_not_called()
+
+    def test_competing_helpers_reserve_one_dispatch_and_preserve_terminal_outcome(self):
+        from concurrent.futures import ThreadPoolExecutor
+        # Bootstrap before racing two independent process-owner connections.
+        self.api.store.get(RUN)
+        other = session_api.OpenClawSessions(self.state_path)
+        both_preflight = threading.Barrier(2)
+        calls = []
+
+        def gateway(method, _params):
+            if method == "chat.history":
+                both_preflight.wait(timeout=3)
+                return snapshot()
+            calls.append(method)
+            return {"runId": RUN, "status": "started"}
+
+        with patch.object(session_api, "call_gateway", side_effect=gateway), ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(api.send_message, self.message()) for api in [self.api, other]]
+            self.assertTrue(all(attempt.result(timeout=5)["run_id"] == RUN for attempt in attempts))
+        self.assertEqual(calls, ["chat.send"])
+        self.api.store.record_terminal(RUN, "completed")
+        self.assertEqual(other.store.record_terminal(RUN, "failed")["status"], "completed")
+
     def test_terminal_cli_run_needs_no_ui_history_receipt_and_never_regresses(self):
         self.accept()
         with patch.object(session_api, "call_gateway", side_effect=[snapshot(), {"runId": RUN, "status": "ok", "endedAt": 100}]) as rpc:
@@ -209,8 +316,7 @@ class ConversationTests(unittest.TestCase):
             rpc.assert_not_called()
 
     def test_wait_timeouts_are_not_automatically_failed_and_queue_is_not_completed(self):
-        self.accept()
-        for wait, expected in [
+        for index, (wait, expected) in enumerate([
             ({"status": "timeout"}, "unconfirmed"),
             ({"status": "ok", "endedAt": True}, "unconfirmed"),
             ({"status": "ok", "endedAt": float("nan")}, "unconfirmed"),
@@ -218,8 +324,9 @@ class ConversationTests(unittest.TestCase):
             ({"status": "timeout", "endedAt": 200}, "failed"),
             ({"status": "pending", "providerStarted": False}, "queued"),
             ({"status": "error", "endedAt": 200, "stopReason": "aborted"}, "aborted"),
-        ]:
-            self.api.submissions[RUN].terminal_result = None
+        ]):
+            self.api = session_api.OpenClawSessions(Path(self.temporary.name) / f"outcome-{index}.sqlite")
+            self.accept()
             with self.subTest(wait=wait), patch.object(session_api, "call_gateway", side_effect=[snapshot(), {"runId": RUN, **wait}]):
                 self.assertEqual(self.api.run_status({"session_key": [KEY], "run_id": [RUN]})["status"], expected)
 
@@ -243,13 +350,14 @@ class ConversationTests(unittest.TestCase):
 
     def test_capacity_never_retires_an_identity_then_replays_it(self):
         for index in range(512):
-            self.api.submissions[str(index)] = session_api.Submission(KEY, "physical-1", "fingerprint",
-                terminal_result={"status": "completed"})
+            self.api.store.reserve(str(index), session_api.Submission(KEY, "physical-1", "fingerprint"))
         with patch.object(session_api, "call_gateway", return_value=snapshot()) as rpc:
             with self.assertRaises(session_api.SessionError) as caught:
                 self.api.send_message(self.message())
         self.assertEqual(caught.exception.code, "request_capacity")
-        self.assertEqual(len(self.api.submissions), 512)
+        self.assertIsNotNone(self.api.store.get("0"))
+        self.assertIsNotNone(self.api.store.get("511"))
+        self.assertIsNone(self.api.store.get(RUN))
         rpc.assert_called_once()
 
 
@@ -258,7 +366,10 @@ class ConversationHTTPTests(unittest.TestCase):
         import main
         self.main = main
         self.auth = patch.object(main, "AUTH_TOKEN", "ceviz-test-only")
-        self.api = patch.object(session_api, "sessions_api", session_api.OpenClawSessions())
+        temporary = tempfile.TemporaryDirectory(prefix="ceviz-session-http-test-")
+        self.addCleanup(temporary.cleanup)
+        self.api = patch.object(session_api, "sessions_api",
+                                session_api.OpenClawSessions(Path(temporary.name) / "conversations.sqlite"))
         self.auth.start()
         self.api.start()
         self.server = main.HTTPServer(("127.0.0.1", 0), main.WatchCevizHandler)

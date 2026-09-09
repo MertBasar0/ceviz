@@ -15,6 +15,7 @@ from phone_ui_fixture import TOKEN, MAIN_KEY, BUSY_KEY
 
 
 class PhoneUIFixtureTests(unittest.TestCase):
+    api_token = TOKEN
     @classmethod
     def setUpClass(cls):
         with socket.socket() as reserved:
@@ -63,9 +64,28 @@ class PhoneUIFixtureTests(unittest.TestCase):
     def http(cls, path, payload=None):
         req = request.Request(cls.base + path,
                               data=json.dumps(payload).encode() if payload is not None else None,
-                              headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
+                              headers={"Authorization": "Bearer " + (TOKEN if path.startswith("/__fixture/") else cls.api_token),
+                                       "Content-Type": "application/json"})
         with request.urlopen(req, timeout=3) as response:
-            return json.loads(response.read())
+            result = json.loads(response.read())
+        if path.startswith("/__fixture/reset"):
+            cls.api_token = result["pairing_token"]
+        return result
+
+    def test_helper_restart_preserves_owner_and_scenario_reset_uses_new_pairing(self):
+        first = self.http("/__fixture/reset?scenario=uncertain")
+        payload = {"session_key": MAIN_KEY, "session_id": "planner-session", "expected_leaf_entry_id": "planner-leaf",
+                   "text": "Check route after restart", "request_id": "a3f743fd-1c15-4140-a3e7-714a1b6314cd"}
+        with self.assertRaises(error.HTTPError):
+            self.http("/api/v1/sessions/message", payload)
+        restarted = self.http("/__fixture/restart_helper")
+        self.assertEqual(restarted["helper_generation"], first["helper_generation"] + 1)
+        self.assertEqual(restarted["pairing_token"], first["pairing_token"])
+        self.assertEqual(self.http("/api/v1/sessions/message", payload)["status"], "unconfirmed")
+        self.assertEqual(len(self.http("/__fixture/state")["send_calls"]), 1)
+        replacement = self.http("/__fixture/reset?scenario=normal")
+        self.assertNotEqual(replacement["pairing_token"], first["pairing_token"])
+        self.assertEqual(replacement["send_calls"], [])
 
     def test_native_fixture_uses_canonical_list_history_and_guarded_send(self):
         self.assertEqual(self.http("/__fixture/reset?scenario=normal")["pid"], self.process.pid)

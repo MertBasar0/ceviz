@@ -288,6 +288,9 @@ struct CompanionApp: App {
                 }
                 .onAppear(perform: applyLaunchRouteIfNeeded)
             }
+            // CVZ uses a fixed dark palette. System chrome and input controls
+            // must use the same appearance, including on a light-mode phone.
+            .preferredColorScheme(.dark)
             .environmentObject(conversationStore)
             .onReceive(NotificationCenter.default.publisher(for: BackendConfig.connectionDidChange)) { _ in
                 conversationStore.synchronizeConnection(baseURL: BackendConfig.baseURLString, token: BackendConfig.token)

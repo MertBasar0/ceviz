@@ -153,3 +153,10 @@
 "RESET CONNECTION" = "RESET CONNECTION";
 "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere." = "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere.";
 "Use HTTPS, or choose Same Wi-Fi with a local relay address." = "Use HTTPS, or choose Same Wi-Fi with a local relay address.";
+"Message tracking is unavailable. Restart Ceviz and check the conversation before sending again." = "Message tracking is unavailable. Restart Ceviz and check the conversation before sending again.";
+"Continue after reviewing" = "Continue after reviewing";
+"conversation.error.tracking_unavailable" = "Message tracking is unavailable. Check the conversation before sending again.";
+"conversation.error.request_capacity" = "Message tracking is full. No command was sent. Contact Ceviz support; do not delete tracking data to retry.";
+"Start a new message after reviewing?" = "Start a new message after reviewing?";
+"I reviewed it — start a new message" = "I reviewed it — start a new message";
+"The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message." = "The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message.";

@@ -89,6 +89,10 @@ struct OpenClawConversationRequest: Encodable, Equatable {
     let requestId: String
     let expectedLeafEntryId: String?
 
+    var delivery: ConversationDelivery {
+        ConversationDelivery(sessionKey: sessionKey, sessionId: sessionId, requestId: requestId)
+    }
+
     enum CodingKeys: String, CodingKey {
         case sessionKey = "session_key"
         case sessionId = "session_id"
@@ -145,11 +149,25 @@ struct OpenClawConversationRun: Decodable {
     }
 }
 
-/// The request survives an ambiguous HTTP result without becoming a new send.
+/// Recovery needs a target and identity, never a stored copy of the message.
+struct ConversationDelivery: Equatable {
+    let sessionKey: String
+    let sessionId: String
+    let requestId: String
+}
+
 enum ConversationSubmission {
     case idle
-    case sending(OpenClawConversationRequest)
-    case tracking(OpenClawConversationRequest, runId: String, run: OpenClawConversationRun?)
+    case sending(ConversationDelivery)
+    case tracking(ConversationDelivery, run: OpenClawConversationRun?)
+    case reviewed(ConversationDelivery)
+
+    var delivery: ConversationDelivery? {
+        switch self {
+        case .idle: return nil
+        case let .sending(delivery), let .tracking(delivery, _), let .reviewed(delivery): return delivery
+        }
+    }
 
     var isSending: Bool {
         if case .sending = self { return true }
@@ -158,9 +176,9 @@ enum ConversationSubmission {
 
     var preventsNewMessage: Bool {
         switch self {
-        case .idle: return false
+        case .idle, .reviewed: return false
         case .sending: return true
-        case let .tracking(_, _, run): return run?.isTerminal != true
+        case let .tracking(_, run): return run?.isTerminal != true
         }
     }
 }

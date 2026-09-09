@@ -8,13 +8,17 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import sqlite3
 import subprocess
 import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
+from contextlib import contextmanager
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from typing import Any
 
 
@@ -31,6 +35,97 @@ class Submission:
     fingerprint: str
     reply: dict | None = None
     terminal_result: dict | None = None
+
+
+class SubmissionStore:
+    """Ceviz-owned metadata journal; no transcripts or OpenClaw database access."""
+    def __init__(self, path: Path):
+        self.path = path
+
+    @contextmanager
+    def connection(self):
+        connection = None
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                descriptor = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                os.close(descriptor)
+            except FileExistsError:
+                pass
+            # Python's bundled SQLite is the storage owner for this standalone
+            # helper. Parameterized writes commit before any external dispatch.
+            connection = sqlite3.connect(self.path, timeout=3)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("""CREATE TABLE IF NOT EXISTS conversation_submissions (
+                request_id TEXT PRIMARY KEY, session_key TEXT NOT NULL,
+                session_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
+                reply_status TEXT, terminal_status TEXT
+                    CHECK (terminal_status IN ('completed', 'failed', 'aborted'))
+            )""")
+            with connection:
+                yield connection
+        except (OSError, sqlite3.Error) as exc:
+            raise SessionError("tracking_unavailable",
+                               "Message tracking is unavailable. Check the conversation before sending again.", 503) from exc
+        finally:
+            if connection is not None:
+                connection.close()
+
+    @staticmethod
+    def submission(row: sqlite3.Row | None) -> Submission | None:
+        if row is None:
+            return None
+        reply = None if row["reply_status"] is None else {
+            "run_id": row["request_id"], "status": row["reply_status"],
+            "delivery_confirmed": row["reply_status"] in {"started", "pending", "in_flight", "ok"},
+        }
+        terminal = None if row["terminal_status"] is None else {
+            "run_id": row["request_id"], "status": row["terminal_status"], "detail": None,
+        }
+        return Submission(row["session_key"], row["session_id"], row["fingerprint"], reply, terminal)
+
+    def get(self, run_id: str) -> Submission | None:
+        with self.connection() as database:
+            return self.submission(database.execute(
+                "SELECT * FROM conversation_submissions WHERE request_id = ?", (run_id,),
+            ).fetchone())
+
+    def reserve(self, run_id: str, submission: Submission) -> Submission | None:
+        with self.connection() as database:
+            # Serialize competing helper processes: checking then inserting in
+            # separate transactions would admit the same external action twice.
+            database.execute("BEGIN IMMEDIATE")
+            previous = self.submission(database.execute(
+                "SELECT * FROM conversation_submissions WHERE request_id = ?", (run_id,),
+            ).fetchone())
+            if previous is not None:
+                return previous
+            if database.execute("SELECT count(*) FROM conversation_submissions").fetchone()[0] >= 512:
+                raise SessionError("request_capacity", "Message tracking is full. No command was sent.", 503)
+            database.execute("""INSERT INTO conversation_submissions
+                (request_id, session_key, session_id, fingerprint) VALUES (?, ?, ?, ?)""",
+                (run_id, submission.session_key, submission.session_id, submission.fingerprint))
+        return None
+
+    def forget_unsent(self, run_id: str) -> None:
+        with self.connection() as database:
+            database.execute("DELETE FROM conversation_submissions WHERE request_id = ?", (run_id,))
+
+    def record_reply(self, run_id: str, status: str) -> dict:
+        with self.connection() as database:
+            database.execute("UPDATE conversation_submissions SET reply_status = ? WHERE request_id = ?",
+                             (status, run_id))
+        return {"run_id": run_id, "status": status,
+                "delivery_confirmed": status in {"started", "pending", "in_flight", "ok"}}
+
+    def record_terminal(self, run_id: str, status: str) -> dict:
+        with self.connection() as database:
+            database.execute("""UPDATE conversation_submissions SET terminal_status = ?
+                WHERE request_id = ? AND terminal_status IS NULL""", (status, run_id))
+            row = database.execute("SELECT terminal_status FROM conversation_submissions WHERE request_id = ?",
+                                   (run_id,)).fetchone()
+        return {"run_id": run_id, "status": row[0], "detail": None}
 
 
 # Public Gateway control-text contract in OpenClaw v2026.9.1,
@@ -175,10 +270,15 @@ def page_fields(result: dict) -> dict:
 
 
 class OpenClawSessions:
-    def __init__(self):
-        # Request-owner metadata, not another transcript store. After restart,
-        # missing run evidence is unconfirmed; it never enables a resend.
-        self.submissions: dict[str, Submission] = {}
+    def __init__(self, state_path: Path | None = None):
+        state_dir = Path(os.environ.get("WATCH_CEVIZ_STATE_DIR", str(Path.home() / ".openclaw" / "ceviz-state")))
+        self.store = SubmissionStore(state_path if state_path is not None else state_dir / "conversations.sqlite")
+
+    @staticmethod
+    def replay(run_id: str, previous: Submission, fingerprint: str) -> dict:
+        if previous.fingerprint != fingerprint:
+            raise SessionError("message_identity_conflict", "This message identity already belongs to another request.", 409)
+        return previous.reply or {"run_id": run_id, "status": "unconfirmed", "delivery_confirmed": False}
 
     def list_sessions(self, query: dict[str, list[str]]) -> dict:
         older = query.get("older", ["false"])[0]
@@ -255,20 +355,18 @@ class OpenClawSessions:
         fingerprint = hashlib.sha256(json.dumps(
             [key, expected_session, leaf, body], ensure_ascii=False,
         ).encode()).hexdigest()
-        previous = self.submissions.get(run_id)
+        previous = self.store.get(run_id)
         if previous:
-            if previous.fingerprint != fingerprint:
-                raise SessionError("message_identity_conflict", "This message identity already belongs to another request.", 409)
-            return previous.reply or {"run_id": run_id, "status": "unconfirmed", "delivery_confirmed": False}
+            return self.replay(run_id, previous, fingerprint)
         current = self.snapshot(key, limit=1)
         if current["sessionId"] != expected_session:
             raise SessionError("session_changed", "The conversation was reset. Review its history before sending.", 409)
         if current["sessionInfo"].get("archived") is True:
             raise SessionError("session_archived", "This conversation is archived and read-only.", 409)
-        if len(self.submissions) >= 512:
-            raise SessionError("request_capacity", "Message tracking is full. No command was sent.", 503)
         submission = Submission(key, expected_session, fingerprint)
-        self.submissions[run_id] = submission
+        previous = self.store.reserve(run_id, submission)
+        if previous:
+            return self.replay(run_id, previous, fingerprint)
         # The Gateway checks both physical session and branch ancestry again
         # at admission. Preserve explicit null: omission disables its guard.
         try:
@@ -279,20 +377,25 @@ class OpenClawSessions:
             })
         except SessionError as exc:
             if not exc.uncertain:
-                del self.submissions[run_id]
+                self.store.forget_unsent(run_id)
             raise
         if result.get("runId") != run_id:
             raise SessionError("gateway_response_invalid", "Message acceptance could not be confirmed.",
                                502, uncertain=True)
         status = text_value(result.get("status"))
-        submission.reply = {"run_id": run_id, "status": status or "unconfirmed",
-                            "delivery_confirmed": status in {"started", "pending", "in_flight", "ok"}}
-        return submission.reply
+        status = status if status in {"started", "pending", "in_flight", "ok"} else "unconfirmed"
+        try:
+            return self.store.record_reply(run_id, status)
+        except SessionError as exc:
+            # Admission may have happened. The pre-dispatch identity remains
+            # durable even if recording the acknowledgment fails or we crash.
+            exc.uncertain = True
+            raise
 
     def run_status(self, query: dict[str, list[str]]) -> dict:
         key = query.get("session_key", [""])[0]
         run_id = valid_run_id(query.get("run_id", [""])[0])
-        submission = self.submissions.get(run_id)
+        submission = self.store.get(run_id)
         if submission and submission.session_key != key:
             raise SessionError("message_identity_conflict", "This message belongs to a different conversation.", 409)
         if submission and submission.terminal_result is not None:
@@ -330,7 +433,7 @@ class OpenClawSessions:
             status = "unconfirmed"
         response = {"run_id": run_id, "status": status, "detail": None}
         if submission and status in {"completed", "failed", "aborted"}:
-            submission.terminal_result = response
+            return self.store.record_terminal(run_id, status)
         return response
 
 

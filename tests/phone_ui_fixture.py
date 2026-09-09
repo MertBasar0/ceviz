@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack, nullcontext
 import faulthandler
+import hmac
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import sys
 from socketserver import TCPServer
 import tempfile
 import time
+import uuid
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -129,6 +131,9 @@ def main() -> None:
         import session_api
         print("Phone UI fixture: binding numeric loopback", file=sys.stderr, flush=True)
         fake = PhoneFixtureGateway()
+        scope.enter_context(patch.object(backend, "AUTH_TOKEN", TOKEN))
+        initial_state_path = Path(temporary) / "initial.sqlite"
+        scope.enter_context(patch.object(session_api, "sessions_api", session_api.OpenClawSessions(initial_state_path)))
         scope.enter_context(patch.object(session_api, "call_gateway", fake))
         scope.enter_context(patch.object(backend.openclaw_client, "invoke_watch_command",
                                         side_effect=AssertionError("Native fixture cannot execute a real command")))
@@ -137,21 +142,31 @@ def main() -> None:
         scope.enter_context(patch.object(backend.push_notifier, "register", return_value={"ok": True, "fixture": True}))
 
         class FixtureHandler(backend.WatchCevizHandler):
+            state_path = initial_state_path
+            helper_generation = 0
+
             def _do_GET_impl(self):
                 parsed = urlparse(self.path)
                 if parsed.path.startswith("/__fixture/"):
-                    if not self._authorized():
+                    if not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + TOKEN):
                         self.send_error(401)
                         return
                     if parsed.path == "/__fixture/reset":
                         fake.reset(parse_qs(parsed.query).get("scenario", ["normal"])[0])
-                        session_api.sessions_api = session_api.OpenClawSessions()
+                        # Each scenario is a new normal pairing, not a hidden
+                        # production-state erase. Restart keeps both identities.
+                        backend.AUTH_TOKEN = "ceviz-fixture-" + uuid.uuid4().hex
+                        FixtureHandler.state_path = Path(temporary) / (uuid.uuid4().hex + ".sqlite")
                         backend.jobs_db.clear()
+                    if parsed.path in {"/__fixture/reset", "/__fixture/restart_helper"}:
+                        session_api.sessions_api = session_api.OpenClawSessions(FixtureHandler.state_path)
+                        FixtureHandler.helper_generation += 1
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
-                    self.wfile.write(json.dumps(fake.evidence()).encode())
+                    self.wfile.write(json.dumps({**fake.evidence(), "pairing_token": backend.AUTH_TOKEN,
+                                                "helper_generation": FixtureHandler.helper_generation}).encode())
                     return
                 super()._do_GET_impl()
 

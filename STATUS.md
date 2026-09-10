@@ -134,6 +134,33 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
   yolu kaldırıldı. Yeni UI düzeltmesinin üretim etkisi çeviriler dahil **+1**
   net satır; yeniden doğrulama öncesi altı yerelleştirme testi geçti.
 
+### Dördüncü Apple doğrulaması — telefon geçti, ortak HTTP yanıtı düzeltildi
+
+- Kod `5dc2573ed22b04585d3b61051ec9609dabd1c89d`;
+  [doğrulama çalışması](https://github.com/MertBasar0/ceviz/actions/runs/34419875188).
+  Telefonun **9 XCTest'i sıfır hatayla** geçti (324,042 sn). Ana incelemede
+  yeni iptal/onay penceresi, yeniden açılış ve açık/koyu sistemde boş mesaj
+  alanı/klavye görüntüleri açıldı: iki karar düğmesi görünür, yazılar okunabilir.
+  İptal taslağı/kilidi korudu; açık inceleme sonrası yeniden açılış eski mesajı
+  göndermedi, yalnız yeni yazılan mesaj yeni kimlikle aynı konuşmaya gitti.
+  Bağımsız incelemede 25 PNG'nin tamamı açıldı. İki görünümde mesaj alanının
+  aynı piksel ölçümü **2,41:1 → 8,02:1**; yeni engelleyici görsel bulgu yok.
+  Ortak Python işi başarısız olduğundan imza/yükleme **skipped**; yeni build yok.
+- Yetkisiz POST gövdesi okunmadan verilen 401 yanıtında bayt uzunluğu yoktu.
+  macOS istemcisi yanıt sonunu bağlantının kapanmasından beklerken TCP reset
+  aldı. Tek ortak yetkilendirme kapısı artık tam JSON uzunluğunu ve bağlantı
+  kapanışını bildiriyor; erişim kontrolü, gövde okumadan ret sırası ve bütün
+  API girişleri korunuyor. İstemcide hata yutma/yeniden deneme eklenmedi.
+- Gerçek soket regresyonu düzeltmeden önce başarısız üretildi; tam küçük/büyük
+  gövde ile hiç veya yalnız bir baytı gönderilen büyük gövdeye tam 401 dönmesi
+  ve ardından başka isteğin karşılanması doğrulandı. 14 API yolu/yönteminde
+  yetkisiz isteğin Gateway, STT, bildirim kaydı veya iş yazımı başlatmadığı test edildi.
+- Son kaynakla Windows **147 Python / 3 Node**, Linux **32 oturum** testi
+  geçti; bağımsız taze incelemede engelleyici bulgu yok. Üretim değişikliği
+  **+7 / -1**: yanıtı üreten mevcut sahibinde eksik HTTP çerçevelemesi eklendi;
+  yeni katman veya seçenek yok. Test değişikliği **+46 / -11** satır.
+  macOS'ta bu düzeltmenin ve tüm Watch kontrollerinin yeniden doğrulanması açık.
+
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 
 **Güncel dış Beta: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,

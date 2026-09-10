@@ -394,21 +394,56 @@ class ConversationHTTPTests(unittest.TestCase):
         except error.HTTPError as exc:
             response = exc
         with response:
-            if authorized:
-                self.assertIsNotNone(response.headers.get("Content-Length"),
-                                     "Bounded responses must not rely on EOF after rejecting an unread body")
-                self.assertEqual(response.headers.get("Connection"), "close")
+            self.assertIsNotNone(response.headers.get("Content-Length"),
+                                 "Bounded responses must not rely on EOF after rejecting an unread body")
+            self.assertEqual(response.headers.get("Connection"), "close")
             data = response.read()
-            if authorized:
-                self.assertEqual(int(response.headers["Content-Length"]), len(data))
+            self.assertEqual(int(response.headers["Content-Length"]), len(data))
             return response.status, json.loads(data)
 
-    def test_all_conversation_endpoints_share_the_existing_bearer_boundary(self):
-        with patch.object(session_api, "call_gateway") as rpc:
+    def test_all_api_endpoints_share_the_framed_bearer_boundary(self):
+        with patch.object(session_api, "call_gateway") as rpc, \
+             patch.object(self.main.openclaw_client, "invoke_watch_command") as invoke, \
+             patch.object(self.main.stt_client, "transcribe_watch_payload") as transcribe, \
+             patch.object(self.main.push_notifier, "register") as register, \
+             patch.object(self.main, "save_jobs") as save:
             for path, method in [("/api/v1/sessions", "GET"), ("/api/v1/sessions/history", "GET"),
-                                 ("/api/v1/sessions/run", "GET"), ("/api/v1/sessions/message", "POST")]:
-                status, _ = self.http(path, method=method, body=b"{}" if method == "POST" else None, authorized=False)
-                self.assertEqual(status, 401)
+                                 ("/api/v1/sessions/run", "GET"), ("/api/v1/sessions/message", "POST"),
+                                 ("/api/v1/capabilities", "GET"), ("/api/v1/jobs/active", "GET"),
+                                 ("/api/v1/jobs/missing/report", "GET"), ("/api/v1/shortcuts/jobs/missing", "GET"),
+                                 ("/api/v1/watch/command", "POST"), ("/api/v1/shortcuts/command", "POST"),
+                                 ("/api/v1/push/register", "POST"), ("/api/v1/jobs/missing/cancel", "POST"),
+                                 ("/api/v1/jobs/missing/summarize", "POST"), ("/api/v1/not-a-route", "POST")]:
+                with self.subTest(path=path, method=method):
+                    status, payload = self.http(path, method=method, body=b"{}" if method == "POST" else None,
+                                                authorized=False)
+                    self.assertEqual(status, 401)
+                    self.assertEqual(payload, {"error": "Unauthorized"})
+            rpc.assert_not_called()
+            invoke.assert_not_called()
+            transcribe.assert_not_called()
+            register.assert_not_called()
+            save.assert_not_called()
+
+    def test_unauthorized_tcp_bodies_receive_complete_errors_without_waiting_for_upload(self):
+        with patch.object(session_api, "call_gateway") as rpc:
+            for body, declared_length in [(b"{}", 2), (b"x" * 96_001, 96_001),
+                                          (b"", 1_000_000_000), (b"x", 1_000_000_000)]:
+                with self.subTest(body_size=len(body), declared_length=declared_length), \
+                     socket.create_connection(self.server.server_address, timeout=2) as client:
+                    client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
+                                   b"Host: localhost\r\nAuthorization: Bearer wrong-token\r\n"
+                                   b"Content-Type: application/json\r\nContent-Length: "
+                                   + str(declared_length).encode("ascii") + b"\r\n\r\n" + body)
+                    # Leave the sending side open, including the absent 1 GB upload.
+                    with http.client.HTTPResponse(client) as response:
+                        response.begin()
+                        self.assertEqual(response.status, 401)
+                        self.assertEqual(response.headers.get("Content-Length"), "25")
+                        self.assertEqual(response.headers.get("Connection"), "close")
+                        self.assertEqual(json.load(response), {"error": "Unauthorized"})
+                    status, _ = self.http("/api/v1/sessions/not-a-route")
+                    self.assertEqual(status, 404, "The rejected upload must not hold the single-threaded server")
             rpc.assert_not_called()
 
     def test_wire_submit_targets_selected_session_and_does_not_create_ceviz_job(self):

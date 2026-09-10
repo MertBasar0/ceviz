@@ -1232,10 +1232,16 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
     def _reject_unauthorized(self, path: str) -> bool:
         if not path.startswith("/api/") or self._authorized():
             return False
+        payload = b'{"error": "Unauthorized"}'
         self.send_response(401)
         self.send_header("Content-Type", "application/json")
+        # Auth rejects before reading the upload. Frame the error independently
+        # of EOF: closing with unread bytes can finish with a TCP reset.
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Connection", "close")
         self.end_headers()
-        self.wfile.write(b'{"error": "Unauthorized"}')
+        self.close_connection = True
+        self.wfile.write(payload)
         return True
 
     def do_GET(self):

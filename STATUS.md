@@ -2,9 +2,13 @@
 
 Son güncelleme: **10 Eylül 2026**
 
-## Geliştirme adayı — güvenli devam ve telefon konuşmaları
+## İç TestFlight adayı — güvenli devam ve telefon konuşmaları
 
-Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
+**2026.6.5 (1789005793)** yalnız **Mert** iç grubunda hazır. Apple yüklemesi
+**COMPLETE**, build **VALID**, iç durum **IN_BETA_TESTING**; EN/TR test notları
+birebir geri okunarak doğrulandı. Ceviz yardımcı servisi de onayla güncellendi.
+Yeni build dış **Beta** grubuna eklenmedi; dış sürüm **1788715054** korunuyor.
+Fiziksel cihaz kabulü ve gerçek konuşmaya ilk gönderim kullanıcı testinde açık.
 
 - Devam mesajı ile öneri onayı ayrıldı; açık iş/eylem kimliği kullanılıyor.
   Saat kayıt başlangıcında seçili bağlamı sabitliyor; son gelen ilgisiz işe
@@ -20,20 +24,21 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - İlk WSL test kabuğunun PATH'i yanlışlıkla Windows npm CLI'ını seçti ve zaman
   aşımına uğradı. Çalışan kurulumun Linux OCM CLI yoluyla aynı kontrol geçti;
   üretim yapılandırması veya zaman aşımı büyütülmedi.
-- Yerel 139 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
+- İlk yerel pakette 139 Python testi ve 3 bildirim sınırı testi geçti. Konuşma gönderiminin
   ekranlar arasında korunması, kontrol metni normalizasyonu, terminal durumun
   gerilememesi ve izole test temizliği bağımsız son incelemeden geçti.
   Yalnız geliştirme dalına commit/push ve `validation_only` çalışma izniyle
-  Apple derlemesi ve otomatik ekran kontrolleri de geçti. Son görsel inceleme
-  telefonda kontrast kusuru buldu; görsel kabul ve dağıtım hâlâ açık.
+  Apple derlemesi ve otomatik ekran kontrolleri de geçti. O aşamadaki görsel
+  incelemede bulunan telefon kusurları sonraki onarımlarla giderildi;
+  son adayın görsel kabul ve iç dağıtım kanıtı aşağıda.
 - 10 Eylül'de kullanıcı telefon ve Ceviz yardımcı servisinde yalnız gönderim/
   hedef kimliği ve durum tutan yerel SQLite kayıtlarını açıkça onayladı.
   Uygulandı; konuşma metni/erişim anahtarı kaydedilmiyor ve OpenClaw
   veritabanına dokunulmuyor. Güncel native sonuç ve kalan işler aşağıda.
 - Yeni TestFlight build'i iç test için onaylandı; dış Beta otomatik açılmayacak.
-  Ceviz servisini kısa süre yeniden başlatma onayı ayrıca bekleniyor.
-  Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
-  değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
+  Ceviz yardımcı servisi ayrıca alınan yeniden başlatma onayıyla güncellendi;
+  canlı doğrulama aşağıda. Gateway ayarları, `main`, mevcut dış TestFlight dağıtımı
+  ve sosyal yayınlar değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
   bağımsız ajan incelemesi ve kaynak/sözleşme/regresyon kontrolleri kullanılıyor.
 
 ### İlk Apple doğrulaması ve taşınabilirlik düzeltmesi
@@ -190,11 +195,96 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
   geçti: 1.120 yetkisiz, 80 aşırı büyük, 80 sonraki istek. İstemci yeniden
   denemesi veya hata yutma yok. Son kaynakla **153 Python / 3 Node** geçti;
   Windows/Linux **33 oturum** testi ve taze bağımsız inceleme de geçti.
-- Üretim farkı **+36 / -21, net +15**; eski gövde döngüsü silindi ve iki
+- Üretim farkı **+37 / -22, net +15**; eski gövde döngüsü silindi ve iki
   mevcut ret noktasına tek taşıma sahibi getirildi. Test farkı **+59 / -31**.
-  Canlı servis değişmedi; kod dağıtımı yeni ortak modülle dört dosya gerektirecek.
-  `cfa4b01` Apple koşusu yalnız saat kanıtı için sürüyor; son onarımı içermediği
-  için dağıtım adayı değil. Son onarımla Apple doğrulaması hâlâ gerekli.
+  O aşamada canlı servis değişmedi; sonraki onaylı dağıtım dört dosyayı kapsadı.
+  `cfa4b01` Apple koşusu son onarımı içermediği için dağıtım adayı değil;
+  aşağıdaki başarılı saat kanıtını sağladı. Son onarımla doğrulama da tamamlandı.
+
+### Beşinci Apple doğrulaması — ekran ve kayıt kanıtı kabul edildi
+
+- `cfa4b01134a9d67c2cf6018d8c2281d6fdede63f` için
+  [doğrulama](https://github.com/MertBasar0/ceviz/actions/runs/34421523936)
+  başarılı: 152 Python, bildirim/Ruby/Swift ve üç simülatör paketi; telefonun
+  dokuz senaryolu işi ve **7 Watch XCTest / 5 koşu** geçti. İmza/yükleme yapılmadı.
+- 40/49 mm normal ve büyük yazıda 58 PNG bağımsız incelemede açıldı:
+  26 Ceviz, 32 Settings görüntüsü. EN/TR kayıt ve silme kontrolleri görünür;
+  iki cihazda dokuzar ayar/geometri geri-dönüş kontrolü geçti. Kaynak piksellerde
+  düğme çerçevesi kesilmiyor; önizlemedeki kesilme şüphesi geri çekildi.
+- Ana incelemede manuel/otomatik kayıt akışının altı PNG'si ve kayıt günlüğü
+  incelendi. Gerçek dosyalar **10,172 sn / 25.220 bayt** ve
+  **14,908 sn / 25.516 bayt**, mono 16 kHz. İki sonuç da saat üzerinde
+  **Queued / Waiting for iPhone**: kaydın korunması kanıtı, Gateway teslimi değil.
+  Önceki tek dokunuş sorunu tekrarlanmadı; üretimde varsayımsal dokunuş değişikliği
+  veya testte tekrar deneme eklenmedi. Hata tanılaması bu başarılı koşuda çalışmadı.
+- Son onarımı içeren `c3404f14e9b23b61cf8addcdcd24a4638cb02603` için
+  [iç TestFlight çalışması](https://github.com/MertBasar0/ceviz/actions/runs/34424690769)
+  10 Eylül 04:14 Türkiye saati civarı başlatıldı ve başarılı tamamlandı.
+  Aynı SHA'nın telefon ve saat işleri yeniden geçtikten sonra imza/yükleme
+  çalıştı. Yeni adayın dış Beta dağıtımı yapılmadı; Apple kabulü aşağıda.
+  Yardımcı servis ayrıca alınan onayla aşağıdaki şekilde güncellendi.
+- Son `c3404f1` adayının iPhone işi geçti: **9 test, 0 hata, 475,841 sn**,
+  iPhone 17 Pro / iOS 26.5. Ana incelemede sekiz kritik PNG, bağımsız
+  incelemede **25 PNG'nin tamamı** açıldı; iptal/onay, boş alan, klavye ve
+  yeniden açılış görünümleri kabul edildi. Yerel test servisine ait 17 durum
+  kaydı, belirsiz teslimde aynı kimliğin tek gönderim olarak kaldığını ve
+  yalnız açık inceleme sonrası yeni metnin ikinci kimlikle gönderildiğini
+  doğruladı. Boş alan kontrastı kaynak piksellerde yine **8,02:1**.
+  Son adayın saat açılış PNG'si de incelendi; normal açılış geçti. Genel URL
+  yoklaması 115 / gerçek kadran dokunuşu doğrulanmamış durumu korunuyor.
+
+### Son aday — imza, Apple kabulü ve iç dağıtım tamamlandı
+
+- Tam `c3404f1` kaynakla Apple'da **153 Python** testi (55,308 sn), bildirim,
+  Ruby, sekiz Swift programı, üç simülatör paketi ve **7 Watch XCTest / 5 koşu**
+  geçti. Son 40/49 mm normal/büyük yazı **58 PNG** bağımsız kabulden geçti;
+  iki cihazda dokuzar geri-dönüş kontrolü doğru. Ana incelemede altı kayıt PNG'si
+  ve ses günlüğü açıldı: manuel **10,364 sn / 25.232 bayt**, otomatik
+  **14,908 sn / 25.516 bayt**, mono 16 kHz; ikisi de saatte korunmuş **Queued**.
+  Bu, canlı Gateway'e teslim veya fiziksel mikrofon kalitesi kanıtı değildir.
+- İmzalı **2026.6.5 (1789005793)**, 10 Eylül **05:06:41 Türkiye saati**
+  Apple'a yüklendi. Build kimliği `24e7721c-4b81-4ea9-acc2-122f5d4c7d9c`.
+  Ayrı yükleme kaydı **COMPLETE**, hata/uyarı listeleri boş; build **VALID**,
+  iç durum **IN_BETA_TESTING**, atanmış tek grup **Mert** olarak geri okundu.
+  Dış durum **READY_FOR_BETA_SUBMISSION**; yeni build **Beta** grubunda yok.
+- İndirilmiş IPA'nın SHA-256 değeri
+  `ff312e30eb2a01fe983eea63d62e0b5e91140a260903a538e18e2be4b7cc8390`.
+  Telefon, Watch ve widget kimlikleri, sürüm/build eşitliği ve üç profil/imza
+  kaynağı kontrol edildi. Minimum iOS 16 / watchOS 9 ve WidgetKit uzantı
+  kimliği doğru. Yerel ZIP denetimi kriptografik imza doğrulaması değildir;
+  imzalama Apple ortamında, yükleme kabulü Apple servisinde doğrulandı.
+- Yalnız bu yeni build'in EN/TR test notlarına iki güncelleme yapıldı;
+  ayrı salt-okunur denetim iki metni birebir eşledi ve kalan yazma sayısı **0**.
+  Grup ayarı değişikliği, dış inceleme başvurusu, genel App Store metadata değişikliği,
+  GitHub release/tag, `main` değişikliği veya duyuru yapılmadı.
+- İç cihaz testi: iPhone ve Watch'u birlikte güncelle; Konuşmalar'da hedef seç,
+  geçmişi aç ve metin gönder; belirsiz teslim/yeniden açılış takibini kontrol et.
+  Saatte sonuca devam etme ile iPhone'da öneri onayını ayrı dene; kadran düğmesini
+  gerçek cihazda kontrol et. Dış Beta ancak bu kabul ve yeni onaydan sonra açılmalı.
+
+### Yerel Ceviz yardımcı servisi — onaylı güncelleme tamamlandı
+
+- Kullanıcı bakım boyunca yeni komut göndermeyeceğini ve yalnız Ceviz
+  yardımcı servisinin kısa süre yeniden başlatılmasını açıkça onayladı.
+  Hemen durdurma öncesinde **50 iş: 44 tamamlandı, 6 başarısız, 0 aktif**
+  doğrulandı. Kontrol tek başına yeni isteği engellemediği için kullanıcı
+  tarafından sağlanan bu bakım aralığı kullanıldı.
+- Eski iki kod dosyası ayrı, üzerine yazılmayan yerel geri dönüş kopyasına
+  alındı. Tam `c3404f1` kaynak kimliğine sabitlenmiş **dört** dosya kuruldu;
+  her dosya kopyalama öncesi/sonrası hash ile doğrulandı. Kod geri alma yolu
+  iş kayıtlarını veya SQLite verisini geri sarmıyor/silmiyor; çalıştırılmadı.
+- Yeniden başlatma ve salt-okunur kabul kontrolleri **3,013 sn** sürdü.
+  Eski iş verisi baytları, yapılandırma/ortam, Python ortamı ve Gateway'in
+  süreç/başlangıç kimliği değişmedi. Kimlik doğrulamasız API **401**, kök sağlık
+  rotası **200**; eski rapor durumu ve yeni üç yetenek doğrulandı.
+- Canlı liste **6 konuşma / 4 asistan** döndürdü; seçilen konuşmanın geçmişi
+  aynı kimlikle okundu. Bu kontrolde komut/model çağrısı gönderilmedi.
+  Kullanıcıya bakımın bittiği ve yeniden Ceviz komutu gönderebileceği bildirildi.
+- Bağımsız salt-okunur son kontrolde dört canlı dosya, servis kimliği,
+  yedekler ve korunan Gateway/ayar parmak izleri tekrar eşleşti. Yardımcı
+  SQLite dosyası ilgili ilk işlemde oluşturuluyor; kontrolde henüz yoktu.
+  Bu yüzden kalıcılığın canlı kullanıcı gönderimiyle doğrulandığı iddia edilmiyor;
+  yeniden açılış kanıtı izole gerçek SQLite/telefon testlerine dayanıyor.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

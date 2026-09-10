@@ -160,6 +160,19 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
   **+7 / -1**: yanıtı üreten mevcut sahibinde eksik HTTP çerçevelemesi eklendi;
   yeni katman veya seçenek yok. Test değişikliği **+46 / -11** satır.
   macOS'ta bu düzeltmenin ve tüm Watch kontrollerinin yeniden doğrulanması açık.
+- Saatin önceki başarısız dokunuşu için test çalıştırıcısına hata anında
+  sınırlı native olay özeti eklendi; ham mesajlar/anahtarlar yayımlanmıyor.
+  Gerçek test hatası, dokunuş ve süre kontrolleri değişmedi. Tanılama eki
+  üretim koduna **0**, test desteğine **+80**, testlere **+119** satır ekler.
+  Son kaynak sabitlendikten sonra **152 Python testi** geçti (21,297 sn);
+  bağımsız inceleme 50 saat testini de çalıştırdı. Native tanılama komutları
+  henüz yürütülmüş sayılmıyor; yalnız olası test hatasında çağrılacak.
+- Yerel test takibi: kaynak sabitlenmeden başlayan ara koşuda test beklentisi
+  düzenlenirken eski beklenti çalıştı; ayrıca HTTP durum satırından önce bir
+  Windows **10053** bağlantı kesilmesi görüldü. İkinci hatanın nedeni eldeki
+  kırpılmış çıktıdan belirlenemedi. Sabit kaynakla tam günlük saklanan koşu
+  geçti; aynı hata tekrarlanırsa tam çağrı/test kimliğiyle ayrıca incelenecek.
+  Üretimde yeniden deneme veya hata yutma eklenmedi.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

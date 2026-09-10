@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import nullcontext
 
 import watch_capture_ui as capture
 
@@ -167,6 +168,124 @@ class CaptureLogStreamTests(unittest.TestCase):
                     raise RuntimeError("original UI failure")
             self.assertIn("cleanup timed out", log_path.read_text())
             process.kill.assert_called_once()
+
+
+class CaptureFailureDiagnosticsTests(unittest.TestCase):
+    watch = "032D47F9-6038-4F30-B9D3-A6C7B665465F"
+    # Actual retained 34417538624 compact log line, not a JSON-schema guess.
+    native_line = ("2026-09-09 23:54:18.279 I  CevizWatchApp[55221:264bd] "
+                   "[com.mertbasar.ceviz.watch:AudioCapture] Capture event: view_appeared scene=active")
+
+    def collect(self, payload=None, archives=None, failure=None, export_code=0, query_code=0):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = Path(temporary) / "capture.xcresult"
+            result.mkdir()
+            log = Path(temporary) / "capture.log"
+            log.write_text("Test Suite 'WatchCaptureUITests' failed at 2026-09-09 23:54:32.993.\n")
+            calls = []
+
+            def run(command, **kwargs):
+                calls.append((command, kwargs))
+                if failure:
+                    raise failure
+                if command[:4] == ["xcrun", "xcresulttool", "export", "diagnostics"]:
+                    native = Path(command[-1])
+                    for name in archives if archives is not None else [f"Apple Watch SE (40mm)_{self.watch}", "iPhone_other"]:
+                        (native / name / "simctl_diagnostics" / "system.logarchive").mkdir(parents=True)
+                    return subprocess.CompletedProcess(command, export_code)
+                kwargs["stdout"].write((self.native_line if payload is None else payload).encode())
+                return subprocess.CompletedProcess(command, query_code)
+
+            with patch.object(capture.subprocess, "run", side_effect=run):
+                proof = capture.capture_failure_diagnostics(result, self.watch, log)
+            if calls and calls[0][0][:4] == ["xcrun", "xcresulttool", "export", "diagnostics"]:
+                self.assertFalse(Path(calls[0][0][-1]).exists(), "Owned raw diagnostics must be cleaned up")
+            return proof, calls
+
+    def test_observed_compact_envelope_watch_archive_window_and_redaction(self):
+        secret = "must-not-export-url-token-transcript"
+        payload = "\n".join([self.native_line, self.native_line + " " + secret,
+                             "2026-09-09 23:54:22.853 Df testmanagerd[55111:abc] TouchEventsCompleted " + secret,
+                             "2026-09-09 23:54:22.853 Df unrelated[111:abc] TouchEventsCompleted " + secret])
+        proof, calls = self.collect(payload)
+        self.assertEqual(proof["status"], "collected")
+        self.assertEqual(proof["start"], "2026-09-09 23:52:32")
+        self.assertEqual(proof["end"], "2026-09-09 23:54:34")
+        self.assertEqual(proof["anchor_source"], "first_failed_native_suite")
+        self.assertEqual(proof["matching_watch_archives"], 1)
+        self.assertEqual(proof["recognized_rows"], 3)
+        self.assertEqual([row["kind"] for row in proof["events"]],
+                         ["app_view_appeared", "app_view_appeared", "native_touch_completion_acknowledgement"])
+        self.assertEqual(proof["events"][0]["pid"], 55221)
+        self.assertNotIn(secret, json.dumps(proof))
+        self.assertNotIn("scene=active", json.dumps(proof))
+        self.assertIn(self.watch, calls[1][0][3])
+        self.assertEqual(calls[1][0][-1], capture.DIAGNOSTIC_PREDICATE)
+        self.assertEqual([call[1]["timeout"] for call in calls], [60, 45])
+        self.assertTrue(all(call[1]["stderr"] is subprocess.DEVNULL for call in calls))
+
+    def test_missing_wrong_or_ambiguous_watch_archive_never_queries_host_or_phone(self):
+        for archives in ([], ["iPhone_other"], ["watch_" + self.watch + "F"],
+                         ["first_" + self.watch, "second_" + self.watch]):
+            with self.subTest(archives=archives):
+                proof, calls = self.collect(archives=archives)
+                self.assertEqual(proof["reason"], "watch_archive_missing_or_ambiguous")
+                self.assertEqual(len(calls), 1)
+
+    def test_export_query_timeout_and_disk_errors_stay_unavailable_without_raw_error(self):
+        for failure in (subprocess.TimeoutExpired("secret-command", 60, output=b"secret-output"),
+                        OSError("secret-path")):
+            proof, _ = self.collect(failure=failure)
+            self.assertEqual(proof["status"], "unavailable")
+            self.assertEqual(proof["error_type"], type(failure).__name__)
+            self.assertNotIn("secret", json.dumps(proof))
+        self.assertEqual(self.collect(export_code=1)[0]["reason"], "native_export_failed")
+        self.assertEqual(self.collect(query_code=65)[0]["reason"], "native_log_query_failed")
+        with patch.object(capture.subprocess, "run") as run:
+            proof = capture.capture_failure_diagnostics(Path("nonexistent.xcresult"), self.watch, Path("unused.log"))
+        run.assert_not_called()
+        self.assertEqual(proof["reason"], "result_bundle_missing")
+
+    def test_unrecognized_rows_and_output_limits_have_no_raw_fallback(self):
+        proof, _ = self.collect("unexpected-format secret\n")
+        self.assertEqual(proof["recognized_rows"], 0)
+        self.assertEqual(proof["events"], [])
+        self.assertNotIn("secret", json.dumps(proof))
+        proof, _ = self.collect("x" * (4 * 1024 * 1024 + 1))
+        self.assertEqual(proof["reason"], "query_output_exceeds_4_mib")
+        self.assertNotIn("events", proof)
+        proof, _ = self.collect((self.native_line + "\n") * 2001)
+        self.assertEqual(len(proof["events"]), 2000)
+        self.assertTrue(proof["event_limit_reached"])
+
+    def test_runner_only_collects_on_failure_and_preserves_native_and_metadata_errors(self):
+        for code, mode, expected in ((0, "short", None), (1, "short", "Native capture UI tests failed"),
+                                     (0, "finish", "Actual file metadata missing")):
+            with self.subTest(code=code, mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                context = root / "build/watch-launch-smoke/context.json"
+                context.parent.mkdir(parents=True)
+                context.write_text(json.dumps({"sdk_versions": {}}))
+                (root / "build/watch-capture-ui/after/derived/Build/Products/Release-watchsimulator/CevizWatchApp.app").mkdir(parents=True)
+                choice = {"watch": {"udid": self.watch, "name": "Apple Watch (40mm)"},
+                          "phone": {"udid": "phone"}, "watch_runtime": "watchOS", "needs_pair": False}
+                with patch.object(capture.Path, "cwd", return_value=root), \
+                        patch.object(capture, "capture_runs", return_value=[(40, "device-default", mode)]), \
+                        patch.object(capture, "select_watch", return_value=choice), \
+                        patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
+                        patch.object(capture, "WatchSimulatorPair"), patch.object(capture, "reinstall_watch"), \
+                        patch.object(capture, "capture_log_stream", return_value=nullcontext()), \
+                        patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess([], code)), \
+                        patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}) as diagnostics, \
+                        patch("builtins.print"):
+                    if expected:
+                        with self.assertRaisesRegex(RuntimeError, expected):
+                            capture.main(root)
+                    else:
+                        capture.main(root)
+                self.assertEqual(diagnostics.call_count, int(expected is not None))
+                evidence = json.loads((root / "build/watch-capture-ui/after/context.json").read_text())[0]
+                self.assertEqual(evidence["status"], "failed" if expected else "passed")
 
 
 if __name__ == "__main__":

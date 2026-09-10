@@ -5,8 +5,10 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import contextmanager, nullcontext
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from watch_launch_smoke import WatchSimulatorPair, choose_simulators, simctl
@@ -14,6 +16,81 @@ from watch_launch_smoke import WatchSimulatorPair, choose_simulators, simctl
 WATCH_ID = "com.mertbasar.cevizwatch.watchkitapp"
 FINISH_TEST = "CevizWatchUITests/WatchCaptureUITests/testManualAndAutomaticFinishRetainRecording"
 LARGER_TEST = "CevizWatchUITests/WatchCaptureUITests/testLargerTextReadyAndDiscardBothLanguages"
+DIAGNOSTIC_PROCESSES = ("CevizWatchApp", "CevizWatchUITests-Runner", "testmanagerd", "Carousel", "backboardd", "runningboardd")
+DIAGNOSTIC_PREDICATE = " OR ".join(f'process == "{process}"' for process in DIAGNOSTIC_PROCESSES)
+
+
+def capture_failure_diagnostics(result, watch_udid, log_path):
+    """Project native diagnostics to fixed event labels; never publish raw messages."""
+    summary = {"status": "unavailable", "scope": "120 seconds before failure anchor through 2 seconds after; not exact tap coverage"}
+    try:
+        if not result.is_dir():
+            return {**summary, "reason": "result_bundle_missing"}
+        logs = log_path.read_text(errors="replace") if log_path.exists() else ""
+        failed_at = re.search(r"Test Suite '[^'\r\n]+' failed at (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\.", logs)
+        anchor = datetime.strptime(failed_at[1], "%Y-%m-%d %H:%M:%S.%f") if failed_at else datetime.now()
+        summary.update(anchor_source="first_failed_native_suite" if failed_at else "runner_failure_time",
+                       start=(anchor - timedelta(seconds=120)).strftime("%Y-%m-%d %H:%M:%S"),
+                       end=(anchor + timedelta(seconds=2)).strftime("%Y-%m-%d %H:%M:%S"))
+        # Keep raw exports outside the workflow's broad **/*.log artifact glob.
+        with tempfile.TemporaryDirectory(prefix="ceviz-watch-failure-") as temporary:
+            native = Path(temporary) / "native"
+            export = subprocess.run(["xcrun", "xcresulttool", "export", "diagnostics", "--path", str(result),
+                                     "--output-path", str(native)], stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=60, check=False)
+            summary["export_exit_code"] = export.returncode
+            if export.returncode:
+                return {**summary, "reason": "native_export_failed"}
+            archives = [path for path in native.rglob("system.logarchive") if path.is_dir()
+                        and path.resolve().is_relative_to(native.resolve())
+                        and any(re.search(rf"(?<![0-9a-f-]){re.escape(watch_udid)}(?![0-9a-f-])", part, re.I)
+                                for part in path.relative_to(native).parts)]
+            summary["matching_watch_archives"] = len(archives)
+            if len(archives) != 1:
+                return {**summary, "reason": "watch_archive_missing_or_ambiguous"}
+            with tempfile.TemporaryFile() as output:
+                query = subprocess.run(["/usr/bin/log", "show", "--archive", str(archives[0]),
+                                        "--start", summary["start"], "--end", summary["end"],
+                                        "--style", "compact", "--info", "--debug", "--predicate", DIAGNOSTIC_PREDICATE],
+                                       stdout=output, stderr=subprocess.DEVNULL, timeout=45, check=False)
+                summary["query_exit_code"] = query.returncode
+                if query.returncode:
+                    return {**summary, "reason": "native_log_query_failed"}
+                output.seek(0)
+                payload = output.read(4 * 1024 * 1024 + 1)
+                if len(payload) > 4 * 1024 * 1024:
+                    return {**summary, "reason": "query_output_exceeds_4_mib", "truncated": True}
+            rows = payload.decode("utf-8").splitlines()
+            summary["read_rows"] = len(rows)
+            summary["recognized_rows"] = 0
+            events = []
+            for row in rows:
+                # Envelope observed in retained native Watch compact logs. The
+                # message suffix is used only for classification and discarded.
+                envelope = re.fullmatch(r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\s+\w+\s+([A-Za-z0-9-]+)\[(\d+):[0-9a-fA-F]+\]\s+(.*)", row)
+                if not envelope or envelope[2] not in DIAGNOSTIC_PROCESSES:
+                    continue
+                summary["recognized_rows"] += 1
+                timestamp, process, pid, message = envelope.groups()
+                capture_event = re.search(r"\[com\.mertbasar\.ceviz\.watch:AudioCapture\] Capture event: (view_appeared|scene_changed|primary_action|view_start|view_cancel|native_start)\b", message)
+                if capture_event and process == "CevizWatchApp":
+                    kind = "app_" + capture_event[1]
+                else:
+                    kind = next((label for token, label in (
+                        ("toucheventscompleted", "native_touch_completion_acknowledgement"),
+                        ("synthesiz", "native_event_synthesis_log"),
+                        ("mt responded in time", "native_main_thread_response"),
+                        ("main run loop", "native_main_run_loop_log"),
+                        ("hid", "native_hid_log"), ("scene", "native_scene_log"),
+                    ) if token in message.casefold()), None)
+                if kind:
+                    events.append({"timestamp": timestamp, "process": process, "kind": kind, "pid": int(pid)})
+                    if len(events) == 2000:
+                        break
+            return {**summary, "status": "collected", "events": events, "event_limit_reached": len(events) == 2000}
+    except Exception as error:
+        # Even diagnostic timeout/schema/disk errors cannot replace the UI failure.
+        return {**summary, "error_type": type(error).__name__}
 
 
 def capture_runs(baseline):
@@ -208,6 +285,9 @@ def main(project, baseline=False):
                         except RuntimeError as error:
                             record.update(status="failed", failure=str(error))
                             metadata_error = error
+                if record["status"] == "failed":
+                    record["native_failure_diagnostics"] = capture_failure_diagnostics(
+                        result, watch["udid"], log_path)
                 if metadata_error:
                     raise metadata_error
     finally:

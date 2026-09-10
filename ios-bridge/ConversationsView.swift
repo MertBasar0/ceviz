@@ -236,16 +236,14 @@ private struct ConversationDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(submission.isSending)
         .toolbar(.visible, for: .navigationBar)
-        .confirmationDialog("Start a new message after reviewing?", isPresented: Binding(
+        .alert("Start a new message after reviewing?", isPresented: Binding(
             get: { reviewingDelivery != nil }, set: { if !$0 { reviewingDelivery = nil } }
-        ), titleVisibility: .visible) {
-            if let review = reviewingDelivery {
-                Button("I reviewed it — start a new message") {
-                    conversationStore.finishReview(review.delivery, in: review.scope)
-                }
+        ), presenting: reviewingDelivery) { review in
+            Button("I reviewed it — start a new message") {
+                conversationStore.finishReview(review.delivery, in: review.scope)
             }
             Button("Cancel", role: .cancel) { }
-        } message: {
+        } message: { _ in
             Text("The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message.")
         }
         .task(id: scenePhase) {
@@ -314,7 +312,8 @@ private struct ConversationDetailView: View {
                     }
                 }
                 HStack(alignment: .bottom, spacing: 10) {
-                    TextField("Message this conversation", text: draftBinding, axis: .vertical)
+                    TextField("Message this conversation", text: draftBinding,
+                              prompt: Text("Message this conversation").foregroundColor(CVZ.textSub), axis: .vertical)
                         .accessibilityIdentifier("conversation.draft")
                         .lineLimit(1...5)
                         .textInputAutocapitalization(.sentences)

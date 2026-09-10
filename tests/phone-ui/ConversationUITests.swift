@@ -194,7 +194,15 @@ final class ConversationUITests: XCTestCase {
             XCTAssertLessThan(title.background, 0.2, "System navigation must match the app's dark palette")
             XCTAssertGreaterThanOrEqual((title.foreground + 0.05) / (title.background + 0.05), 4.5,
                                        "The navigation title must be readable against its actual background")
-            element("conversation.draft").tap()
+            let draft = element("conversation.draft")
+            XCTAssertTrue(draft.isEnabled)
+            assertEmptyDraft()
+            // Sample the unfocused, empty field so only the placeholder—not a
+            // bright insertion caret or entered text—can satisfy the assertion.
+            let placeholder = try luminance(of: draft, named: "composer-placeholder-" + mode)
+            XCTAssertGreaterThanOrEqual((placeholder.foreground + 0.05) / (placeholder.background + 0.05), 4.5,
+                                       "The empty composer placeholder must be readable against its actual background")
+            draft.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
             capture("phone-conversation-keyboard-" + mode)
             let keyboard = try luminance(of: app.keyboards.firstMatch, named: "keyboard-" + mode)
@@ -249,11 +257,17 @@ final class ConversationUITests: XCTestCase {
         let review = element("conversation.review")
         XCTAssertTrue(review.waitForExistence(timeout: 10))
         review.tap()
-        let confirm = app.buttons["I reviewed it — start a new message"]
+        let confirmation = app.alerts.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        let confirm = confirmation.buttons["I reviewed it — start a new message"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Start a new message after reviewing?"].exists)
+        XCTAssertTrue(confirm.isHittable)
+        XCTAssertTrue(confirmation.staticTexts["Start a new message after reviewing?"].exists)
+        let cancel = confirmation.buttons["Cancel"]
+        XCTAssertTrue(cancel.exists, "Review requires a visible Cancel action")
+        XCTAssertTrue(cancel.isHittable)
         capture("phone-conversation-review-confirmation-en")
-        app.buttons["Cancel"].tap()
+        cancel.tap()
         waitForStatus(uncertain)
         XCTAssertEqual(element("conversation.draft").value as? String, originalText)
         XCTAssertFalse(element("conversation.send").isEnabled)

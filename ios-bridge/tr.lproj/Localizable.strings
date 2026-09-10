@@ -155,6 +155,7 @@
 "Use HTTPS, or choose Same Wi-Fi with a local relay address." = "HTTPS kullanın veya yerel relay adresiyle Aynı Wi-Fi seçeneğini seçin.";
 "Message tracking is unavailable. Restart Ceviz and check the conversation before sending again." = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce Ceviz'i yeniden başlatıp konuşmayı kontrol edin.";
 "Continue after reviewing" = "Kontrol ettikten sonra devam et";
+"Cancel" = "İptal";
 "conversation.error.tracking_unavailable" = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce konuşmayı kontrol edin.";
 "conversation.error.request_capacity" = "Gönderim takibi dolu. Hiçbir komut gönderilmedi. Ceviz desteğiyle iletişime geçin; tekrar denemek için takip verisini silmeyin.";
 "Start a new message after reviewing?" = "Kontrol ettikten sonra yeni mesaja geçilsin mi?";

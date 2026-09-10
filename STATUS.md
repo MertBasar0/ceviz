@@ -28,8 +28,8 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
   telefonda kontrast kusuru buldu; görsel kabul ve dağıtım hâlâ açık.
 - 10 Eylül'de kullanıcı telefon ve Ceviz yardımcı servisinde yalnız gönderim/
   hedef kimliği ve durum tutan yerel SQLite kayıtlarını açıkça onayladı.
-  Uygulama yapılıyor; konuşma metni/erişim anahtarı kaydedilmiyor ve
-  OpenClaw veritabanına dokunulmuyor. Güncel Apple kanıtı henüz alınmadı.
+  Uygulandı; konuşma metni/erişim anahtarı kaydedilmiyor ve OpenClaw
+  veritabanına dokunulmuyor. Güncel native sonuç ve kalan işler aşağıda.
 - Yeni TestFlight build'i iç test için onaylandı; dış Beta otomatik açılmayacak.
   Ceviz servisini kısa süre yeniden başlatma onayı ayrıca bekleniyor.
   Canlı servisler, Gateway ayarları, `main`, TestFlight ve sosyal yayınlar
@@ -99,6 +99,40 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
   telefon ekranı testi yazıldı; Apple'da çalışmadan geçmiş sayılmıyor.
   Saat ve telefon kanıtları bağımsız paralel işlere ayrıldı; aynı kod
   kimliğindeki iki iş de başarılı olmadıkça imza/yükleme işi çalışamaz.
+
+### Üçüncü Apple doğrulaması — kalıcılık geçti, ekran kabulü açık
+
+- Kod `7aa54a6aeee393a4b3f079831927c378fd40f78e`;
+  [doğrulama çalışması](https://github.com/MertBasar0/ceviz/actions/runs/34417538624)
+  başarısız. İmza/yükleme ve dış dağıtım **skipped**; yeni TestFlight build'i yok.
+- Python/sözleşme, bildirim, Ruby, sekiz Swift programı ve üç simülatör paketi
+  geçti. Gerçek SQLite açma/kilitleme/bozuk kayıt regresyonları Apple'da çalıştı.
+  Telefonun dokuz ekran testinden sekizi geçti; uygulama ve yardımcı servis
+  yeniden açıldıktan sonra aynı gönderimin korunması ve yeniden gönderilmemesi
+  geçti. Açık kullanıcı incelemesi senaryosu iptal düğmesinde durdu.
+- Ana incelemede 22 telefon PNG'si açıldı: sistem başlığı, durum çubuğu ve
+  klavye düzeldi; boş mesaj alanı hâlâ soluk. İki sistem görünümünde gerçek
+  alanın ölçülen kontrastı **2,41:1**, hedef **4,5:1**. Yeni düzeltme mevcut
+  `CVZ.textSub` rengini doğrudan alanın yönlendirme yazısına uyguluyor;
+  test, odak/caret veya yazılmış metin olmadan bu alanı da ölçüyor.
+- Aynı iPhone 17 Pro / iOS 26.5 görüntüsünde `confirmationDialog` popover'ı
+  yalnız onay seçeneğini gösterdi; `Cancel` gerçekten yoktu. Kullanıcının
+  kararını açık tutmak için dondurulmuş gönderim verisini alan `alert` ve
+  görünür iptal seçeneği kullanılıyor. EN/TR iptal metni eklendi; taslağı ve
+  takip kilidini koruyan iptal testi gevşetilmedi. Yeni native sonuç bekleniyor.
+- Watch 40 mm normal EN/TR kayıt-silme ve büyük yazı/geri dönüş kontrolleri
+  geçti. Ardından manuel bitiş senaryosunda görünür, etkin mikrofon düğmesine
+  tek dokunuş kaydı başlatmadı: ekran hazır kaldı; ilk `primary_action` olayı
+  bile yok. Koordinat **(81,149)** düğmenin içinde ve önceki başarılı
+  dokunuşlarla aynı. Kayıt süresi/boyutu hatası kanıtlanmadı; 9/15 saniye ve
+  49 mm aşamaları bu koşuda geçmedi. Kök neden hâlâ inceleniyor; kör yeniden
+  dokunma, daha uzun bekleme veya test atlama eklenmedi.
+- Kalıcılık/görünüm commit'inin üretim kodu **+430 / -84**, testleri
+  **+554 / -47**, dokümanları **+86 / -15**, CI **+58 / -2** satırdır.
+  Üretim büyümesi onaylanan yerel gönderim sahipliği, disk hatasında güvenli
+  duruş ve açık inceleme yaşam döngüsünü kapsar; eski genel durum güncelleme
+  yolu kaldırıldı. Yeni UI düzeltmesinin üretim etkisi çeviriler dahil **+1**
+  net satır; yeniden doğrulama öncesi altı yerelleştirme testi geçti.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

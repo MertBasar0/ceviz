@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import threading
 import time
+from contextlib import closing
 from urllib import request, error
 from pathlib import Path
 from types import SimpleNamespace
@@ -425,10 +426,11 @@ class ConversationHTTPTests(unittest.TestCase):
             register.assert_not_called()
             save.assert_not_called()
 
-    def test_unauthorized_tcp_bodies_receive_complete_errors_without_waiting_for_upload(self):
+    def test_unauthorized_tcp_bodies_receive_complete_errors_with_bounded_upload_wait(self):
         with patch.object(session_api, "call_gateway") as rpc:
             for body, declared_length in [(b"{}", 2), (b"x" * 96_001, 96_001),
-                                          (b"", 1_000_000_000), (b"x", 1_000_000_000)]:
+                                          (b"", 1_000_000_000), (b"x", 1_000_000_000),
+                                          (b"", "invalid"), (b"", -1), (b"", 0)]:
                 with self.subTest(body_size=len(body), declared_length=declared_length), \
                      socket.create_connection(self.server.server_address, timeout=2) as client:
                     client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
@@ -444,6 +446,26 @@ class ConversationHTTPTests(unittest.TestCase):
                         self.assertEqual(json.load(response), {"error": "Unauthorized"})
                     status, _ = self.http("/api/v1/sessions/not-a-route")
                     self.assertEqual(status, 404, "The rejected upload must not hold the single-threaded server")
+            rpc.assert_not_called()
+
+    def test_delayed_unauthorized_body_receives_its_error_before_connection_teardown(self):
+        def delayed_body():
+            yield b"{"
+            time.sleep(0.05)
+            yield b"}"
+
+        with patch.object(session_api, "call_gateway") as rpc:
+            with closing(http.client.HTTPConnection(*self.server.server_address, timeout=2)) as client:
+                client.request("POST", "/api/v1/not-a-route", body=delayed_body(),
+                               headers={"Content-Type": "application/json", "Content-Length": "2"})
+                with client.getresponse() as response:
+                    self.assertEqual(response.status, 401)
+                    self.assertEqual(response.headers.get("Connection"), "close")
+                    data = response.read()
+                    self.assertEqual(len(data), int(response.headers["Content-Length"]))
+                    self.assertEqual(json.loads(data), {"error": "Unauthorized"})
+            status, _ = self.http("/api/v1/sessions/not-a-route")
+            self.assertEqual(status, 404)
             rpc.assert_not_called()
 
     def test_wire_submit_targets_selected_session_and_does_not_create_ceviz_job(self):
@@ -483,36 +505,42 @@ class ConversationHTTPTests(unittest.TestCase):
                 self.assertEqual(status, 404, "The single-threaded server can handle its next request")
             rpc.assert_not_called()
 
-    def test_trickling_oversized_body_has_a_total_drain_deadline(self):
+    def test_trickling_rejected_body_has_a_total_drain_deadline(self):
         with patch.object(session_api, "call_gateway") as rpc:
-            with socket.create_connection(self.server.server_address, timeout=2) as client:
-                client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
-                               b"Host: localhost\r\nAuthorization: Bearer ceviz-test-only\r\n"
-                               b"Content-Length: 96001\r\n\r\n")
-                stop = threading.Event()
+            for auth, expected in [(b"Authorization: Bearer ceviz-test-only\r\n", 400), (b"", 401)]:
+                with self.subTest(status=expected), \
+                     socket.create_connection(self.server.server_address, timeout=2) as client:
+                    client.sendall(b"POST /api/v1/sessions/message HTTP/1.1\r\n"
+                                   b"Host: localhost\r\n" + auth + b"Content-Length: 96001\r\n\r\n")
+                    stop = threading.Event()
 
-                def trickle():
-                    while not stop.wait(0.05):
-                        try:
-                            client.sendall(b"x")
-                        except OSError:
-                            return
+                    def trickle():
+                        while not stop.wait(0.05):
+                            try:
+                                client.sendall(b"x")
+                            except OSError:
+                                return
 
-                sender = threading.Thread(target=trickle, daemon=True)
-                sender.start()
-                started = time.monotonic()
-                try:
-                    with http.client.HTTPResponse(client) as response:
-                        response.begin()
-                        self.assertEqual(response.status, 400)
-                        self.assertEqual(json.load(response)["code"], "invalid_request")
-                    self.assertLess(time.monotonic() - started, 1.5,
-                                    "Incoming bytes must not renew the rejected body's drain budget")
-                finally:
-                    stop.set()
-                    sender.join(timeout=1)
-                status, _ = self.http("/api/v1/sessions/not-a-route")
-                self.assertEqual(status, 404)
+                    sender = threading.Thread(target=trickle, daemon=True)
+                    sender.start()
+                    started = time.monotonic()
+                    try:
+                        with http.client.HTTPResponse(client) as response:
+                            response.begin()
+                            self.assertEqual(response.status, expected)
+                            self.assertEqual(response.headers.get("Connection"), "close")
+                            payload = json.load(response)
+                            if expected == 400:
+                                self.assertEqual(payload["code"], "invalid_request")
+                            else:
+                                self.assertEqual(payload, {"error": "Unauthorized"})
+                        self.assertLess(time.monotonic() - started, 1.5,
+                                        "Incoming bytes must not renew the rejected body's drain budget")
+                    finally:
+                        stop.set()
+                        sender.join(timeout=1)
+                    status, _ = self.http("/api/v1/sessions/not-a-route")
+                    self.assertEqual(status, 404)
             rpc.assert_not_called()
 
 

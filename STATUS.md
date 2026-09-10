@@ -170,9 +170,31 @@ Henüz dağıtılmadı. Mevcut dış Beta aşağıda aynen korunuyor.
 - Yerel test takibi: kaynak sabitlenmeden başlayan ara koşuda test beklentisi
   düzenlenirken eski beklenti çalıştı; ayrıca HTTP durum satırından önce bir
   Windows **10053** bağlantı kesilmesi görüldü. İkinci hatanın nedeni eldeki
-  kırpılmış çıktıdan belirlenemedi. Sabit kaynakla tam günlük saklanan koşu
-  geçti; aynı hata tekrarlanırsa tam çağrı/test kimliğiyle ayrıca incelenecek.
-  Üretimde yeniden deneme veya hata yutma eklenmedi.
+  kırpılmış çıktıdan belirlenemedi; aşağıdaki ayrı araştırmada yeniden üretildi.
+  Sonraki yeşil koşu tek başına açıklama sayılmadı.
+
+### Ortak bağlantı kapanışı — asıl taşıma onarımı
+
+- Sabit `cfa4b01` kaynakla sınırlı tekrarlı araştırma, üçüncü döngüde iki
+  baytlık yetkisiz POST'ta **HTTP durum satırından önce Windows 10053** üretti.
+  Ayrıca commit'ten yüklenen gerçek eski handler, gecikmeli iki baytlık yeni
+  regresyonda başarısız oldu. Tam izler ve araştırma kodu yerel artefaktlarda.
+- Yanıtın uzunluğunu belirtmek tek başına yeterli değildi: okunmamış istek
+  verisiyle kapanış, yanıt başlıklarının alınmasını bile kesebiliyordu.
+  Mevcut reddedilen-gövde tüketimi tek `http_transport.py` sahibine taşındı;
+  hem ortak yetkilendirme reddi hem konuşmanın aşırı büyük isteği bunu kullanıyor.
+  Sınır **96.001 bayt / toplam 0,5 sn**, her okumada yenilenmiyor. Veri
+  ayrıştırılmıyor/yazılmıyor; sonrasında bağlantı kapatılıyor. Sınırsız veya
+  yanlış bildirilmiş yüklerde her koşulda yanıt teslimi garantisi verilmez.
+- Aynı tekrarlı kontrol yeni kaynakta **80 döngü / 1.280 gerçek HTTP isteği**
+  geçti: 1.120 yetkisiz, 80 aşırı büyük, 80 sonraki istek. İstemci yeniden
+  denemesi veya hata yutma yok. Son kaynakla **153 Python / 3 Node** geçti;
+  Windows/Linux **33 oturum** testi ve taze bağımsız inceleme de geçti.
+- Üretim farkı **+36 / -21, net +15**; eski gövde döngüsü silindi ve iki
+  mevcut ret noktasına tek taşıma sahibi getirildi. Test farkı **+59 / -31**.
+  Canlı servis değişmedi; kod dağıtımı yeni ortak modülle dört dosya gerektirecek.
+  `cfa4b01` Apple koşusu yalnız saat kanıtı için sürüyor; son onarımı içermediği
+  için dağıtım adayı değil. Son onarımla Apple doğrulaması hâlâ gerekli.
 
 ## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
 

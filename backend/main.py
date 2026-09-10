@@ -33,6 +33,7 @@ from job_outcome import normalize_job_outcome
 from push_notifier import PushNotifier
 from stt import WatchSTT
 from session_api import handle_session_request
+from http_transport import discard_rejected_body
 
 openclaw_client = OpenClawClient()
 stt_client = WatchSTT()
@@ -1232,10 +1233,11 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
     def _reject_unauthorized(self, path: str) -> bool:
         if not path.startswith("/api/") or self._authorized():
             return False
+        discard_rejected_body(self)
         payload = b'{"error": "Unauthorized"}'
         self.send_response(401)
         self.send_header("Content-Type", "application/json")
-        # Auth rejects before reading the upload. Frame the error independently
+        # Auth rejects before parsing the upload. Frame the error independently
         # of EOF: closing with unread bytes can finish with a TCP reset.
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Connection", "close")

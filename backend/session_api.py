@@ -11,7 +11,6 @@ import math
 import os
 import sqlite3
 import subprocess
-import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -20,6 +19,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+
+from http_transport import discard_rejected_body
 
 
 class SessionError(Exception):
@@ -466,26 +467,7 @@ def handle_session_request(handler: BaseHTTPRequestHandler, method: str, path: s
                 if length <= 0:
                     raise ValueError("request size")
                 if length > 96_000:
-                    # Drain only a bounded prefix before closing, so a small
-                    # oversized request can receive its framed error. Never
-                    # wait indefinitely for a rejected/incomplete body.
-                    previous_timeout = handler.connection.gettimeout()
-                    try:
-                        deadline = time.monotonic() + 0.5
-                        remaining = min(length, 96_001)
-                        while remaining:
-                            budget = deadline - time.monotonic()
-                            if budget <= 0:
-                                break
-                            handler.connection.settimeout(budget)
-                            chunk = handler.rfile.read1(remaining)
-                            if not chunk:
-                                break
-                            remaining -= len(chunk)
-                    except OSError:
-                        pass
-                    finally:
-                        handler.connection.settimeout(previous_timeout)
+                    discard_rejected_body(handler)
                     raise ValueError("request size")
                 body = json.loads(handler.rfile.read(length))
             except (TypeError, ValueError, UnicodeDecodeError) as exc:

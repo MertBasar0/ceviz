@@ -1,8 +1,16 @@
-# Phone conversations — development candidate
+# Phone conversations — TestFlight beta
 
-This feature is not in the current external TestFlight build. It requires the
-updated iPhone app and Ceviz helper. It does not change the Watch's OpenClaw
-target or the operator's Gateway configuration.
+This feature is available in external TestFlight **2026.6.5 (1789005793)**.
+Update both iPhone and Apple Watch apps. Conversations and the new follow-up
+semantics require the matching Ceviz helper from `codex/phone-conversations`,
+tested at `c3404f14e9b23b61cf8addcdcd24a4638cb02603`. The current standard
+installation instructions clone `main`, whose helper does not include these
+features; the phone displays an update-required message with that helper.
+Contact the maintainer for help updating an existing installation while
+preserving its configuration and state. Re-running the installer alone is not
+a verified upgrade procedure. Standard upgrade guidance is tracked in
+`STATUS.md`. Selecting a phone conversation does not change the Watch's
+OpenClaw target or the operator's Gateway configuration.
 
 ## Product behavior
 

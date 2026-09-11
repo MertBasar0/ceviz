@@ -1,14 +1,55 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **10 Eylül 2026**
+Son güncelleme: **11 Eylül 2026**
 
-## İç TestFlight adayı — güvenli devam ve telefon konuşmaları
+## Güncel dış Beta — güvenli devam ve telefon konuşmaları
 
-**2026.6.5 (1789005793)** yalnız **Mert** iç grubunda hazır. Apple yüklemesi
+**2026.6.5 (1789005793)** dış **Beta** ve iç **Mert** gruplarında hazır.
+Apple yüklemesi **COMPLETE**, build **VALID**, iç ve dış durum
+**IN_BETA_TESTING**, beta incelemesi **APPROVED**. Mevcut
+[TestFlight bağlantısı](https://testflight.apple.com/join/nEdn2Np2) korundu.
+
+Kullanıcı 11 Eylül'de testlerini tamamladığını, bir sorun görmediğini bildirdi
+ve dış Beta dağıtımını açıkça onayladı. Bu, kullanıcı kabul bildirimidir;
+her ayrıntılı cihaz/yeniden başlatma senaryosu bağımsız gözlenmiş sayılmıyor.
+Test edilen aynı imzalı paket dağıtıldı; yeniden derleme yapılmadı.
+
+### 11 Eylül dış dağıtım kanıtı
+
+- Tam kaynak `c3404f14e9b23b61cf8addcdcd24a4638cb02603`; Apple build kimliği
+  `24e7721c-4b81-4ea9-acc2-122f5d4c7d9c`. Sürüm **2026.6.5**, build
+  **1789005793**, **APP_STORE_ELIGIBLE**, süresi dolmamış. Ayrı yükleme
+  kaydı **COMPLETE**; hata, uyarı ve bilgi listeleri boş.
+- Yalnız bu build'in EN/TR “What to Test” metinleri dış beta için güncellendi
+  (**200 + 200**) ve birebir geri okundu. Yeni Konuşmalar/devam özelliklerinin
+  eşleşen yardımcı servis gerektirdiği, mevcut ana daldaki serviste bulunmadığı
+  ve mevcut kurulum güncellemesi için yardım istenmesi gerektiği açıklandı.
+- Mevcut dış **Beta** grubuna tek build ekleme **204**, beta inceleme başvurusu
+  **201** döndü. Başvuru sonrası ayrı GET'ler **APPROVED**, dış
+  **IN_BETA_TESTING** ve doğru Beta üyeliğini doğruladı. Yalnız grup üyeliği
+  dağıtım başarısı sayılmadı. Sonuç **11 Eylül 03:53 Türkiye saati** civarında
+  gözlendi; Apple'ın `submittedDate` alanı boş, bu alandan zaman türetilmedi.
+- Otomatik TestFlight bildirimi açık bırakıldı; ayrıca manuel bildirim
+  gönderilmedi. İç Mert erişimi, önceki dış build **1788715054**, grup ayarları
+  ve açık bağlantı korundu. Test kullanıcıları, genel App Store metadata'sı,
+  Gateway/Ceviz servisleri veya bağlantı ayarları değiştirilmedi. `main`'e
+  birleştirme, GitHub release/tag ve sosyal duyuru yapılmadı.
+- **Duyuru öncesi kurulum takibi:** README ve ürün sayfasındaki standart
+  kurulum hâlâ `main` dalını klonluyor; yeni yardımcı servis yalnız açık
+  `codex/phone-conversations` dalında, test edilen kaynak **c3404f1**.
+  Eski yardımcı serviste telefon açık bir güncelleme gereksinimi gösteriyor.
+  Yapılandırma/iş/SQLite kayıtlarını koruyan, boşta yalnız Ceviz'i yeniden
+  başlatan ve yetenekleri doğrulayan standart güncelleme yönergesi hazırlanmalı;
+  yalnız kurulum betiğini yeniden çalıştırmak güvenli güncelleme kanıtı değil.
+  Bu dağıtım sırasında ana dala geçiş veya kurulum betiği onarımı yapılmadı.
+
+## Güvenli devam ve konuşmalar — geliştirme ve iç test geçmişi
+
+10 Eylül'deki ilk dağıtımda **2026.6.5 (1789005793)** yalnız **Mert** iç grubunda hazırdı. Apple yüklemesi
 **COMPLETE**, build **VALID**, iç durum **IN_BETA_TESTING**; EN/TR test notları
 birebir geri okunarak doğrulandı. Ceviz yardımcı servisi de onayla güncellendi.
-Yeni build dış **Beta** grubuna eklenmedi; dış sürüm **1788715054** korunuyor.
-Fiziksel cihaz kabulü ve gerçek konuşmaya ilk gönderim kullanıcı testinde açık.
+O aşamada yeni build dış **Beta** grubuna eklenmedi; dış sürüm **1788715054** korundu.
+Fiziksel cihaz kabulü kullanıcı testine bırakıldı; 11 Eylül kabulü ve dış dağıtımı yukarıda.
 
 - Devam mesajı ile öneri onayı ayrıldı; açık iş/eylem kimliği kullanılıyor.
   Saat kayıt başlangıcında seçili bağlamı sabitliyor; son gelen ilgisiz işe
@@ -35,7 +76,7 @@ Fiziksel cihaz kabulü ve gerçek konuşmaya ilk gönderim kullanıcı testinde 
   hedef kimliği ve durum tutan yerel SQLite kayıtlarını açıkça onayladı.
   Uygulandı; konuşma metni/erişim anahtarı kaydedilmiyor ve OpenClaw
   veritabanına dokunulmuyor. Güncel native sonuç ve kalan işler aşağıda.
-- Yeni TestFlight build'i iç test için onaylandı; dış Beta otomatik açılmayacak.
+- Bu aşamada yeni TestFlight build'i yalnız iç test için onaylandı; dış Beta açılmadı.
   Ceviz yardımcı servisi ayrıca alınan yeniden başlatma onayıyla güncellendi;
   canlı doğrulama aşağıda. Gateway ayarları, `main`, mevcut dış TestFlight dağıtımı
   ve sosyal yayınlar değiştirilmedi. Özel `autoreview` / `test-audit` becerileri bu oturumda yok;
@@ -286,9 +327,9 @@ Fiziksel cihaz kabulü ve gerçek konuşmaya ilk gönderim kullanıcı testinde 
   Bu yüzden kalıcılığın canlı kullanıcı gönderimiyle doğrulandığı iddia edilmiyor;
   yeniden açılış kanıtı izole gerçek SQLite/telefon testlerine dayanıyor.
 
-## Kayıt ve mikrofon ekranı — dış TestFlight Beta dağıtımı tamamlandı
+## Önceki dış Beta — kayıt ve mikrofon ekranı dağıtım geçmişi
 
-**Güncel dış Beta: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,
+**8 Eylül dış Beta: 2026.6.5 (1788715054).** Apple yüklemesi **COMPLETE**,
 build **VALID**, iç ve dış durum **IN_BETA_TESTING**; **Mert** ve **Beta**
 gruplarına atanmış. İnceleme **APPROVED**, otomatik test bildirimi açık.
 Mevcut [TestFlight bağlantısı](https://testflight.apple.com/join/nEdn2Np2) korundu.

@@ -76,7 +76,7 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   iddia edilmemeli.
 
 Yerel değişiklik hesabı (`git diff --numstat` + yeni, henüz izlenmeyen kaynaklar):
-üretim **+2073/-453, net +1620**, test **+2135/-6, net +2129**, CI **+25/-1**.
+üretim **+2073/-453, net +1620**, test **+2140/-6, net +2134**, CI **+25/-1**.
 Üretim artışı tek HTTP alım/eşzamanlılık sahibi, açık Watch teslim/liste durumları,
 iptal edilebilir oturum sahipliği ve ağdan bağımsız Windows görev sınırına ait.
 Ek artış metadata-only SQLite kabul/durum sahipleri ve Watch kuyruk/odak
@@ -85,6 +85,24 @@ ses POST yolu kaldırıldı. Eski kayıtlar için sessiz protokol geçişi yok.
 Seri HTTP yolu, LAN relay'nin WSL gözeticiliği ve aynı bağlantıyı sıfırlama
 davranışı kaldırıldı/ayrıldı; taslak PowerShell yaşam-süresi sarmalayıcısı da
 doğrudan görev eylemiyle tamamen kaldırıldı. Yeni paket bağımlılığı yok.
+
+### İlk uzak doğrulama ve macOS test temizliği
+
+Onarım `1c745e2acce3ec15c164dab9fb56b27f9bfb399e` olarak yalnız geliştirme
+dalına gönderildi. [Helper koşusunda](https://github.com/MertBasar0/ceviz/actions/runs/34725991834)
+Linux ve Windows işleri geçti. macOS'taki tek hata, dokuzuncu bağlantının 503
+ile reddedilip sunucu tarafından kapatılmasından sonra testin ona da `shutdown`
+uygulamasıydı (`ENOTCONN`). [Apple koşusu](https://github.com/MertBasar0/ceviz/actions/runs/34726003616)
+aynı Python testinde durdu; Swift/Watch derleme adımlarına ulaşmadı. iPhone
+ekran işi ayrı çalışıyor; tamamlandı sayılmıyor. `validation_only=true`;
+TestFlight yükleme/dağıtımı yok.
+
+Test, yalnız reddedilmiş soketi doğrudan kapatıp sahipliğinden çıkaracak şekilde
+düzeltildi. Sekiz açık bağlantının kapanması, sekiz iznin geri dönmesi ve
+sağlık yanıtı doğrulamaları aynen duruyor; bağımsız inceleme bunu doğruladı.
+Düzeltme sonrası yerel geniş tekrar **224 test / 206 geçti / 18 atlandı,
+84,603 saniye**, temizleme başarılı. Üretim kodu değişmedi. Yeni uzak doğrulama
+henüz bu düzeltmeyi çalıştırmadı; macOS hatası gizlenmiş/geçmiş sayılmıyor.
 
 ### Onarım öncesi teşhis — tarihsel kayıt
 

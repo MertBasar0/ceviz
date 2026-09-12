@@ -200,6 +200,11 @@ class HTTPIngressTests(HTTPFixture):
         refused = self.connect(b"")
         self.assertEqual(self.response(refused)[0], 503)
         self.assertEqual(len(self.server._threads), 8, "Refused peers must not create waiting threads")
+        # The rejection path closes the ninth peer after its framed response.
+        # Darwin rejects shutdown() on it with ENOTCONN; it is not one of the
+        # eight live workers whose release this test must prove.
+        refused.close()
+        self.clients.remove(refused)
         for client in self.clients:
             client.shutdown(socket.SHUT_RDWR)
             client.close()

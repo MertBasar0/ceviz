@@ -284,3 +284,35 @@ alone is not proof that such a recovered installation lost its token.
 Microsoft documents the relevant boundaries: [systemd and WSL lifetime](https://learn.microsoft.com/en-us/windows/wsl/systemd),
 [Windows localhost access to WSL](https://learn.microsoft.com/en-us/windows/wsl/networking), and
 [Task Scheduler settings](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).
+
+### Voice delivery recovery (unreleased repair candidate)
+
+The repaired phone/Watch pair requires the helper's versioned Watch command
+recovery endpoints. Update all three components together after native/device
+validation; the currently published helper tag does not contain this candidate.
+An older peer is an explicit update requirement, not permission to fall back
+to an untracked audio POST. Captures made before this protocol are checked for
+an existing receipt only; they are not silently upgraded and resent.
+
+The helper adds metadata tables to its existing `conversations.sqlite`. Keep
+this file together with the existing job history during updates and recovery.
+It contains command IDs, capture digests/timestamps, target IDs and admission
+state, not audio, transcripts or access tokens. The phone uses its existing
+local delivery database for equivalent metadata. Recording retention on Watch
+is still 15 minutes; these databases are not another recording archive.
+
+If an upload response is lost, **Check delivery** asks about the same identity.
+An accepted identity resumes result lookup. Only a verified, still-current
+`not_submitted` identity can use its original capture again. Missing/replaced
+tracking data or an interrupted admission remains unknown; checking Jobs is
+required before deliberately recording another request. Do not delete tracking
+files, reinstall, rotate pairing or run an older endpoint to force a retry.
+New requests are not blocked behind an older uncertain capture on Watch.
+
+The updater now refuses maintenance while a Watch reservation is unresolved,
+even if no job appears in `jobs.json`; contact support to review the reservation
+instead of deleting it. Run one helper against a state directory. Cross-process
+tests cover two versioned submissions, not a mixture of legacy/new endpoints in
+separate helper processes. Tests use private fixtures, not physical power-loss
+or paired-device proof. No live task or service is installed by this source
+change; the maintenance checks above still require separate approval.

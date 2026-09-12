@@ -8,10 +8,10 @@ import FoundationNetworking
 enum BackendCapabilityGate {
     static func send(
         _ request: URLRequest, capabilityRequest: URLRequest, requiring capability: BackendCapability,
-        session: URLSession, isCurrent: () -> Bool
+        load: (URLRequest) async throws -> (Data, URLResponse), isCurrent: () -> Bool
     ) async throws -> (Data, URLResponse) {
         do {
-            let (data, response) = try await session.data(for: capabilityRequest)
+            let (data, response) = try await load(capabilityRequest)
             guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if http.statusCode == 401 { throw URLError(.userAuthenticationRequired) }
             guard (200...299).contains(http.statusCode),
@@ -23,7 +23,7 @@ enum BackendCapabilityGate {
             // This type means no command POST occurred; the user may safely try again.
             throw error as? BackendCapabilityError ?? .verificationFailed(error.localizedDescription)
         }
-        // Pairing also invalidates this captured session after the identity check.
-        return try await session.data(for: request)
+        // The transport rejects an invalidated generation atomically with task creation.
+        return try await load(request)
     }
 }

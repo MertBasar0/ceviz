@@ -4,11 +4,12 @@ import Foundation
 ///
 /// URL ve auth token kullaniciya ait: Ayarlar ekranindan girilir ya da QR
 /// ile eslesir. Token KEYCHAIN'de saklanir (uygulama silinse bile kalir);
-/// URL UserDefaults'ta. Bos birakilirsa gelistirme varsayilanina duser.
+/// URL UserDefaults'ta. Yapilandirilmamis adres gercek bir sunucuya yonelmez.
 /// Backend WATCH_CEVIZ_AUTH_TOKEN ile calisiyorsa tum /api istekleri
 /// "Authorization: Bearer <token>" ister.
 enum BackendConfig {
     static let connectionDidChange = Notification.Name("cvz.backendConnectionDidChange")
+    static let connectionDidRefresh = Notification.Name("cvz.backendConnectionDidRefresh")
     static let urlDefaultsKey = "cvz.backendURL"
     static let connectionMethodKey = "cvz.connectionMethod"
     static let tokenDefaultsKey = "cvz.backendToken"   // eski UserDefaults konumu (migrasyon)
@@ -61,18 +62,23 @@ enum BackendConfig {
         let method = items.first(where: { $0.name == "m" })?.value ?? "manual"
         guard !u.isEmpty, !t.isEmpty,
               BackendEndpointPolicy.isAllowed(u, connectionMethod: method) else { return nil }
-        setBaseURL(u)
-        setToken(t)
-        UserDefaults.standard.set(method, forKey: connectionMethodKey)
-        NotificationCenter.default.post(name: connectionDidChange, object: nil)
+        guard save(baseURL: u, token: t, connectionMethod: method) else { return nil }
         return (u, t)
     }
 
-    static func save(baseURL: String, token: String, connectionMethod: String) {
-        setBaseURL(baseURL)
-        setToken(token)
+    @discardableResult
+    static func save(baseURL: String, token: String, connectionMethod: String) -> Bool {
+        guard baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+              BackendEndpointPolicy.isAllowed(baseURL, connectionMethod: connectionMethod) else { return false }
+        let unchanged = BackendEndpointPolicy.isSameConnection(baseURLString, token: self.token,
+                                                               as: baseURL, token: token)
+        // Preserve the stored spelling too: other durable consumers bind their
+        // scope to this URL. Cosmetic host/port edits must not orphan that scope.
+        setBaseURL(unchanged ? baseURLString : baseURL)
+        if !unchanged { setToken(token) }
         UserDefaults.standard.set(connectionMethod, forKey: connectionMethodKey)
-        NotificationCenter.default.post(name: connectionDidChange, object: nil)
+        NotificationCenter.default.post(name: unchanged ? connectionDidRefresh : connectionDidChange, object: nil)
+        return true
     }
 
     static func pairingMethod(_ url: URL) -> String? {
@@ -101,24 +107,26 @@ enum BackendConfig {
 
 /// Owns backend networking separately from URLSession.shared so pairing can
 /// discard stale DNS, connection and request state without reinstalling the app.
-final class BackendTransport {
+final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable {
     static let shared = BackendTransport()
 
     private let lock = NSLock()
-    private var session: URLSession
+    // All session access, task creation and invalidation share this lock.
+    private lazy var session = makeSession()
+    private var draining: [ObjectIdentifier: URLSession] = [:]
 
-    private init() {
-        session = Self.makeSession()
-    }
+    private override init() { super.init() }
 
-    private static func makeSession() -> URLSession {
+    private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 180
-        configuration.waitsForConnectivity = true
-        return URLSession(configuration: configuration)
+        // Offline is a visible delivery state, not an invisible 180-second wait.
+        // A POST failure still means unknown delivery, never permission to replay.
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }
 
     func dataTask(
@@ -126,17 +134,26 @@ final class BackendTransport {
         completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void
     ) -> URLSessionDataTask {
         lock.lock()
-        let current = session
-        lock.unlock()
-        return current.dataTask(with: request, completionHandler: completionHandler)
+        defer { lock.unlock() }
+        return session.dataTask(with: request, completionHandler: completionHandler)
     }
 
-    func reset() {
+    func reset(cancelInFlight: Bool = true) {
         lock.lock()
+        defer { lock.unlock() }
         let previous = session
-        session = Self.makeSession()
-        lock.unlock()
-        previous.invalidateAndCancel()
+        draining[ObjectIdentifier(previous)] = previous
+        session = makeSession()
+        // Graceful invalidation returns immediately: dropping A here would
+        // let A's tasks escape a later identity-changing reset of B.
+        if cancelInFlight { draining.values.forEach { $0.invalidateAndCancel() } }
+        else { previous.finishTasksAndInvalidate() }
+    }
+
+    func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?) {
+        lock.lock()
+        defer { lock.unlock() }
+        draining.removeValue(forKey: ObjectIdentifier(session))
     }
 
     private func currentSession() -> URLSession {
@@ -146,7 +163,66 @@ final class BackendTransport {
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await currentSession().data(for: request)
+        try await data(for: request, in: nil)
+    }
+
+    /// Capture synchronously before an actor hop. All requests in one delivery
+    /// exchange are fenced by this session, including its capability GET/POST.
+    func loader() -> (URLRequest) async throws -> (Data, URLResponse) {
+        let selected = currentSession()
+        return { try await self.data(for: $0, in: selected) }
+    }
+
+    private func data(for request: URLRequest, in selectedSession: URLSession?) async throws -> (Data, URLResponse) {
+        let cancellation = TaskCancellation()
+        return try await withTaskCancellationHandler(operation: {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                do {
+                    let task = try self.makeTask(with: request, in: selectedSession) { data, response, error in
+                        if let error { continuation.resume(throwing: error) }
+                        else if let data, let response { continuation.resume(returning: (data, response)) }
+                        else { continuation.resume(throwing: URLError(.badServerResponse)) }
+                    }
+                    cancellation.start(task)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }, onCancel: { cancellation.cancel() })
+    }
+
+    private func makeTask(with request: URLRequest, in selectedSession: URLSession?,
+                          completion: @escaping (Data?, URLResponse?, Error?) -> Void) throws -> URLSessionDataTask {
+        lock.lock()
+        defer { lock.unlock() }
+        // Checking identity separately from creation leaves a window in which
+        // reset invalidates the captured session before its task exists.
+        if let selectedSession, selectedSession !== session { throw BackendCapabilityError.connectionChanged }
+        return session.dataTask(with: request, completionHandler: completion)
+    }
+
+    private final class TaskCancellation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var task: URLSessionDataTask?
+        private var cancelled = false
+
+        func start(_ task: URLSessionDataTask) {
+            lock.lock()
+            self.task = task
+            let wasCancelled = cancelled
+            lock.unlock()
+            // Cancellation can arrive before the continuation creates its
+            // native task; a cancelled task never gets resumed as fresh work.
+            if wasCancelled { task.cancel() }
+            else { task.resume() }
+        }
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            let current = task
+            lock.unlock()
+            current?.cancel()
+        }
     }
 
     func data(for request: URLRequest, requiring capability: BackendCapability) async throws -> (Data, URLResponse) {
@@ -158,7 +234,8 @@ final class BackendTransport {
         }
         return try await BackendCapabilityGate.send(
             request, capabilityRequest: capabilityRequest, requiring: capability,
-            session: selectedSession, isCurrent: { self.currentSession() === selectedSession }
+            load: { try await self.data(for: $0, in: selectedSession) },
+            isCurrent: { self.currentSession() === selectedSession }
         )
     }
 }

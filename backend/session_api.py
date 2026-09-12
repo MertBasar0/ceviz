@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
-from http_transport import discard_rejected_body
+from http_transport import RequestReadError, read_request_body
 
 
 class SessionError(Exception):
@@ -463,13 +463,11 @@ def handle_session_request(handler: BaseHTTPRequestHandler, method: str, path: s
             payload = sessions_api.run_status(query)
         elif method == "POST" and path == "/api/v1/sessions/message":
             try:
-                length = int(handler.headers.get("Content-Length", "0"))
-                if length <= 0:
-                    raise ValueError("request size")
-                if length > 96_000:
-                    discard_rejected_body(handler)
-                    raise ValueError("request size")
-                body = json.loads(handler.rfile.read(length))
+                body = json.loads(read_request_body(handler, 96_000))
+            except RequestReadError as exc:
+                # Keep the shipped conversation size-error status; timeout is
+                # distinct and never grants permission to replay an identity.
+                raise SessionError("invalid_request", str(exc), 400 if exc.status == 413 else exc.status) from exc
             except (TypeError, ValueError, UnicodeDecodeError) as exc:
                 raise SessionError("invalid_request", "A bounded JSON message is required.") from exc
             payload = sessions_api.send_message(body)

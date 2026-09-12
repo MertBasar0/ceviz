@@ -12,11 +12,30 @@ struct JobsListView: View {
                         .tracking(1)
                         .foregroundColor(CVZ.accent)
                     Spacer()
+                    Button { sessionManager.fetchJobs() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.plain).foregroundColor(CVZ.accent)
+                    .disabled(sessionManager.jobsLoading)
+                    .accessibilityLabel(Text("Refresh"))
+                    .accessibilityIdentifier("jobs.refresh")
                 }
                 .padding(.bottom, 4)
 
-                if sessionManager.activeJobs.isEmpty {
-                    Text("No active jobs")
+                if sessionManager.jobsLoading {
+                    ProgressView("Refreshing jobs…").font(.caption).tint(CVZ.accent)
+                        .accessibilityIdentifier("jobs.loading")
+                }
+                if let error = sessionManager.jobsErrorKey {
+                    Text(LocalizedStringKey(error)).font(.caption).foregroundColor(CVZ.warn)
+                        .accessibilityIdentifier("jobs.error")
+                    if !sessionManager.activeJobs.isEmpty {
+                        Text("Showing the last received jobs.").font(.caption).foregroundColor(CVZ.textSub)
+                    }
+                }
+                if sessionManager.activeJobs.isEmpty && sessionManager.jobsHaveLoaded && sessionManager.jobsErrorKey == nil && !sessionManager.jobsLoading {
+                    Text("No jobs yet")
                         .font(.caption)
                         .foregroundColor(CVZ.textDim)
                         .padding(.top, 12)
@@ -27,6 +46,10 @@ struct JobsListView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }
+                if sessionManager.jobsHaveMore {
+                    Text("Showing recent jobs. Full history on iPhone.")
+                        .font(.caption).foregroundColor(CVZ.textSub).padding(.top, 8)
                 }
             }
             .padding(.horizontal, 2)

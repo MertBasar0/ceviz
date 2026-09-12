@@ -11,6 +11,10 @@ struct WatchTransportTests {
             precondition(WatchCommandTransport.needsFile(Data(count: count)) == file)
         }
         precondition(WatchCommandTransport.supportsFiles(["audio_file_v1": true]))
+        precondition(WatchCommandTransport.supportsRecovery(["audio_status_v1": true]))
+        for reply in [[:], ["audio_file_v1": true], ["audio_status_v1": false], ["audio_status_v1": "true"]] as [[String: Any]] {
+            precondition(!WatchCommandTransport.supportsRecovery(reply), "An old phone must not receive even a small new durable command")
+        }
         precondition(WatchCommandTransport.supportsContinuation(["continuation_v1": true]))
         precondition(!WatchCommandTransport.supportsContinuation(["audio_file_v1": true]))
         precondition(!WatchCommandTransport.supportsContinuation(["continuation_v1": "true"]))
@@ -25,7 +29,8 @@ struct WatchTransportTests {
         let oldModel = try JSONDecoder().decode(WatchCommandRequest.self, from: encodedSmall)
         precondition(oldModel.audioData == small.audioData && oldModel.clientTimestamp == small.clientTimestamp)
         let legacy = try WatchCommandTransport.decode(JSONEncoder().encode(small), now: now)
-        precondition(legacy.identity == nil)
+        precondition(legacy.identity == nil && legacy.recoveryProtocol == nil)
+        try testRecoveryBoundary(small)
         let aac = WatchCommandRequest(audioData: small.audioData, format: "aac", clientTimestamp: small.clientTimestamp)
         _ = try WatchCommandTransport.decode(WatchCommandTransport.encode(aac, commandID: commandID), now: now)
 
@@ -110,6 +115,66 @@ struct WatchTransportTests {
     private static func mustReject(_ operation: () throws -> Void) throws {
         do { try operation() } catch { return }
         preconditionFailure("Invalid/unacknowledged input must not be accepted")
+    }
+
+    private static func testRecoveryBoundary(_ request: WatchCommandRequest) throws {
+        // Round-trip actual JSON envelopes and binary WC property lists, not
+        // status enum fixtures. No real WCSession or user's backend is used.
+        let journalID = "DD8F2A1C-2345-4567-ABCD-0123456789AB"
+        let marked = try WatchCommandTransport.encode(request, commandID: commandID, recoveryProtocol: 1,
+                                                      deliveryJournalID: journalID)
+        let incoming = try WatchCommandTransport.decode(marked, now: now)
+        let identity = WatchCommandTransport.identity(commandID: commandID, request: request)
+        precondition(incoming.recoveryProtocol == 1 && incoming.identity == identity && incoming.deliveryJournalID == journalID)
+        let oldIdentified = try WatchCommandTransport.decode(
+            WatchCommandTransport.encode(request, commandID: commandID), now: now)
+        precondition(oldIdentified.identity == identity && oldIdentified.recoveryProtocol == nil && oldIdentified.deliveryJournalID == nil,
+                     "An older queued identity must never be upgraded into a safe first submission")
+        var object = try JSONSerialization.jsonObject(with: marked) as! [String: Any]
+        for journal in ["invalid", 1] as [Any] {
+            object["delivery_journal_id"] = journal
+            try mustReject { _ = try WatchCommandTransport.decode(JSONSerialization.data(withJSONObject: object), now: now) }
+        }
+        object["delivery_journal_id"] = journalID
+        for marker in [true, "1", 2] as [Any] {
+            object["recovery_protocol"] = marker
+            try mustReject { _ = try WatchCommandTransport.decode(JSONSerialization.data(withJSONObject: object), now: now) }
+        }
+        object["recovery_protocol"] = 1
+        object.removeValue(forKey: "command_id")
+        object.removeValue(forKey: "audio_digest")
+        try mustReject { _ = try WatchCommandTransport.decode(JSONSerialization.data(withJSONObject: object), now: now) }
+        try mustReject { _ = try WatchCommandTransport.encode(request, commandID: commandID, recoveryProtocol: 2) }
+        try mustReject { _ = try WatchCommandTransport.encode(request, commandID: commandID, recoveryProtocol: 1, deliveryJournalID: "invalid") }
+        try mustReject { _ = try WatchCommandTransport.encode(request, commandID: commandID, deliveryJournalID: journalID) }
+
+        func receive(_ reply: [String: Any]) throws -> WatchCommandTransport.DeliveryStatus {
+            let bytes = try PropertyListSerialization.data(fromPropertyList: reply, format: .binary, options: 0)
+            let decoded = try PropertyListSerialization.propertyList(from: bytes, format: nil) as! [String: Any]
+            return WatchCommandTransport.deliveryStatus(decoded, matching: identity)
+        }
+        for state in ["not_submitted", "in_flight", "accepted", "unknown", "unexpected"] {
+            let reply: [String: Any] = ["status": state, "command_id": commandID,
+                                       "audio_digest": identity.digest, "response_data": try response()]
+            switch try receive(reply) {
+            case .notSubmitted: precondition(state == "not_submitted")
+            case .inFlight: precondition(state == "in_flight")
+            case .accepted(let data): precondition(state == "accepted" && (try? JSONDecoder().decode(WatchCommandResponse.self, from: data).jobId) == "job-1")
+            case .unknown: precondition(state == "unknown" || state == "unexpected")
+            }
+            for key in ["command_id", "audio_digest"] {
+                var wrong = reply
+                wrong[key] = "wrong"
+                guard case .unknown = try receive(wrong) else { preconditionFailure("A mismatched status must not acknowledge or authorize replay") }
+                wrong.removeValue(forKey: key)
+                guard case .unknown = try receive(wrong) else { preconditionFailure("A status without its identity echo stays unknown") }
+            }
+        }
+        for body in [Data("not JSON".utf8), try response(status: "error", jobID: nil), try response(jobID: nil)] {
+            let malformed: [String: Any] = ["status": "accepted", "command_id": commandID,
+                                           "audio_digest": identity.digest, "response_data": body]
+            guard case .unknown = try receive(malformed) else { preconditionFailure("Only a validated job receipt retires saved audio") }
+        }
     }
 
     private static func testFileLifetime(_ data: Data, identity: WatchCommandTransport.Identity) throws {

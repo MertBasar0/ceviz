@@ -28,7 +28,6 @@ private final class CommandBackgroundLease {
 class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCenterDelegate {
     static let shared = WatchBridgeCoordinator()
     private let logger = Logger(subsystem: "com.mertbasar.ceviz.ios", category: "WatchBridge")
-    private var backendURL: URL { BackendConfig.url("/api/v1/watch/command") }
     private let notificationCenter = UNUserNotificationCenter.current()
     private let handoffNotificationPrefix = "watch-ceviz.handoff."
     private let handoffNudgeDefaultsKey = "watch-ceviz.last-handoff-nudge"
@@ -37,6 +36,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     private var pendingCommandReceipts: [String: (message: [String: Any], createdAt: Date)] = [:]
     private var commandConfigurationGeneration = 0
     private let commandResetDefaultsKey = "cvz.watchCommandResetAt"
+    @MainActor private var deliveryOwner: (generation: Int, coordinator: WatchDeliveryCoordinator)?
 
     private override init() {
         super.init()
@@ -45,6 +45,10 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             selector: #selector(connectionConfigurationDidChange),
             name: BackendConfig.connectionDidChange,
             object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refreshConnectionState),
+            name: BackendConfig.connectionDidRefresh, object: nil
         )
         notificationCenter.delegate = self
         // Bildirim izni acilista DEGIL, ilk gercek handoff bildiriminden
@@ -60,6 +64,22 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
 
     @objc private func connectionConfigurationDidChange() {
         resetConnectionState()
+    }
+
+    @objc private func refreshConnectionState() {
+        // Preserve receipts, the original command generation and in-flight POSTs.
+        // Re-pairing the same backend must not erase the Watch's only audio copy.
+        BackendTransport.shared.reset(cancelInFlight: false)
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        session.activate()
+        let message: [String: Any] = ["action": "connection_refreshed"]
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+        } else {
+            session.transferUserInfo(message)
+        }
+        flushCommandReceipts()
     }
 
     func resetConnectionState() {
@@ -200,7 +220,16 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
                 }
                 return
             }
-            self.forwardToBackend(request: incoming.request, configurationGeneration: generation, replyHandler: completion)
+            do {
+                let result = try await self.watchDeliveryCoordinator().submit(incoming, load: BackendTransport.shared.loader())
+                if result["status"] as? String == "accepted", let data = result["response_data"] as? Data {
+                    completion(data)
+                } else {
+                    self.replyWithError(message: self.deliveryErrorText(nil), replyHandler: completion)
+                }
+            } catch {
+                self.replyWithError(message: self.deliveryErrorText(error), replyHandler: completion)
+            }
         }
     }
 
@@ -253,7 +282,19 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
     /// Handles dictionary messages for fetching data like active jobs.
     func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
         if message["action"] as? String == WatchCommandTransport.capabilitiesAction {
-            replyHandler(["audio_file_v1": true, "continuation_v1": true])
+            Task { @MainActor in
+                do {
+                    let journalID = try self.watchDeliveryCoordinator().deliveryJournalID
+                    replyHandler(["audio_file_v1": true, "continuation_v1": true,
+                                  "audio_status_v1": true, "delivery_journal_id": journalID])
+                } catch {
+                    replyHandler(["audio_status_v1": false, "error_reason": self.deliveryErrorText(error)])
+                }
+            }
+            return
+        }
+        if message["action"] as? String == WatchCommandTransport.statusAction {
+            reconcileCommand(message, replyHandler: replyHandler)
             return
         }
         if message["action"] as? String == "register_watch_push",
@@ -268,7 +309,10 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
         if DemoMode.isActive {
             let action = message["action"] as? String
             if action == "fetch_jobs" {
-                replyHandler(safeReply(DemoMode.jobsReplyForWatch))
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: DemoMode.jobsReplyForWatch)
+                    replyHandler(try WatchJobSnapshot.reply(from: data))
+                } catch { replyHandler(["error": "Failed to parse jobs response"]) }
                 return
             }
             if action == "summarize_job" || action == "cancel_job" {
@@ -452,76 +496,62 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
                 replyHandler(["error": "Backend unavailable"])
                 return
             }
-            guard let data = data, let jobsObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            guard let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
+                replyHandler(["error": "Backend unavailable"])
+                return
+            }
+            guard let data else {
                 replyHandler(["error": "Failed to parse jobs response"])
                 return
             }
-            replyHandler(self.safeReply(jobsObj))
+            do { replyHandler(try WatchJobSnapshot.reply(from: data)) }
+            catch { replyHandler(["error": "Failed to parse jobs response"]) }
         }
         task.resume()
     }
     
-    private func forwardToBackend(request: WatchCommandRequest, configurationGeneration: Int, replyHandler: @escaping (Data) -> Void) {
-        var urlRequest = URLRequest(url: backendURL)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        BackendConfig.applyAuth(&urlRequest)
-        
-        do {
-            urlRequest.httpBody = try JSONEncoder().encode(request)
-        } catch {
-            logger.error("Failed to encode backend request: \(error.localizedDescription)")
-            replyWithError(message: "Failed to encode request", replyHandler: replyHandler)
+    @MainActor private func watchDeliveryCoordinator() throws -> WatchDeliveryCoordinator {
+        if let deliveryOwner, deliveryOwner.generation == commandConfigurationGeneration { return deliveryOwner.coordinator }
+        let generation = commandConfigurationGeneration
+        let coordinator = try WatchDeliveryCoordinator(baseURL: BackendConfig.baseURLString, token: BackendConfig.token,
+            isCurrent: { [weak self] in self?.commandConfigurationGeneration == generation })
+        deliveryOwner = (generation, coordinator)
+        return coordinator
+    }
+
+    private func reconcileCommand(_ message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
+        guard let commandID = message["command_id"] as? String, UUID(uuidString: commandID) != nil,
+              let digest = message["audio_digest"] as? String, digest.utf8.count == 64,
+              digest.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+            replyHandler(["status": "unknown"])
             return
         }
-        
-        let completion: (Data?, URLResponse?, Error?) -> Void = { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                self.logger.error("Backend request failed: \(error.localizedDescription)")
-                self.replyWithError(message: error is BackendCapabilityError ? error.localizedDescription : "Backend unavailable", replyHandler: replyHandler)
-                return
-            }
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  let responseData = data,
-                  (200...299).contains(httpResponse.statusCode) else {
-                self.logger.error("Backend returned non-200 response")
-                self.replyWithError(message: "Backend error", replyHandler: replyHandler)
-                return
-            }
-            
-            if let decodedResponse = try? JSONDecoder().decode(WatchCommandResponse.self, from: responseData) {
-                Task { @MainActor in
-                    guard self.commandConfigurationGeneration == configurationGeneration else { return }
-                    self.storeLatestContinuation(
-                        jobId: decodedResponse.jobId,
-                        summaryText: decodedResponse.reportMeta?.watchSummary ?? decodedResponse.summaryText,
-                        transcript: decodedResponse.transcript,
-                        phoneReport: decodedResponse.reportMeta?.phoneReport ?? decodedResponse.phoneReport,
-                        reportMeta: decodedResponse.reportMeta,
-                        previewSections: decodedResponse.previewSections
-                    )
+        Task { @MainActor in
+            let identity = WatchCommandTransport.Identity(commandID: commandID, digest: digest)
+            let lease = CommandBackgroundLease()
+            defer { lease.finish() }
+            var result: [String: Any] = ["status": "unknown", "command_id": commandID, "audio_digest": digest]
+            do {
+                if !DemoMode.isActive {
+                    let coordinator = try self.watchDeliveryCoordinator()
+                    if let journalID = message["delivery_journal_id"] as? String,
+                       journalID != coordinator.deliveryJournalID {
+                        throw WatchDeliveryCoordinator.Failure.unknown
+                    }
+                    result = try await coordinator.status(identity, load: BackendTransport.shared.loader())
                 }
-                // APNs owns automatic terminal alerts, including an idempotent
-                // command replay that returns an already completed result.
+            } catch {
+                result["error_reason"] = self.deliveryErrorText(error)
             }
+            replyHandler(result)
+        }
+    }
 
-            self.logger.info("Successfully received backend response, forwarding to Watch")
-            replyHandler(responseData)
+    private func deliveryErrorText(_ error: Error?) -> String {
+        if case .updateRequired? = error as? WatchDeliveryCoordinator.Failure {
+            return NSLocalizedString("Update Ceviz on both devices and update your helper service before sending again.", comment: "Watch recovery needs compatible owners")
         }
-        
-        if request.continueJobId != nil {
-            Task {
-                do {
-                    let (data, response) = try await BackendTransport.shared.data(for: urlRequest, requiring: .continuation)
-                    completion(data, response, nil)
-                } catch { completion(nil, nil, error) }
-            }
-        } else {
-            BackendTransport.shared.dataTask(with: urlRequest, completionHandler: completion).resume()
-        }
+        return NSLocalizedString("Delivery is unconfirmed. Check Jobs before recording or sending the request again.", comment: "Never promise safe replay after a connection or storage error")
     }
     
     @MainActor

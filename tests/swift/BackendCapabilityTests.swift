@@ -54,7 +54,7 @@ struct BackendCapabilityTests {
             CapabilityProtocol.received = []
             do {
                 _ = try await BackendCapabilityGate.send(command, capabilityRequest: capabilityRequest, requiring: required,
-                                                         session: session, isCurrent: { current })
+                                                         load: { try await session.data(for: $0) }, isCurrent: { current })
                 precondition(shouldSend, "An unsupported or changed helper must reject before submission")
             } catch {
                 precondition(!shouldSend, "A supported unchanged helper should receive the linked request: \(error)")
@@ -68,7 +68,7 @@ struct BackendCapabilityTests {
             CapabilityProtocol.received = []
             do {
                 _ = try await BackendCapabilityGate.send(command, capabilityRequest: capabilityRequest, requiring: .continuation,
-                                                         session: session, isCurrent: { true })
+                                                         load: { try await session.data(for: $0) }, isCurrent: { true })
                 preconditionFailure("The injected HTTP timeout must be visible")
             } catch {
                 precondition((error is BackendCapabilityError) == (method == "GET"),
@@ -78,7 +78,7 @@ struct BackendCapabilityTests {
             if method == "GET" {
                 CapabilityProtocol.failMethod = nil
                 _ = try await BackendCapabilityGate.send(command, capabilityRequest: capabilityRequest, requiring: .continuation,
-                                                         session: session, isCurrent: { true })
+                                                         load: { try await session.data(for: $0) }, isCurrent: { true })
                 precondition(CapabilityProtocol.received == ["GET", "GET", "POST"],
                              "Retrying the unchanged intent after a GET-only failure sends exactly one command")
             }

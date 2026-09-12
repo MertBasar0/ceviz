@@ -149,6 +149,7 @@ class EndpointContractTests(unittest.TestCase):
                 self.assertEqual(response.status, 200)
             self.assertEqual(capabilities, {
                 "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
+                "watch_command_recovery_v1": True,
             })
 
     def test_job_report_response_matches_contract_with_full_section_shape(self) -> None:

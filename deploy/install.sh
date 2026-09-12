@@ -30,6 +30,10 @@ if [ -e "$APP_DIR/.auth-token" ] || [ -L "$APP_DIR/.auth-token" ] || \
 fi
 
 PORT="${WATCH_CEVIZ_PORT:-8080}"
+if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$PORT < 1 || 10#$PORT > 65535 )); then
+  echo "!! WATCH_CEVIZ_PORT must be a TCP port from 1 to 65535." >&2
+  exit 1
+fi
 NETWORK_MODE="${WATCH_CEVIZ_NETWORK_MODE:-auto}"
 VENV="$APP_DIR/.venv"
 PY="$VENV/bin/python"
@@ -144,6 +148,15 @@ fi
 # --- 5) Tailscale yayini + URL ---
 IS_WSL=0
 grep -qi microsoft /proc/version 2>/dev/null && IS_WSL=1
+if [ "$IS_WSL" = 1 ]; then
+  if ! command -v powershell.exe >/dev/null 2>&1 || [ -z "${WSL_DISTRO_NAME:-}" ]; then
+    echo "!! Windows PowerShell and WSL_DISTRO_NAME are required for persistent WSL availability." >&2
+    echo "   The backend may stop when this terminal closes; see deploy/README.md." >&2
+    exit 1
+  fi
+  LIFETIME_INSTALLER="$(wslpath -w "$SCRIPT_DIR/windows/install-wsl-lifetime.ps1")"
+  powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LIFETIME_INSTALLER" -Distro "$WSL_DISTRO_NAME"
+fi
 WINDOWS_TS=0
 if [ "$IS_WSL" = 1 ] && command -v powershell.exe >/dev/null 2>&1; then
   powershell.exe -NoProfile -Command 'if (Get-Command tailscale -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }' >/dev/null 2>&1 && WINDOWS_TS=1 || true
@@ -166,7 +179,7 @@ install_windows_relay() {
   fi
   installer="$(wslpath -w "$SCRIPT_DIR/windows/install-relay.ps1")"
   if ! output="$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Port "$PORT" \
-      -Distro "${WSL_DISTRO_NAME:-Ubuntu}" 2>&1 | tr -d '\r')"; then
+      -Distro "$WSL_DISTRO_NAME" 2>&1 | tr -d '\r')"; then
     printf '%s\n' "$output" >&2
     echo "!!  HATA: Windows relay kurulumu basarisiz oldu." >&2
     return 1
@@ -199,10 +212,26 @@ if [ "$NETWORK_MODE" = tailscale ] && command -v tailscale >/dev/null 2>&1; then
   PAIRING_METHOD=tailscale
   echo "==> Tailscale serve: $BASE_URL"
 elif [ "$NETWORK_MODE" = tailscale ] && [ "$WINDOWS_TS" = 1 ]; then
-  RELAY_URL="$(install_windows_relay)"; BASE_URL="$RELAY_URL"
-  powershell.exe -NoProfile -Command "tailscale serve --bg --set-path=/ceviz $RELAY_URL" >/dev/null
-  TS_HOST="$(powershell.exe -NoProfile -Command '(tailscale status --json | ConvertFrom-Json).Self.DNSName.TrimEnd(".")' | tr -d '\r')"
-  [ -n "$TS_HOST" ] && BASE_URL="https://$TS_HOST/ceviz"
+  # WSL localhost forwarding is independent of a LAN address and firewall.
+  # Prove this exact backend is reachable before publishing its private route.
+  if ! printf '%s' "$TOKEN" | powershell.exe -NoProfile -NonInteractive -Command "
+    \$ErrorActionPreference='Stop'
+    try {
+      \$token=[Console]::In.ReadToEnd()
+      \$features=Invoke-RestMethod -Uri 'http://127.0.0.1:$PORT/api/v1/capabilities' -TimeoutSec 5 -Headers @{Authorization=('Bearer '+\$token)}
+      if (\$features.conversations_v1 -ne \$true) { exit 1 }
+    } catch { exit 1 }" >/dev/null 2>&1; then
+    echo "!! Windows cannot reach this Ceviz backend on localhost:$PORT. No LAN relay or firewall rule was created." >&2
+    echo "   Use the WSL localhost-forwarding repair guidance in deploy/README.md." >&2
+    exit 1
+  fi
+  powershell.exe -NoProfile -NonInteractive -Command "tailscale serve --bg --set-path=/ceviz http://127.0.0.1:$PORT; exit \$LASTEXITCODE" >/dev/null
+  TS_HOST="$(powershell.exe -NoProfile -NonInteractive -Command '$ErrorActionPreference="Stop"; try { $status=tailscale status --json; if ($LASTEXITCODE -ne 0) { exit 1 }; ($status | ConvertFrom-Json).Self.DNSName.TrimEnd(".") } catch { exit 1 }' | tr -d '\r')"
+  if [[ ! "$TS_HOST" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+\.ts\.net$ ]]; then
+    echo "!! Windows Tailscale did not return a valid tailnet DNS name; pairing was not generated." >&2
+    exit 1
+  fi
+  BASE_URL="https://$TS_HOST/ceviz"
   PAIRING_METHOD=tailscale
 elif [ "$NETWORK_MODE" = relay ] && [ "$IS_WSL" = 1 ]; then
   BASE_URL="$(install_windows_relay)"; PAIRING_METHOD=relay

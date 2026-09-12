@@ -1,6 +1,8 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -67,6 +69,21 @@ class PushNotifierTests(unittest.TestCase):
         self.assertEqual(device["relay_handle"], "relay-handle")
         self.assertEqual(device["send_grant"], "send-grant")
         self.assertEqual(stored["installation_id"], "installation-1")
+
+    def test_concurrent_phone_watch_registration_preserves_both_devices(self) -> None:
+        both_posted = threading.Barrier(2)
+
+        def relay(path, payload):
+            both_posted.wait(timeout=2)
+            return {"ok": True, "relayHandle": payload["bundleId"], "sendGrant": "fixture-grant"}
+
+        with mock.patch.object(self.notifier, "_post", side_effect=relay), ThreadPoolExecutor(max_workers=2) as pool:
+            registrations = [pool.submit(self.notifier.register, {
+                "installation_id": "same-fixture", "bundle_id": bundle, "apns_token": "fixture-token",
+            }) for bundle in ("fixture.phone", "fixture.watch")]
+            self.assertTrue(all(future.result()["ok"] for future in registrations))
+        stored = json.loads(self.notifier.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(set(stored["devices"]), {"fixture.phone", "fixture.watch"})
 
     def test_reregister_same_installation_preserves_first_registration(self) -> None:
         self.notifier._store({

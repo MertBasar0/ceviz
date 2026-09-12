@@ -2,17 +2,19 @@ import Foundation
 import CryptoKit
 
 /// One request/receipt contract across interactive messages and background files.
-/// The extra identity fields stay on the Watch link; the phone forwards the
-/// unchanged audio and timestamp using the existing backend request model.
+/// The phone binds the original capture identity to its durable delivery record
+/// before forwarding the unchanged audio, timestamp and selected parent.
 enum WatchCommandTransport {
     static let interactiveBudget = 60_000
     static let maximumAge: TimeInterval = 15 * 60
     static let fileAction = "audio_command_file_v1"
     static let receiptAction = "audio_command_receipt_v1"
     static let capabilitiesAction = "audio_command_capabilities"
+    static let statusAction = "audio_command_status_v1"
 
     static func supportsFiles(_ reply: [String: Any]) -> Bool { reply["audio_file_v1"] as? Bool == true }
     static func supportsContinuation(_ reply: [String: Any]) -> Bool { reply["continuation_v1"] as? Bool == true }
+    static func supportsRecovery(_ reply: [String: Any]) -> Bool { reply["audio_status_v1"] as? Bool == true }
 
     struct Identity: Equatable {
         let commandID: String
@@ -26,6 +28,35 @@ enum WatchCommandTransport {
     struct Incoming {
         let request: WatchCommandRequest
         let identity: Identity?
+        let recoveryProtocol: Int?
+        let deliveryJournalID: String?
+    }
+
+    private struct RecoveryMarker: Decodable {
+        let recoveryProtocol: Int?
+        let deliveryJournalID: String?
+        enum CodingKeys: String, CodingKey {
+            case recoveryProtocol = "recovery_protocol", deliveryJournalID = "delivery_journal_id"
+        }
+    }
+
+    enum DeliveryStatus {
+        case accepted(Data), notSubmitted, inFlight, unknown
+    }
+
+    static func deliveryStatus(_ reply: [String: Any], matching identity: Identity) -> DeliveryStatus {
+        guard reply["command_id"] as? String == identity.commandID,
+              reply["audio_digest"] as? String == identity.digest else { return .unknown }
+        switch reply["status"] as? String {
+        case "not_submitted": return .notSubmitted
+        case "in_flight": return .inFlight
+        case "accepted":
+            guard let data = reply["response_data"] as? Data,
+                  let response = try? JSONDecoder().decode(WatchCommandResponse.self, from: data),
+                  isReceipt(response) else { return .unknown }
+            return .accepted(data)
+        default: return .unknown
+        }
     }
 
     enum TransportError: Error {
@@ -41,8 +72,13 @@ enum WatchCommandTransport {
         return Identity(commandID: commandID, digest: digest)
     }
 
-    static func encode(_ request: WatchCommandRequest, commandID: String) throws -> Data {
-        guard UUID(uuidString: commandID) != nil else { throw TransportError.invalidIdentity }
+    static func encode(_ request: WatchCommandRequest, commandID: String, recoveryProtocol: Int? = nil,
+                       deliveryJournalID: String? = nil) throws -> Data {
+        guard UUID(uuidString: commandID) != nil,
+              recoveryProtocol == nil || recoveryProtocol == 1 else { throw TransportError.invalidIdentity }
+        if let deliveryJournalID {
+            guard recoveryProtocol == 1, UUID(uuidString: deliveryJournalID) != nil else { throw TransportError.invalidIdentity }
+        }
         let encoded = try JSONEncoder().encode(request)
         guard var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
             throw TransportError.invalidRequest
@@ -50,6 +86,8 @@ enum WatchCommandTransport {
         let identity = identity(commandID: commandID, request: request)
         object["command_id"] = identity.commandID
         object["audio_digest"] = identity.digest
+        if let recoveryProtocol { object["recovery_protocol"] = recoveryProtocol }
+        if let deliveryJournalID { object["delivery_journal_id"] = deliveryJournalID }
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 
@@ -69,9 +107,16 @@ enum WatchCommandTransport {
               let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw TransportError.invalidRequest
         }
+        let recovery = try JSONDecoder().decode(RecoveryMarker.self, from: data)
+        let recoveryProtocol = recovery.recoveryProtocol
+        guard recoveryProtocol == nil || recoveryProtocol == 1 else { throw TransportError.invalidIdentity }
+        if let journalID = recovery.deliveryJournalID {
+            guard recoveryProtocol == 1, UUID(uuidString: journalID) != nil else { throw TransportError.invalidIdentity }
+        }
         // An old Watch still sends the original flat request without identity.
         if object["command_id"] == nil && object["audio_digest"] == nil && metadata == nil {
-            return Incoming(request: request, identity: nil)
+            guard recoveryProtocol == nil else { throw TransportError.invalidIdentity }
+            return Incoming(request: request, identity: nil, recoveryProtocol: nil, deliveryJournalID: nil)
         }
         guard let commandID = object["command_id"] as? String, UUID(uuidString: commandID) != nil,
               let digest = object["audio_digest"] as? String else { throw TransportError.invalidIdentity }
@@ -83,7 +128,8 @@ enum WatchCommandTransport {
                   metadata["audio_digest"] as? String == digest else { throw TransportError.invalidIdentity }
         }
         guard isCurrent(request, now: now) else { throw TransportError.expiredRequest }
-        return Incoming(request: request, identity: expected)
+        return Incoming(request: request, identity: expected, recoveryProtocol: recoveryProtocol,
+                        deliveryJournalID: recovery.deliveryJournalID)
     }
 
     /// Read synchronously while WCSession still owns the received URL. No mmap:

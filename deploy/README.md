@@ -181,16 +181,106 @@ service.
 
 ## WSL2 + Windows connection note
 
-When Tailscale runs on Windows, it may not be on WSL's `PATH`. The current
-installer can detect Windows Tailscale and set up a Windows relay for that
-route. For an assisted/manual setup with a Windows-reachable backend on port
-8080, the corresponding Windows-side command is:
+The Windows lifecycle repair below is a **repair candidate**, not yet included
+in the `ceviz-helper-v2026.9.12-beta.1` download above. Use a reviewed repair
+source folder supplied for your installation; do not assume the old tag has
+these scripts or rerun its installer to repair an existing setup.
+
+When Tailscale runs on Windows, the repaired fresh installer verifies the
+authenticated Ceviz backend at Windows `127.0.0.1:<port>` before publishing
+that address. It does not create a LAN listener or firewall rule for Tailscale.
+For an assisted/manual setup with a Windows-reachable backend on port 8080,
+the corresponding Windows-side command is:
 
 ```powershell
 tailscale serve --bg --set-path=/ceviz http://127.0.0.1:8080
 ```
 
-Only use that address after verifying Windows can reach the backend there;
-custom WSL networking may require the relay setup instead. Pair iPhone with
+Only use that address after verifying Windows can reach the backend there.
+If localhost forwarding is unavailable in a custom WSL configuration, stop and
+request assistance; do not silently substitute a LAN address or open the
+firewall. The separate LAN relay remains an explicit `relay` connection mode.
+Its legacy recovery is limited: a LAN address change does not update its firewall
+binding, and extended loss of a default route can exhaust its three retries.
+Those conditions need operator assistance; the independent lifetime task and
+Windows Tailscale localhost route do not rely on that relay.
+Pair iPhone with
 `https://<machine-name>.<tailnet>.ts.net/ceviz` and its private token. These are
 initial networking instructions, not part of the code-only update.
+
+### Windows lifetime repair for an existing WSL installation
+
+An enabled systemd service does **not** keep WSL alive. The repaired setup uses
+an independent **Ceviz WSL Lifetime** Windows scheduled task. It holds one
+foreground WSL client for the selected distribution, starts at Windows logon,
+and checks once per minute whether another instance can start. Its action runs
+`System32\wsl.exe --distribution "YOUR_DISTRO" --exec /bin/sleep infinity`
+directly, so the tracked process is the foreground client, not a PowerShell
+wrapper with a separately owned child. `IgnoreNew`
+prevents overlapping task instances; there is no task execution time limit or
+network/idle/battery prerequisite. The Windows user must be logged in and the
+computer awake. Windows sleep, logoff or a disconnected VPN still interrupts
+access; task state alone is not backend health or command-delivery proof.
+
+First inspect from **Windows PowerShell**, before opening a Linux terminal:
+
+```powershell
+wsl.exe --list --verbose
+Get-ScheduledTask -TaskName 'Ceviz WSL Lifetime' -ErrorAction SilentlyContinue
+Get-ScheduledTaskInfo -TaskName 'Ceviz WSL Lifetime' -ErrorAction SilentlyContinue
+```
+
+These checks do not start a stopped distro. Running a command *inside* WSL,
+including Linux Doctor, can start it and its enabled services; that temporary
+availability is not evidence that the outage was repaired.
+
+After an explicit maintenance approval, close Ceviz clients and use the
+reviewed repair source folder in Windows PowerShell. Replace `YOUR_DISTRO`
+with the exact registered name shown above:
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\deploy\windows\install-wsl-lifetime.ps1 -Distro 'YOUR_DISTRO'
+```
+
+This registers and starts only the independent lifetime task. It does not
+rewrite the Ceviz service, pairing token, jobs, conversation records, Python
+environment, Gateway settings or Tailscale target. Starting WSL can naturally
+start its already-enabled Linux services. The old LAN relay is not required
+for Tailscale and is not restarted by this command. Its retirement, if needed,
+is a separate reviewed Windows maintenance action.
+
+An existing task is replaced only when its exact component, Windows user and
+distro match; its previous XML definition remains available under
+`%LOCALAPPDATA%\Ceviz\wsl-lifetime`. No custom lifetime runtime is copied.
+Unknown, modified, running or disabled-for-maintenance tasks require operator
+review before replacement. A registration/start/readback error is a failure,
+not a successful repair: retain the backups and inspect Task Scheduler before
+continuing. The code-only helper updater deliberately does not install or
+update Windows tasks and does not overwrite deployment scripts in old checkouts.
+
+For an intentional WSL shutdown or lifetime-task upgrade, first pause clients
+and disable the lifetime task, then stop that exact task; otherwise its
+one-minute trigger will bring WSL back. Do not kill arbitrary WSL processes.
+Re-enable/start the reviewed task when maintenance ends. Confirm from Windows
+that it stays Running, that the selected distro remains running after all
+Linux terminals close, and that Ceviz's existing authenticated connection still
+works. Do not re-pair, clear pending requests or resend an unconfirmed command
+to test host availability.
+
+Real-host validation must also check the task's stop/restart behavior and
+whether the interactive Windows session shows a console window; isolated tests
+do not prove these Task Scheduler/WSL behaviors. A window-free launch is not
+claimed until that approved maintenance check passes.
+
+If a fresh installation stops during its network or task step, a service/token
+may already have been created. Do not rerun `install.sh`, delete that token or
+re-pair as recovery: the existing-install guard intentionally stops another
+fresh installation. Keep the output and request assisted repair of the failed
+boundary. The older native-Linux Tailscale branch still needs separate
+serve/DNS failure handling. Doctor's `.auth-token` check also does not cover
+legacy service-environment-only token storage; a missing token-file warning
+alone is not proof that such a recovered installation lost its token.
+
+Microsoft documents the relevant boundaries: [systemd and WSL lifetime](https://learn.microsoft.com/en-us/windows/wsl/systemd),
+[Windows localhost access to WSL](https://learn.microsoft.com/en-us/windows/wsl/networking), and
+[Task Scheduler settings](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).

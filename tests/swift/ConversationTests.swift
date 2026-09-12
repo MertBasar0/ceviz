@@ -1,7 +1,7 @@
 import Foundation
 import SQLite3
 
-// swiftc ios-bridge/ConversationModels.swift ios-bridge/ConversationSessionStore.swift tests/swift/ConversationTests.swift -lsqlite3 -o /tmp/conversation-tests
+// swiftc ios-bridge/CevizDeliveryDatabase.swift ios-bridge/ConversationModels.swift ios-bridge/ConversationSessionStore.swift tests/swift/ConversationTests.swift -lsqlite3 -o /tmp/conversation-tests
 @main
 struct ConversationTests {
     @MainActor

@@ -58,7 +58,7 @@
 "The backend WATCH_CEVIZ_AUTH_TOKEN value." = "Backend'in WATCH_CEVIZ_AUTH_TOKEN değeri.";
 "TESTING_" = "TEST EDİLİYOR_";
 "TEST CONNECTION" = "BAĞLANTIYI TEST ET";
-"Empty fields fall back to the development default. The token must match WATCH_CEVIZ_AUTH_TOKEN in the backend service." = "Boş bırakılan alanlar geliştirme varsayılanına döner. Token, backend systemd servisindeki WATCH_CEVIZ_AUTH_TOKEN değeriyle aynı olmalı.";
+"Enter your helper URL and access token. Refreshing the same connection preserves pending Watch recordings." = "Yardımcı servis adresini ve erişim anahtarını girin. Aynı bağlantıyı yenilemek bekleyen saat kayıtlarını korur.";
 "Invalid QR (expected ceviz://pair)" = "Geçersiz QR (ceviz://pair bekleniyor)";
 "QR scanned — remember to save" = "QR okundu — kaydetmeyi unutma";
 "Invalid URL" = "Geçersiz adres";
@@ -113,6 +113,8 @@
 "Failed" = "Hata oluştu";
 "Result ready" = "Sonuç hazır";
 "Status unavailable" = "Durum alınamadı";
+"REFRESH CONNECTION" = "BAĞLANTIYI YENİLE";
+"Save the changed connection before refreshing." = "Yenilemeden önce değiştirdiğiniz bağlantıyı kaydedin.";
 "Ceviz report ready" = "Ceviz raporu hazır";
 "Continue on iPhone" = "iPhone'da devam et";
 "YOUR NEXT STEP" = "SIRADAKİ ADIMINIZ";
@@ -150,13 +152,15 @@
 "Show sample data without a backend. Useful before pairing, and required for app review." = "Backend olmadan örnek veri gösterir. Eşleşmeden önce ve uygulama incelemesi için kullanışlıdır.";
 "Demo mode — sample data" = "Demo modu — örnek veri";
 "Not available in demo mode" = "Demo modunda kullanılamaz";
-"RESET CONNECTION" = "BAĞLANTIYI SIFIRLA";
 "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere." = "Aynı Wi-Fi relay trafiği şifrelenmez. Yalnızca güvendiğiniz yerel ağda kullanın; diğer ağlarda Tailscale'i tercih edin.";
 "Use HTTPS, or choose Same Wi-Fi with a local relay address." = "HTTPS kullanın veya yerel relay adresiyle Aynı Wi-Fi seçeneğini seçin.";
 "Message tracking is unavailable. Restart Ceviz and check the conversation before sending again." = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce Ceviz'i yeniden başlatıp konuşmayı kontrol edin.";
 "Continue after reviewing" = "Kontrol ettikten sonra devam et";
 "Cancel" = "İptal";
 "conversation.error.tracking_unavailable" = "Gönderim takibi kullanılamıyor. Yeniden göndermeden önce konuşmayı kontrol edin.";
+"Request received. Checking result…" = "İstek alındı. Sonuç kontrol ediliyor…";
+"Update Ceviz on both devices and update your helper service before sending again." = "Tekrar göndermeden önce her iki cihazda Ceviz’i ve yardımcı servisinizi güncelleyin.";
+"Delivery is unconfirmed. Check Jobs before recording or sending the request again." = "Teslimat doğrulanamadı. İsteği yeniden kaydetmeden veya göndermeden önce İşler’i kontrol edin.";
 "conversation.error.request_capacity" = "Gönderim takibi dolu. Hiçbir komut gönderilmedi. Ceviz desteğiyle iletişime geçin; tekrar denemek için takip verisini silmeyin.";
 "Start a new message after reviewing?" = "Kontrol ettikten sonra yeni mesaja geçilsin mi?";
 "I reviewed it — start a new message" = "Kontrol ettim — yeni mesaja geç";

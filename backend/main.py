@@ -1,11 +1,11 @@
-import hashlib
 import hmac
 import json
 import logging
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from functools import wraps
 from pathlib import Path
 import sys
+import threading
 import time
 from urllib.parse import parse_qs, urlparse
 import uuid
@@ -21,6 +21,17 @@ CONTRACTS_DIR = Path(__file__).resolve().parents[1] / "contracts"
 
 # Dynamic job store for real OpenClaw processes
 jobs_db = {}
+# Lock order: voice admission -> jobs state. Network ingestion, STT and push
+# delivery never hold jobs state; polling stays available during slow work.
+jobs_lock = threading.RLock()
+
+
+def serialized_jobs(function):
+    @wraps(function)
+    def protected(*args, **kwargs):
+        with jobs_lock:
+            return function(*args, **kwargs)
+    return protected
 
 # Is gecmisi diske yazilir: servis yeniden baslayinca (guc kesintisi,
 # makine reboot'u, deploy) gecmis ve konusma zinciri kaybolmasin.
@@ -32,12 +43,15 @@ from openclaw_client import OpenClawClient, OpenClawUnavailable, TaskResult
 from job_outcome import normalize_job_outcome
 from push_notifier import PushNotifier
 from stt import WatchSTT
-from session_api import handle_session_request
-from http_transport import discard_rejected_body
+from session_api import SessionError, handle_session_request
+from watch_admission import WatchAdmission, audio_fingerprint, identity_metadata
+from http_transport import (BoundedHTTPServer as HTTPServer, BoundedHTTPRequestHandler,
+                            RequestReadError, discard_rejected_body, read_request_body)
 
 openclaw_client = OpenClawClient()
 stt_client = WatchSTT()
 push_notifier = PushNotifier()
+watch_admission = WatchAdmission(STATE_DIR / "conversations.sqlite")
 
 
 USER_COPY = {
@@ -827,6 +841,7 @@ def build_job_report(job: dict) -> tuple[str, str]:
     )
 
 
+@serialized_jobs
 def sync_job_status(job: dict) -> None:
     now = time.time()
     previous_status = job.get("status")
@@ -921,18 +936,32 @@ def _serializable_job(job: dict) -> dict:
     return out
 
 
-def save_jobs() -> None:
+@serialized_jobs
+def save_jobs(*, strict=False) -> None:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         recent = sorted(jobs_db.values(), key=lambda j: j.get("created_at", 0))[-MAX_PERSISTED_JOBS:]
         payload = {"jobs": [_serializable_job(job) for job in recent]}
         tmp = JOBS_STATE_PATH.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        with tmp.open("w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False)
+            if strict:
+                stream.flush()
+                os.fsync(stream.fileno())
         tmp.replace(JOBS_STATE_PATH)
+        if strict and os.name != "nt":
+            descriptor = os.open(STATE_DIR, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
     except Exception as exc:
         logging.warning("İş geçmişi yazılamadı: %s", exc)
+        if strict:
+            raise SessionError("tracking_unavailable", "The job receipt could not be saved. Check Jobs before retrying.", 503, uncertain=True) from exc
 
 
+@serialized_jobs
 def load_jobs() -> None:
     """Diskteki gecmisi geri yukle. Servis kapaliyken tamamlanmis
     olabilecek isleri log dosyasindan sonuclandirmayi dene."""
@@ -980,6 +1009,26 @@ def load_jobs() -> None:
         save_jobs()
 
 
+@serialized_jobs
+def job_snapshot(job):
+    if job is None:
+        return None
+    sync_job_status(job)
+    return dict(job)
+
+
+@serialized_jobs
+def all_job_snapshots():
+    return [job_snapshot(job) for job in jobs_db.values()]
+
+
+@serialized_jobs
+def remember_job(job, *, strict=False):
+    jobs_db[job["id"]] = job
+    save_jobs(strict=strict)
+    return job
+
+
 def build_continuation_context(prev_job: dict, *, approved_suggestion: bool) -> str:
     prev_summary = trim_watch_text(prev_job.get("watch_summary") or prev_job.get("canned_result") or "", 220)
     if approved_suggestion:
@@ -1009,6 +1058,8 @@ def create_openclaw_job(
     continue_job: dict | None = None,
     approved_suggestion: bool = False,
     locale: str = "",
+    audio_fingerprint: str | None = None,
+    strict_save: bool = False,
 ) -> dict:
     effective_transcript = transcript.strip()
 
@@ -1058,9 +1109,9 @@ def create_openclaw_job(
             "outcome": "blocked",
             "next_action_actor": None,
         }
-        jobs_db[new_job_id] = failed_job
-        save_jobs()
-        return failed_job
+        if audio_fingerprint is not None:
+            failed_job["audio_fingerprint"] = audio_fingerprint
+        return remember_job(failed_job, strict=strict_save)
     initial_requires_phone_handoff = not bool(effective_transcript)
     summary_text = build_processing_summary(source, effective_transcript, stt_error, locale)
     phone_report = (
@@ -1094,9 +1145,9 @@ def create_openclaw_job(
             "started_at": invocation.started_at,
         },
     }
-    jobs_db[new_job_id] = job
-    save_jobs()
-    return job
+    if audio_fingerprint is not None:
+        job["audio_fingerprint"] = audio_fingerprint
+    return remember_job(job, strict=strict_save)
 
 
 def build_watch_command_response(job: dict) -> dict:
@@ -1124,7 +1175,7 @@ def build_watch_command_response(job: dict) -> dict:
 
 
 def build_shortcut_response(job: dict) -> dict:
-    sync_job_status(job)
+    job = job_snapshot(job)
     summary = build_job_watch_summary(job)
     job_id = job["id"]
     return {
@@ -1144,6 +1195,56 @@ def build_shortcut_response(job: dict) -> dict:
     }
 
 
+def accept_watch_command(payload: dict) -> dict:
+    # Keep the existing audio+parent dedupe as one admission operation. Waiting
+    # uploads do not monopolize all eight HTTP workers behind a slow model.
+    if not watch_admission.lock.acquire(timeout=1):
+        raise RequestReadError(503, "Another voice upload is being processed. Try again shortly.")
+    try:
+        previous = watch_admission.legacy_job(audio_fingerprint(payload), openclaw_client.agent)
+        if previous is not None:
+            with jobs_lock:
+                job = job_snapshot(jobs_db.get(previous))
+            if job is None:
+                raise SessionError("delivery_unknown", "This audio was already accepted, but its report is unavailable. Do not resend it.", 409, uncertain=True)
+        else:
+            job = execute_watch_command(payload)
+        return build_watch_command_response(job)
+    finally:
+        watch_admission.lock.release()
+
+
+def execute_watch_command(payload: dict, *, strict_save=False) -> dict:
+    # Called only under the canonical voice admission lock. A versioned
+    # call has already committed its reservation before entering here.
+    fingerprint = audio_fingerprint(payload)
+    with jobs_lock:
+        duplicate = next((job for job in sorted(jobs_db.values(),
+                         key=lambda item: item.get("created_at", 0), reverse=True)
+                         if job.get("audio_fingerprint") == fingerprint
+                         and time.time() - job.get("created_at", 0) < 30 * 60), None)
+        if duplicate is not None:
+            logging.warning("Duplicate watch audio suppressed; returning %s", duplicate["id"])
+            if strict_save:
+                save_jobs(strict=True)
+            return job_snapshot(duplicate)
+    try:
+        parent, _ = resolve_command_context(payload)
+    except ValueError as exc:
+        raise RequestReadError(400, str(exc)) from exc
+    # No jobs lock during STT or command process startup. Polling and phone
+    # conversations remain independent of this serial voice admission.
+    result = stt_client.transcribe_watch_payload(payload)
+    job = create_openclaw_job(transcript=result.transcript.strip(), source=result.source,
+                             client_timestamp=payload.get("client_timestamp"), stt_error=result.error or "",
+                             continue_job=parent, locale=str(payload.get("locale") or ""),
+                             audio_fingerprint=fingerprint, strict_save=strict_save)
+    with jobs_lock:
+        # The initial receipt describes admission, as before; terminal
+        # polling belongs to later queries or a duplicate request.
+        return dict(job)
+
+
 def parse_shortcut_text(payload: dict | str) -> tuple[str, str | None]:
     if isinstance(payload, str):
         return payload.strip(), None
@@ -1156,6 +1257,7 @@ def parse_shortcut_text(payload: dict | str) -> tuple[str, str | None]:
     return "", payload.get("client_timestamp")
 
 
+@serialized_jobs
 def resolve_command_context(payload: dict | str, *, allow_approval: bool = False) -> tuple[dict | None, str | None]:
     """Resolve a named parent and, only for an explicit action, its full text."""
     if isinstance(payload, str):
@@ -1176,6 +1278,7 @@ def resolve_command_context(payload: dict | str, *, allow_approval: bool = False
         sync_job_status(parent)
         if parent.get("status") not in {"completed", "failed"}:
             raise ValueError("The selected job is still running. Wait for its result before continuing.")
+        parent = dict(parent)
     if intent == "follow_up":
         if "next_action_id" in payload:
             raise ValueError("An action selection requires explicit suggestion approval.")
@@ -1223,7 +1326,15 @@ def wait_for_job_completion(job: dict, timeout_seconds: float, poll_interval: fl
     sync_job_status(job)
 
 
-class WatchCevizHandler(BaseHTTPRequestHandler):
+class WatchCevizHandler(BoundedHTTPRequestHandler):
+    def send_json(self, status, payload):
+        data = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _authorized(self) -> bool:
         if not AUTH_TOKEN:
             return True
@@ -1250,6 +1361,10 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
         import traceback
         try:
             self._do_GET_impl()
+        except SessionError as exc:
+            self.send_json(exc.status, {"code": exc.code, "error": str(exc)})
+        except ConnectionError:
+            self.close_connection = True
         except Exception as exc:
             logging.error("GET %s başarısız: %s", self.path, exc)
             traceback.print_exc()
@@ -1272,7 +1387,11 @@ class WatchCevizHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
+                "watch_command_recovery_v1": True,
             }).encode("utf-8"))
+            return
+        if path == "/api/v1/watch/command/capabilities":
+            self.send_json(200, watch_admission.capabilities())
             return
         if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):
             handle_session_request(self, "GET", path, parse_qs(parsed_url.query))
@@ -1312,8 +1431,7 @@ Content-Type: application/json
 </html>""")
         elif path == "/api/v1/jobs/active":
             active_jobs = []
-            for jid, job in list(jobs_db.items()):
-                sync_job_status(job)
+            for job in all_job_snapshots():
                 structured_fields = build_structured_report_fields(job)
                 deep_link = build_handoff_deep_link(job["id"]) if derive_job_handoff(job) else None
                 active_jobs.append({
@@ -1372,7 +1490,7 @@ Content-Type: application/json
                     "next_action": None,
                 }
             else:
-                sync_job_status(job)
+                job = job_snapshot(job)
 
             report_title, report_content = build_job_report(job)
             structured_fields = build_structured_report_fields(job)
@@ -1434,6 +1552,12 @@ Content-Type: application/json
         import traceback
         try:
             self._do_POST_impl()
+        except RequestReadError as exc:
+            self.send_input_error(exc)
+        except SessionError as exc:
+            self.send_json(exc.status, {"error": str(exc), "code": exc.code, "delivery_uncertain": exc.uncertain})
+        except ConnectionError:
+            self.close_connection = True
         except Exception as e:
             print(f"ERROR: {e}", flush=True)
             traceback.print_exc()
@@ -1449,8 +1573,7 @@ Content-Type: application/json
             handle_session_request(self, "POST", path, query)
             return
         if path == "/api/v1/push/register":
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = json.loads(read_request_body(self).decode("utf-8") or "{}")
             try:
                 result = push_notifier.register(payload)
                 status = 200
@@ -1465,15 +1588,17 @@ Content-Type: application/json
             return
 
         if path.startswith("/api/v1/jobs/") and path.endswith("/cancel"):
+            read_request_body(self)
             job_id = path.split("/")[4]
             job = jobs_db.get(job_id)
             if job:
-                sync_job_status(job)
-                invocation = job.get("invocation")
-                if invocation and invocation["process"].poll() is None:
-                    invocation["process"].terminate()
-                    mark_result_unconfirmed(job, user_copy(job, "job_cancelled"), user_copy(job, "job_cancelled"))
-                    save_jobs()
+                with jobs_lock:
+                    sync_job_status(job)
+                    invocation = job.get("invocation")
+                    if invocation and invocation["process"].poll() is None:
+                        invocation["process"].terminate()
+                        mark_result_unconfirmed(job, user_copy(job, "job_cancelled"), user_copy(job, "job_cancelled"))
+                        save_jobs()
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1481,8 +1606,9 @@ Content-Type: application/json
             self.wfile.write(json.dumps({"status": "cancelled", "job_id": job_id}).encode("utf-8"))
             return
         elif path.startswith("/api/v1/jobs/") and path.endswith("/summarize"):
+            read_request_body(self)
             job_id = path.split("/")[4]
-            job = jobs_db.get(job_id)
+            job = job_snapshot(jobs_db.get(job_id))
             if not job:
                 summary = f"Job {job_id} was not found."
                 requires_phone_handoff = True
@@ -1492,7 +1618,6 @@ Content-Type: application/json
                 handoff_reason = "job_missing"
                 next_actions = []
             else:
-                sync_job_status(job)
                 summary = build_job_watch_summary(job)
                 requires_phone_handoff = derive_job_handoff(job)
                 deep_link = build_handoff_deep_link(job_id) if requires_phone_handoff else None
@@ -1548,8 +1673,7 @@ Content-Type: application/json
             self.wfile.write(json.dumps(response_payload).encode("utf-8"))
             return
         elif path == "/api/v1/shortcuts/command":
-            content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length)
+            body = read_request_body(self)
             content_type = self.headers.get("Content-Type", "")
 
             if "application/json" in content_type:
@@ -1600,9 +1724,33 @@ Content-Type: application/json
             self.end_headers()
             self.wfile.write(json.dumps(build_shortcut_response(job)).encode("utf-8"))
             return
+        elif path in {"/api/v1/watch/command/submit", "/api/v1/watch/command/status"}:
+            body = read_request_body(self, maximum=4096 if path.endswith("/status") else 1024 * 1024)
+            try:
+                payload = json.loads(body)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise RequestReadError(400, "Expected a Watch command object.") from exc
+            identity = identity_metadata(payload)
+            try:
+                if path.endswith("/status"):
+                    status, result = 200, watch_admission.status(payload, openclaw_client.agent)
+                else:
+                    status, result = watch_admission.submit(payload, openclaw_client.agent,
+                        lambda value: execute_watch_command(value, strict_save=True)["id"])
+                if result.get("job_id"):
+                    with jobs_lock:
+                        job = job_snapshot(jobs_db.get(result["job_id"]))
+                    if job is not None:
+                        # Transient existing projection only; SQLite stores no
+                        # audio, transcript, report or full response body.
+                        result["response"] = build_watch_command_response(job)
+            except SessionError as exc:
+                status = exc.status
+                result = {**identity, "delivery_state": "unknown", "error": str(exc), "code": exc.code}
+            self.send_json(status, result)
+            return
         elif path == "/api/v1/watch/command":
-            content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length)
+            body = read_request_body(self)
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError:
@@ -1619,47 +1767,7 @@ Content-Type: application/json
                 self.wfile.write(json.dumps({"error": "Validation failed", "details": errors}).encode("utf-8"))
                 return
 
-            fingerprint_material = payload["audio_data"]
-            if "continue_job_id" in payload:
-                fingerprint_material += "\ncontinue_job_id=" + payload["continue_job_id"]
-            audio_fingerprint = hashlib.sha256(fingerprint_material.encode("utf-8")).hexdigest()
-            duplicate_job = next(
-                (
-                    candidate
-                    for candidate in sorted(
-                        jobs_db.values(), key=lambda item: item.get("created_at", 0), reverse=True
-                    )
-                    if candidate.get("audio_fingerprint") == audio_fingerprint
-                    and time.time() - candidate.get("created_at", 0) < 30 * 60
-                ),
-                None,
-            )
-            if duplicate_job is not None:
-                logging.warning("Duplicate watch audio suppressed; returning %s", duplicate_job["id"])
-                sync_job_status(duplicate_job)
-                resp_payload = build_watch_command_response(duplicate_job)
-            else:
-                try:
-                    continue_job, _ = resolve_command_context(payload)
-                except ValueError as exc:
-                    self.send_response(400)
-                    self.send_header("Content-Type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
-                    return
-                stt_result = stt_client.transcribe_watch_payload(payload)
-                effective_transcript = stt_result.transcript.strip()
-                job = create_openclaw_job(
-                    transcript=effective_transcript,
-                    source=stt_result.source,
-                    client_timestamp=payload.get("client_timestamp"),
-                    stt_error=stt_result.error or "",
-                    continue_job=continue_job,
-                    locale=str(payload.get("locale") or ""),
-                )
-                job["audio_fingerprint"] = audio_fingerprint
-                save_jobs()
-                resp_payload = build_watch_command_response(job)
+            resp_payload = accept_watch_command(payload)
 
             resp_schema = load_contract("watch-command-response.schema.json")
             resp_errors = validate_payload(resp_payload, resp_schema)
@@ -1688,17 +1796,27 @@ def _warmup_stt() -> None:
     except Exception as exc:
         logging.warning("STT warmup atlandı: %s", exc)
 
+def notify_jobs_once() -> None:
+    # APNs may be slow: notify immutable HTTP/job snapshots, then merge only
+    # notification receipt fields under the jobs owner, never an old job body.
+    for snapshot in all_job_snapshots():
+        try:
+            if push_notifier.notify_terminal_job(snapshot):
+                with jobs_lock:
+                    job = jobs_db.get(snapshot["id"])
+                    if job is not None:
+                        for key in ("push_notification_sent_at", "push_notification_apns_id"):
+                            job[key] = snapshot[key]
+                        save_jobs()
+        except Exception as exc:
+            logging.warning("Push delivery deferred for %s: %s", snapshot.get("id"), exc)
+
+
 def _monitor_jobs_for_push() -> None:
     """Observe terminal transitions even while the phone and watch are suspended."""
     while True:
         try:
-            for job in list(jobs_db.values()):
-                sync_job_status(job)
-                try:
-                    if push_notifier.notify_terminal_job(job):
-                        save_jobs()
-                except Exception as exc:
-                    logging.warning("Push delivery deferred for %s: %s", job.get("id"), exc)
+            notify_jobs_once()
         except Exception:
             logging.exception("Push monitor iteration failed")
         time.sleep(5)

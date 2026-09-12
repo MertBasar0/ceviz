@@ -26,6 +26,22 @@ permissions:
   contents: read
 
 jobs:
+  windows_lifetime:
+    name: Windows WSL lifetime boundaries
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run isolated PowerShell lifecycle regressions
+        # Real PowerShell processes with substituted task/WSL/firewall calls;
+        # never install a task, start a distro or change a live firewall here.
+        run: python -B -m unittest discover -s tests -p 'test_windows_lifecycle.py' -v
+
   helper:
     name: Helper contracts (${{ matrix.os }})
     strategy:

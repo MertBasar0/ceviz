@@ -58,7 +58,7 @@
 "The backend WATCH_CEVIZ_AUTH_TOKEN value." = "The backend WATCH_CEVIZ_AUTH_TOKEN value.";
 "TESTING_" = "TESTING_";
 "TEST CONNECTION" = "TEST CONNECTION";
-"Empty fields fall back to the development default. The token must match WATCH_CEVIZ_AUTH_TOKEN in the backend service." = "Empty fields fall back to the development default. The token must match WATCH_CEVIZ_AUTH_TOKEN in the backend service.";
+"Enter your helper URL and access token. Refreshing the same connection preserves pending Watch recordings." = "Enter your helper URL and access token. Refreshing the same connection preserves pending Watch recordings.";
 "Invalid QR (expected ceviz://pair)" = "Invalid QR (expected ceviz://pair)";
 "QR scanned — remember to save" = "QR scanned — remember to save";
 "Invalid URL" = "Invalid URL";
@@ -113,6 +113,8 @@
 "Failed" = "Failed";
 "Result ready" = "Result ready";
 "Status unavailable" = "Status unavailable";
+"REFRESH CONNECTION" = "REFRESH CONNECTION";
+"Save the changed connection before refreshing." = "Save the changed connection before refreshing.";
 "Ceviz report ready" = "Ceviz report ready";
 "Continue on iPhone" = "Continue on iPhone";
 "YOUR NEXT STEP" = "YOUR NEXT STEP";
@@ -150,13 +152,15 @@
 "Show sample data without a backend. Useful before pairing, and required for app review." = "Show sample data without a backend. Useful before pairing, and required for app review.";
 "Demo mode — sample data" = "Demo mode — sample data";
 "Not available in demo mode" = "Not available in demo mode";
-"RESET CONNECTION" = "RESET CONNECTION";
 "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere." = "Same-Wi-Fi relay traffic is not encrypted. Use it only on a trusted local network; prefer Tailscale elsewhere.";
 "Use HTTPS, or choose Same Wi-Fi with a local relay address." = "Use HTTPS, or choose Same Wi-Fi with a local relay address.";
 "Message tracking is unavailable. Restart Ceviz and check the conversation before sending again." = "Message tracking is unavailable. Restart Ceviz and check the conversation before sending again.";
 "Continue after reviewing" = "Continue after reviewing";
 "Cancel" = "Cancel";
 "conversation.error.tracking_unavailable" = "Message tracking is unavailable. Check the conversation before sending again.";
+"Request received. Checking result…" = "Request received. Checking result…";
+"Update Ceviz on both devices and update your helper service before sending again." = "Update Ceviz on both devices and update your helper service before sending again.";
+"Delivery is unconfirmed. Check Jobs before recording or sending the request again." = "Delivery is unconfirmed. Check Jobs before recording or sending the request again.";
 "conversation.error.request_capacity" = "Message tracking is full. No command was sent. Contact Ceviz support; do not delete tracking data to retry.";
 "Start a new message after reviewing?" = "Start a new message after reviewing?";
 "I reviewed it — start a new message" = "I reviewed it — start a new message";

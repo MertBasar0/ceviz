@@ -39,10 +39,18 @@ struct JobDetailView: View {
                 Button { sessionManager.fetchJobs() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise").font(.caption)
                 }
-                .disabled(!sessionManager.isReachable)
+                .disabled(sessionManager.jobsLoading)
+                if sessionManager.jobsLoading {
+                    ProgressView("Refreshing jobs…").font(.caption).tint(CVZ.accent)
+                }
+                if let error = sessionManager.jobsErrorKey {
+                    Text(LocalizedStringKey(error)).font(.caption).foregroundColor(CVZ.warn)
+                }
                 if !sessionManager.isReachable {
                     Text("Phone offline — showing the last received result.")
                         .font(.caption2).foregroundColor(CVZ.textSub)
+                } else if sessionManager.jobsErrorKey != nil {
+                    Text("Showing the last received result.").font(.caption2).foregroundColor(CVZ.textSub)
                 }
             }
             .padding(.horizontal, 4)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -14,6 +15,7 @@ from job_outcome import normalize_job_outcome
 
 class PushNotifier:
     def __init__(self) -> None:
+        self._registration_lock = threading.Lock()
         state_dir = Path(os.environ.get("WATCH_CEVIZ_STATE_DIR", str(Path.home() / ".openclaw" / "ceviz-state")))
         self.state_path = state_dir / "push-registration.json"
         self.relay_url = os.environ.get(
@@ -79,7 +81,6 @@ class PushNotifier:
         return {}
 
     def register(self, payload: dict[str, Any]) -> dict[str, Any]:
-        previous = self._load()
         installation_id = str(payload.get("installation_id", ""))
         bundle_id = str(payload.get("bundle_id", "")).strip()
         response = self._post("/v1/register", {
@@ -91,6 +92,13 @@ class PushNotifier:
         if not response.get("ok"):
             raise RuntimeError(str(response.get("reason") or "push registration failed"))
 
+        # Relay I/O is independent; serialize the local read/merge/replace so
+        # concurrent phone/watch registrations cannot lose the other device.
+        with self._registration_lock:
+            return self._merge_registration(installation_id, bundle_id, response)
+
+    def _merge_registration(self, installation_id, bundle_id, response):
+        previous = self._load()
         now = time.time()
         same_installation = bool(previous and previous.get("installation_id") == installation_id)
         first_registered_at = now

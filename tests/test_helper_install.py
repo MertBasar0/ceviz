@@ -16,6 +16,132 @@ ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = (ROOT / "deploy/install.sh").read_bytes()
 DOCTOR = (ROOT / "deploy/doctor.sh").read_bytes()
 FEATURES = {"continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True}
+BASH = shutil.which("bash") if os.name == "posix" else next(
+    (str(path) for path in (Path(r"C:\Program Files\Git\bin\bash.exe"), Path(r"C:\Program Files\Git\usr\bin\bash.exe"))
+     if path.is_file()), None)
+
+
+@unittest.skipUnless(BASH, "Actual Bash installer boundary")
+class WindowsTailscaleInstallerTests(unittest.TestCase):
+    def run_install(self, mode="success", network="tailscale", content=INSTALLER):
+        with tempfile.TemporaryDirectory(prefix="ceviz-windows-install-") as temporary:
+            root = Path(temporary)
+            app = root / "app"
+            for path in (app / "deploy", app / ".venv/bin", root / "home/.config/systemd/user", root / "empty-path"):
+                path.mkdir(parents=True)
+            (app / "deploy/install.sh").write_bytes(content.replace(b"\r\n", b"\n"))
+            python = app / ".venv/bin/python"
+            python.write_text('#!/bin/bash\nif [[ "$1" == "-c" ]]; then exit 0; fi\nprintf "pair-url %s\\n" "$2" >> "$CEVIZ_TEST_CALLS"\n')
+            python.chmod(0o700)
+            pip = app / ".venv/bin/pip"
+            pip.write_text('#!/bin/bash\nprintf "pip\\n" >> "$CEVIZ_TEST_CALLS"\n')
+            pip.chmod(0o700)
+            # Source the complete installer in actual Bash. Closed PATH and
+            # shell functions prevent all real service, package, network, WSL
+            # or Windows task operations, including on Git Bash for Windows.
+            harness = r'''
+set -euo pipefail
+cd "$1"
+FIXTURE_ROOT="$PWD"
+export HOME="$FIXTURE_ROOT/home" CEVIZ_TEST_CALLS="$FIXTURE_ROOT/calls"
+export PATH="$FIXTURE_ROOT/empty-path" WSL_DISTRO_NAME='Fixture Distro'
+export WATCH_CEVIZ_NETWORK_MODE="$2" CEVIZ_TEST_MODE="$3"
+record() { printf '%s\n' "$1" >> "$CEVIZ_TEST_CALLS"; }
+dirname() { printf '%s\n' "${1%/*}"; }
+mkdir() { [[ "$*" == "-p $HOME/.config/systemd/user" ]]; }
+grep() { [[ "$*" == '-qi microsoft /proc/version' ]]; }
+openclaw() { return 99; }
+systemctl() {
+  record "systemctl $*"
+  case "$*" in
+    '--user show watch-ceviz-backend.service -p LoadState --value') printf 'not-found\n';;
+    '--user show-environment'|'--user daemon-reload'|'--user enable --now watch-ceviz-backend') return 0;;
+    *) return 98;;
+  esac
+}
+openssl() { [[ "$*" == 'rand -hex 24' ]] && printf 'private-fixture-token\n'; }
+wslpath() { [[ "$1" == '-w' ]] && printf '%s\n' "$2"; }
+tr() { local line; while IFS= read -r line || [[ -n "$line" ]]; do printf '%s\n' "${line//$'\r'/}"; done; }
+sed() { local line; while IFS= read -r line; do [[ "$line" == CEVIZ_RELAY_URL=* ]] && printf '%s\n' "${line#CEVIZ_RELAY_URL=}"; done; return 0; }
+tail() { local line last=''; while IFS= read -r line; do last="$line"; done; printf '%s\n' "$last"; }
+function powershell.exe {
+  case "$*" in
+    *install-wsl-lifetime.ps1*) record 'lifetime'; [[ "$CEVIZ_TEST_MODE" != lifetime-failure ]];;
+    *install-relay.ps1*) record 'lan-relay'; printf 'CEVIZ_RELAY_URL=http://192.0.2.10:8080\n';;
+    *Get-Command\ tailscale*) return 0;;
+    *Invoke-RestMethod*)
+      record 'localhost-probe'
+      local token=''; IFS= read -r token || true
+      [[ "$token" == private-fixture-token && "$CEVIZ_TEST_MODE" != probe-failure ]];;
+    *tailscale\ serve*)
+      record "serve $*"
+      [[ "$CEVIZ_TEST_MODE" != serve-failure ]];;
+    *Self.DNSName*)
+      case "$CEVIZ_TEST_MODE" in
+        dns-empty) printf '\n';;
+        dns-invalid) printf 'https://not-a-host/path\n';;
+        dns-failure) return 1;;
+        *) printf 'fixture.tail.ts.net\n';;
+      esac;;
+    *Get-ScheduledTask*)
+      record 'passive-lifetime-query'
+      [[ "$*" == *'wsl.exe --list --running --quiet'* && "$*" != *'wsl.exe --distribution'* ]] || return 96
+      local distro=''; IFS= read -r distro || true
+      [[ "$distro" == 'Fixture Distro' && "$CEVIZ_TEST_MODE" != keeper-down ]];;
+    *) return 97;;
+  esac
+}
+source "$FIXTURE_ROOT/app/deploy/install.sh"
+'''
+            result = subprocess.run([BASH, "-c", harness, "--", root.as_posix(), network, mode],
+                                    capture_output=True, text=True, timeout=15,
+                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            calls = (root / "calls").read_text().splitlines() if (root / "calls").exists() else []
+            return result, calls
+
+    def test_windows_tailscale_uses_independent_lifetime_and_authenticated_localhost_without_lan(self):
+        result, calls = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertLess(calls.index("lifetime"), calls.index("localhost-probe"))
+        self.assertNotIn("lan-relay", calls)
+        serve = [call for call in calls if call.startswith("serve ")]
+        self.assertEqual(len(serve), 1)
+        self.assertIn("http://127.0.0.1:8080", serve[0])
+        self.assertNotIn("192.0.2.10", serve[0])
+        self.assertEqual(calls[-1], "pair-url https://fixture.tail.ts.net/ceviz")
+        self.assertNotIn("private-fixture-token", result.stdout + result.stderr + "\n".join(calls))
+
+    def test_lifetime_localhost_or_publish_failure_cannot_report_pairing_success(self):
+        for mode in ("lifetime-failure", "probe-failure", "serve-failure", "dns-empty", "dns-invalid", "dns-failure"):
+            with self.subTest(mode=mode):
+                result, calls = self.run_install(mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any(call.startswith("pair-url ") for call in calls))
+                self.assertNotIn("lan-relay", calls)
+                if mode == "lifetime-failure":
+                    self.assertNotIn("localhost-probe", calls)
+                if mode in ("lifetime-failure", "probe-failure"):
+                    self.assertFalse(any(call.startswith("serve ") for call in calls))
+
+    def test_explicit_lan_mode_remains_separate(self):
+        result, calls = self.run_install(network="relay")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("lifetime", calls)
+        self.assertIn("lan-relay", calls)
+        self.assertNotIn("localhost-probe", calls)
+        self.assertFalse(any(call.startswith("serve ") for call in calls))
+        self.assertEqual(calls[-1], "pair-url http://192.0.2.10:8080")
+
+    def test_doctor_reports_lifetime_gap_without_starting_wsl_or_installing(self):
+        for mode in ("success", "keeper-down"):
+            with self.subTest(mode=mode):
+                result, calls = self.run_install(mode=mode, content=DOCTOR)
+                self.assertIn("passive-lifetime-query", calls)
+                self.assertNotIn("lifetime", calls)
+                self.assertNotIn("lan-relay", calls)
+                self.assertFalse(any(call.startswith(("serve ", "pair-url ", "pip")) for call in calls))
+                expected = "Independent Windows WSL lifetime task and selected distro are running" if mode == "success" else "Persistent WSL availability is not established"
+                self.assertIn(expected, result.stdout)
 
 
 @unittest.skipUnless(os.name == "posix" and shutil.which("bash"), "Actual Bash guards run on Linux/macOS")

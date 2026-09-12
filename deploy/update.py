@@ -170,9 +170,14 @@ def journal_idle(directory):
     try:
         with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=3)) as database:
             pending = database.execute("SELECT count(*) FROM conversation_submissions WHERE terminal_status IS NULL").fetchone()[0]
+            watch_table = database.execute("SELECT name FROM sqlite_master WHERE name = 'watch_submissions'").fetchone()
+            # Before the Watch admission contract this additive table did not exist.
+            # A reserved row remains unconfirmed across a helper process restart.
+            watch_pending = database.execute("SELECT count(*) FROM watch_submissions WHERE state = 'reserved'").fetchone()[0] if watch_table else 0
     except sqlite3.Error:
         raise UpdateError("Conversation tracking could not be checked. No records were removed or repaired.") from None
     require(pending == 0, "Active or unconfirmed conversation delivery remains. Review it in Ceviz; contact support if unresolved.")
+    require(watch_pending == 0, "Active or unconfirmed Watch delivery remains. Review it in Ceviz; contact support if unresolved.")
 
 
 def lifecycle(jobs):

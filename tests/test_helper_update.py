@@ -246,6 +246,64 @@ class HelperUpdateTests(unittest.TestCase):
             update.journal_idle(self.directory)
         self.assertEqual(path.read_bytes(), b"not a sqlite database")
 
+    def test_reserved_watch_delivery_blocks_without_rewriting_its_journal(self):
+        path = self.directory / "conversations.sqlite"
+        with contextlib.closing(sqlite3.connect(path)) as database, database:
+            database.execute("CREATE TABLE conversation_submissions (terminal_status TEXT)")
+            database.execute("CREATE TABLE watch_submissions (state TEXT NOT NULL CHECK(state IN ('reserved', 'accepted')), job_id TEXT)")
+            database.execute("INSERT INTO watch_submissions VALUES ('accepted', 'existing-job')")
+        original = path.read_bytes()
+        update.journal_idle(self.directory)
+        self.assertEqual(path.read_bytes(), original, "Accepted Watch jobs remain owned by the existing jobs check")
+        with contextlib.closing(sqlite3.connect(path)) as database, database:
+            database.execute("INSERT INTO watch_submissions VALUES ('reserved', NULL)")
+        original = path.read_bytes()
+        with self.assertRaisesRegex(update.UpdateError, "unconfirmed Watch"):
+            update.journal_idle(self.directory)
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual({p.name for p in self.directory.iterdir()}, {"installation", "conversations.sqlite"})
+
+    def test_unreadable_watch_schema_refuses_without_repair(self):
+        path = self.directory / "conversations.sqlite"
+        with contextlib.closing(sqlite3.connect(path)) as database, database:
+            database.execute("CREATE TABLE conversation_submissions (terminal_status TEXT)")
+            database.execute("CREATE TABLE watch_submissions (unexpected TEXT)")
+        original = path.read_bytes()
+        with self.assertRaisesRegex(update.UpdateError, "could not be checked"):
+            update.journal_idle(self.directory)
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_reserved_watch_with_empty_jobs_blocks_before_service_stop_or_backup(self):
+        self.write_files(runtime_files("old"))
+        self.init_git()
+        instance = self.installation()
+        destination = self.directory / "candidate"
+        self.write_files(runtime_files("new"), destination)
+        state = self.directory / "state"
+        state.mkdir()
+        with contextlib.closing(sqlite3.connect(state / "conversations.sqlite")) as database, database:
+            database.execute("CREATE TABLE conversation_submissions (terminal_status TEXT)")
+            database.execute("CREATE TABLE watch_submissions (state TEXT NOT NULL CHECK(state IN ('reserved', 'accepted')), job_id TEXT)")
+            database.execute("INSERT INTO watch_submissions VALUES ('reserved', NULL)")
+        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        before = {"entry": str(instance.entry), "python": sys.executable, "environment": environment,
+                  "state": state, "pid": 123, "started": "1", "environment_hash": update.environment_hash(environment)}
+        original, original_state = instance.entry.read_bytes(), update.state_hashes(state)
+        with patch.object(instance, "snapshot", return_value=before), \
+                patch.object(update, "property_value", return_value="123"), \
+                patch.object(update, "process_details", return_value=([], environment, "1")), \
+                patch.object(instance, "api", return_value={"jobs": []}), \
+                patch.object(update, "atomic_bytes", side_effect=AssertionError("Must refuse before backup")) as writes, \
+                patch.object(instance, "stop", side_effect=AssertionError("Must refuse before service stop")) as stop:
+            with self.assertRaisesRegex(update.UpdateError, "unconfirmed Watch"):
+                update.apply_update(instance, destination, SHA, MANIFEST)
+        writes.assert_not_called()
+        stop.assert_not_called()
+        self.assertEqual(instance.entry.read_bytes(), original)
+        self.assertEqual(update.state_hashes(state), original_state)
+        self.assertFalse(instance.pending.exists())
+        self.assertFalse((instance.area / "backups").exists())
+
     def test_busy_and_unknown_jobs_refuse_and_empty_history_is_valid(self):
         for status in ("queued", "processing", "running", "unconfirmed", "unexpected", None):
             rows = [{"id": "existing", "status": status}]

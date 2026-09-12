@@ -3,6 +3,25 @@ import Foundation
 /// Release networking policy: HTTPS is accepted everywhere. Plain HTTP is
 /// limited to the explicit same-Wi-Fi relay mode and local/private hosts.
 enum BackendEndpointPolicy {
+    /// Re-entering the same pairing is a transport refresh, not permission to
+    /// discard saved recordings. Keep path/token differences identity-changing.
+    static func isSameConnection(_ currentURL: String, token currentToken: String,
+                                 as proposedURL: String, token proposedToken: String) -> Bool {
+        func canonical(_ value: String) -> String {
+            var value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            while value.hasSuffix("/") { value.removeLast() }
+            guard var components = URLComponents(string: value) else { return value }
+            components.scheme = components.scheme?.lowercased()
+            components.host = components.host?.lowercased()
+            if (components.scheme == "https" && components.port == 443) ||
+               (components.scheme == "http" && components.port == 80) { components.port = nil }
+            return components.string ?? value
+        }
+        return canonical(currentURL) == canonical(proposedURL) &&
+            currentToken.trimmingCharacters(in: .whitespacesAndNewlines) ==
+            proposedToken.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func isAllowed(_ value: String, connectionMethod: String) -> Bool {
         guard let components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),

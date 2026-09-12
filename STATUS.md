@@ -1,6 +1,124 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **12 Eylül 2026**
+Son güncelleme: **13 Eylül 2026**
+
+## Güvenilirlik onarımı — 13 Eylül, yerel çalışma sürüyor
+
+Kullanıcı tam onarıma başlanmasını onayladı. Aşağıdaki değişiklikler yalnız
+geliştirme çalışma kopyasında; **canlı kurulum veya yeni build değildir**.
+Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştirilmedi.
+
+- HTTP alımının sahibi artık bağlantı/başlık/gövde sınırlarını ve sınırlı
+  eşzamanlılığı yönetiyor. Yarım yükleme diğer sağlık/iş sorgularını kilitlemiyor;
+  iş anlık görüntüsü, aynı ses/hedefin eşzamanlı kabulü ve bildirim kaydı
+  birleştirmesi aynı sahiplik sınırında düzeltildi. İzole gerçek TCP ve sözleşme
+  paketi bağımsız tekrar çalıştırıldı: **81/81 geçti (53,204 saniye)**;
+  geçici durum temizlendi. Gerçek Whisper veya Gateway komutu çalıştırılmadı.
+  Geniş Windows tekrarında **207 test: 189 geçti, 18 platform testi atlandı
+  (71,396 saniye)**; temizleme doğrulandı. Bildirim sınırı Node paketi **3/3**
+  geçti. Bunlar gerçek telefon/saat veya model yürütme kanıtı değildir.
+- Watch tarafında belirsiz teslimin görünürlüğü, uyanma/zaman aşımı takibi,
+  geç gelen alındı bildiriminin eski “gönderiliyor” metnini bırakmaması ve
+  iş listesinin yükleniyor/hata/yenileme durumları hazırlandı. Telefon daha
+  küçük, ölçülmüş üst sınırı olan özet liste gönderiyor; saat yeni işleri önce
+  gösteriyor. Aynı bağlantıyı yenileme, bekleyen kayıtları temizleyen gerçek
+  eşleştirme değişiminden ayrıldı. **Apple derlemesi/cihaz kanıtı henüz yok.**
+- Windows/WSL ömür yönetimi LAN relay'den ayrıldı: görev, aracı PowerShell
+  süreci olmadan doğrudan seçilen dağıtımın WSL istemcisini izliyor. Windows
+  Tailscale yolu kimliği doğrulanmış localhost hedefini kullanıyor; bozuk DNS
+  veya ağ adımında başarılı kurulum/QR bildirilmiyor. Yeni görev canlı
+  Windows'a kurulmadı; WSL başlatılmadı. Gerçek görev durdurma/yeniden başlatma,
+  konsol görünürlüğü ve terminal kapandıktan sonraki süreklilik açık kanıt
+  kapılarıdır. Eski LAN ve ortam-token Doctor sınırları deploy rehberinde.
+  Son ek düzeltme: LAN kurucusunda `-Distro` zorunlu; belirtilmezse ilk
+  dağıtımı seçmiyor. Eski kaynakta beş alt senaryoda kırmızı olan regresyon
+  düzeldi; son Windows paketi bağımsız tekrarında **10/10 geçti (15,108 sn)**.
+- Bağlantı yenilemesinde önceki URLSession'ların sahipliği korunuyor; gerçek
+  bağlantı değişikliği mevcut ve önceki oturumları birlikte iptal ediyor.
+  Görev yaratımı/sıfırlama yarışı aynı kilit altında; capability kontrolündeki
+  eski oturum yeni bağlantıya komut taşıyamıyor. Kaynaklar bağımsız incelendi;
+  yeni native oturum/iptal/temizleme regresyonları CI'ya eklendi ancak
+  **Swift bulunmayan bu Windows ortamında derlenmedi veya çalıştırılmadı**.
+- **13 Eylül ek onayı alındı:** Watch sesli gönderimlerinin telefon/backend
+  SQLite kimlik kaydı, yalnız geliştirme dalına commit/push ve Apple doğrulaması
+  ile bulunmayan özel inceleme araçları yerine bağımsız kaynak incelemesi ve
+  regresyon testi kullanımı onaylandı. Canlı servis veya TestFlight dağıtımı bu
+  onayın kapsamında değil.
+- Telefon ve yardımcı serviste yeni teslimat kaydı yalnız kimlik/hedef/durum
+  içeriyor; ses, transkript ve erişim anahtarı içermiyor. Telefon kaydı HTTP'den,
+  backend rezervasyonu STT/iş başlatmadan önce yazılıyor. Kaybolmuş yanıt önce
+  aynı kimlikle sorgulanıyor; belirsiz kayıt otomatik tekrar yetkisi vermiyor.
+  Her iki tarafın veritabanı kaybolsa bile gecikmiş WC dosyası yeniden kabul
+  edilmesin diye Watch, telefon kayıt kimliğini ilk aktarım öncesi sabitliyor;
+  telefon da backend kayıt kimliğini ilk POST öncesi sabitliyor. Önceki sürümün
+  kayıtları bu protokole sessizce yükseltilmiyor. 15 dakikalık ses saklama sınırı
+  korunuyor. Güncelleyici belirsiz Watch rezervasyonu varken kurulumu durduruyor.
+- Son geniş izole Windows tekrarında **224 test: 206 geçti, 18 platform testi
+  atlandı (84,348 saniye)**; tüm geçici durum temizlendi. Node bildirim sınırı
+  **3/3** ve Git Bash kurucu/Doctor sözdizimi geçti. Ek backend paketi gerçek
+  SQLite, TCP yanıt kaybı, yarışan iki yardımcı süreç ve iş başlatmadan önce/
+  sonra süreç ölümü içeriyor; gerçek kullanıcı komutu/Whisper/Gateway yok.
+  Bağımsız telefon incelemesinde bulunan çift depo kaybı/yeniden bağlama açığı
+  kayıt kimliği sabitlemesiyle kapatıldı ve native regresyona eklendi.
+- **Tamamlanma kapısı:** yeni Swift kayıt testleri ve Apple doğrulaması henüz
+  tamamlanmadı; çalışma kopyası dağıtıma hazır değil. Önceki
+  Watch simülatörü URL açılış hatası açık takip olarak korunuyor; test kapısı
+  gevşetilmedi. Yeni Swift kaynaklarının derlenmiş/çalışmış olduğu iddia edilmiyor.
+- **Ayrı açık takip:** HTTP'nin 10 saniyelik süresi yalnız istek alımını
+  kapsar. Süresiz takılan yerel STT işlemini durdurma/izole etme henüz
+  çözülmedi; mevcut testler bekleyen STT sırasında diğer yolların yanıtını ve
+  test STT'si serbest bırakılınca temiz kapanışı kanıtlıyor.
+- Bağımsız backend incelemesinde yeni sürümlü kabul yolunda engel bulunmadı.
+  Süreçler arası test iki **yeni protokol** gönderimini kapsar; eski endpoint
+  ile yeni endpoint'in aynı durum klasörünü paylaşan farklı helper süreçlerinde
+  eşzamanlı çalışması atomik kabul garantisinin dışında. Mevcut tek-helper
+  kurulumu korunmalı; evrensel “exactly once” veya fiziksel güç kesintisi kanıtı
+  iddia edilmemeli.
+
+Yerel değişiklik hesabı (`git diff --numstat` + yeni, henüz izlenmeyen kaynaklar):
+üretim **+2073/-453, net +1620**, test **+2135/-6, net +2129**, CI **+25/-1**.
+Üretim artışı tek HTTP alım/eşzamanlılık sahibi, açık Watch teslim/liste durumları,
+iptal edilebilir oturum sahipliği ve ağdan bağımsız Windows görev sınırına ait.
+Ek artış metadata-only SQLite kabul/durum sahipleri ve Watch kuyruk/odak
+ayrımına ait; mevcut SQLite bootstrap ortaklaştırıldı, telefonun doğrudan eski
+ses POST yolu kaldırıldı. Eski kayıtlar için sessiz protokol geçişi yok.
+Seri HTTP yolu, LAN relay'nin WSL gözeticiliği ve aynı bağlantıyı sıfırlama
+davranışı kaldırıldı/ayrıldı; taslak PowerShell yaşam-süresi sarmalayıcısı da
+doğrudan görev eylemiyle tamamen kaldırıldı. Yeni paket bağımlılığı yok.
+
+### Onarım öncesi teşhis — tarihsel kayıt
+
+Kullanıcı aşağıdaki teşhis sırasında onarımları sonraya bırakmıştı; o aşamada
+yeni build, dağıtım, kod/ayar değişikliği veya komut tekrarı yapılmadı.
+
+- **Yeni Watch gönderim olayı:** 13 Eylül 00:05'te WSL ve Ceviz kapanmış;
+  01:03'teki kontrolde o gün için kabul edilmiş Watch POST'u veya yeni iş yoktu.
+  Tanı komutunun WSL'yi açması servisi otomatik başlattı, yerel/Tailscale
+  kontrolleri geçti. Ancak WSL tekrar kapandı; 01:06'daki Windows tarafından
+  yapılan pasif kontrol `Ubuntu-E: Stopped` ve Ceviz adresinde HTTP 502 verdi.
+  `Ceviz Backend Relay` Windows görevi çalışmıyor (`Ready`, son sonuç `1`);
+  son çalışması 9 Eylül. Kesin çıkış nedeni henüz kanıtlanmadı. WSL ömür
+  yönetimi ile LAN relay/Tailscale erişimini ayrı sorumluluklar olarak incele.
+- **Watch teslim/kurtarma:** belirsiz teslimi görünür yap, aynı kimliği
+  uzlaştırmadan yeniden gönderme; bağlantı geri dönüşü, FIFO ve uyanmayı sına.
+  Kullanıcının 15 dakikalık ekranı için cihaz kanıtı hâlâ gerekli; backend'in
+  kapalı olması tek başına yerel 30 saniyelik watchdog davranışını açıklamaz.
+  Kullanıcı alt açıklamayı da doğruladı: kayıtlı bir isteğin süresi dolmuş,
+  tekrar gönderilmemiş. Kaynakta bu mesaj, 15 dakikadan eski en az bir bekleyen
+  Watch kaydının kuyruktan kaldırılmasıyla üretiliyor. Bu, 15 dakikalık kayıt
+  saklama sınırıdır; tek ağ isteğinin zaman aşımı değil. Mesaj kayıt kimliğini
+  belirtmez ve backend'de daha önce çalışmadığını tek başına kanıtlamaz.
+- **HTTP alımı:** kabul edilmiş yarım başlık/gövdenin seri sunucuyu
+  kilitlemesi izole testte doğrulandı; bu yeni olayın nedeni olduğu gösterilmedi.
+- **Watch iş listesi:** tam raporlar yerine sınırlı özet veri, yeni işlerin
+  önce gösterimi ve görünür yükleniyor/hata/yenileme durumları. Büyük gerçek
+  yanıt ölçüldü; cihazda `payloadTooLarge` oluştuğu kanıtlanmadı.
+- **Eşleştirme:** aynı bağlantıyı yenileme ile gerçek yeniden eşleştirmeyi ayır;
+  mevcut sıfırlama bekleyen saat seslerini silebildiği için kurtarma önerisi değil.
+
+Özel yerel ayrıntılı kanıt: dış çalışma alanındaki
+`.artifacts/network-recovery-audit/incident-summary.md`. Aynı klasördeki QR
+mevcut özel erişim anahtarını içerir; repoya veya duyuruya eklenmemelidir.
 
 ## Yardımcı servis güncellemesi — 12 Eylül yayımlandı
 
@@ -49,8 +167,9 @@ ve etiketin tam commit karşılığı ayrı ayrı geri okundu.
   LSApplicationWorkspaceErrorDomain** döndürdü. Kaynak tanı JSON'u ve gerçek
   42 mm açılış görüntüsü incelendi; hazır başlığı, süre ve mikrofon görünür.
   Katı varsayılan kapı hatayı fatal tuttu; kayıt/büyük yazı adımına ulaşılmadı.
-  iPhone işi son durum kontrolünde hâlâ çalışıyordu; bu kapanışta tamamlanmış
-  veya geçmiş sayılmıyor. Push olayında Apple imzalama/yükleme yapılamaz;
+  13 Eylül salt okunur son kontrolde iPhone işi **başarılı** doğrulandı
+  (iş `103588858831`, bitiş 12 Eylül 17:22:56 UTC). Bu eski SHA kanıtı yeni
+  onarım kaynaklarının native kanıtı değildir. Push olayında Apple imzalama/yükleme yapılamaz;
   mevcut build dağıtım işi de atlandı.
 - **Açık takip — Watch simülatör URL açılışı:** önceki native doğrulamalarda da
   kaydedilen 115 hâlâ çözülmüş değil; yeni koşu tüm native kontrollerin geçtiği

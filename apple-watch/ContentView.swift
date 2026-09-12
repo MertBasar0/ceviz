@@ -29,7 +29,7 @@ struct ContentView: View {
         if preparingCapture { return .preparing }
         if sessionManager.isCapturing { return .finalizing }
         if requestedResult != nil { return .result }
-        if sessionManager.isSending { return .sending }
+        if sessionManager.isPresentingDelivery { return .sending }
         if captureReady || (sessionManager.responseText.isEmpty && sessionManager.resultState == nil) { return .idle }
         return .result
     }
@@ -73,7 +73,8 @@ struct ContentView: View {
             }
             sessionManager.audioPlayerManager = player
             sessionManager.resumeResultPollingIfNeeded()
-            sessionManager.processQueue()
+            sessionManager.processQueue(startNewPass: true)
+            sessionManager.fetchJobs()
         }
         .onOpenURL { url in
             guard let route = WatchCaptureRoute(url: url, isRecording: recorder.isRecording,
@@ -86,7 +87,8 @@ struct ContentView: View {
             AudioRecorderManager.logger.info("Capture event: scene_changed phase=\(String(describing: phase), privacy: .public)")
             if phase == .active {
                 sessionManager.resumeResultPollingIfNeeded()
-                sessionManager.processQueue()
+                sessionManager.processQueue(startNewPass: true)
+                sessionManager.fetchJobs()
             }
             if phase == .background && preparingCapture { cancelRecording() }
         }
@@ -138,12 +140,15 @@ struct ContentView: View {
                                     } icon: { Image(systemName: "iphone") }
                                     .font(.caption).foregroundColor(CVZ.textSub)
                                 }
+                                if !sessionManager.pendingCommands.isEmpty { checkDeliveryButton }
                             case .preparing:
                                 ProgressView("Preparing microphone…").font(.body).tint(CVZ.accent)
                             case .finalizing:
                                 ProgressView("Finishing recording…").font(.body).tint(CVZ.accent)
                             case .sending:
-                                ProgressView("Sending request…").font(.body).tint(CVZ.accent)
+                                ProgressView { Text(sessionManager.responseText) }
+                                    .font(.body).tint(CVZ.accent)
+                                    .accessibilityIdentifier(sessionManager.isCheckingDelivery ? "capture.checkingDelivery" : "capture.sending")
                             case .result:
                                 resultCard(at: context.date)
                             case .recording:
@@ -187,7 +192,11 @@ struct ContentView: View {
             Text(displayedText)
                 .font(.body).foregroundColor(CVZ.text)
                 .fixedSize(horizontal: false, vertical: true)
-            if displayedState == .running || displayedState == .queued {
+            if !sessionManager.pendingCommands.isEmpty {
+                Text("Earlier recordings remain unconfirmed. You can send a different request; do not repeat the same one.")
+                    .font(.body).foregroundColor(CVZ.textSub)
+                if !sessionManager.isSending { checkDeliveryButton }
+            } else if displayedState == .running || displayedState == .queued {
                 Text("You can start another request. Earlier jobs stay in Jobs.")
                     .font(.body).foregroundColor(CVZ.textSub)
             } else if displayedState?.needsAttention == true {
@@ -196,6 +205,19 @@ struct ContentView: View {
             }
             followUpCaption(at: date)
         }
+    }
+
+    private var checkDeliveryButton: some View {
+        Button {
+            requestedResult = nil
+            captureReady = false
+            sessionManager.checkDelivery()
+        } label: {
+            Label("Check delivery", systemImage: "arrow.clockwise")
+                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered).tint(CVZ.accent)
+        .accessibilityIdentifier("capture.checkDelivery")
     }
 
     @ViewBuilder
@@ -258,7 +280,7 @@ struct ContentView: View {
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(CVZ.accent, lineWidth: 1.5))
             }
             .buttonStyle(.plain)
-            .disabled(!recorder.isRecording && (sessionManager.isSending || sessionManager.isCapturing))
+            .disabled(!recorder.isRecording && (!sessionManager.canStartCapture || sessionManager.isCapturing))
             .accessibilityLabel(Text(LocalizedStringKey(sessionManager.isCapturing ? "Send recording" : "Start recording")))
             .accessibilityIdentifier("capture.primary")
         }
@@ -266,7 +288,7 @@ struct ContentView: View {
     }
 
     private func start() {
-        guard !sessionManager.isCapturing && !sessionManager.isSending else { return }
+        guard !sessionManager.isCapturing && sessionManager.canStartCapture else { return }
         AudioRecorderManager.logger.info("Capture event: view_start accepted")
         sessionManager.beginCaptureContinuation(displayedJobID: displayedJobID)
         recordingWasCancelled = false

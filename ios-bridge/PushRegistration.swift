@@ -22,6 +22,10 @@ final class CevizAppDelegate: NSObject, UIApplicationDelegate {
             name: BackendConfig.connectionDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(connectionConfigurationDidChange),
+            name: BackendConfig.connectionDidRefresh, object: nil
+        )
         if !ProcessInfo.processInfo.arguments.contains(screenshotLaunchArgument) {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
                 if let error {

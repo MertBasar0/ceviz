@@ -144,10 +144,10 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .disabled(testState == .testing)
 
-                    Button(action: resetConnection) {
+                    Button(action: refreshConnection) {
                         HStack {
                             Image(systemName: "arrow.clockwise")
-                            Text("RESET CONNECTION")
+                            Text("REFRESH CONNECTION")
                         }
                         .font(CVZ.mono(12, .semibold))
                         .foregroundColor(CVZ.textDim)
@@ -182,7 +182,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Text(NSLocalizedString("Empty fields fall back to the development default. The token must match WATCH_CEVIZ_AUTH_TOKEN in the backend service.", comment: ""))
+                    Text(NSLocalizedString("Enter your helper URL and access token. Refreshing the same connection preserves pending Watch recordings.", comment: ""))
                         .font(.system(size: 12))
                         .foregroundColor(CVZ.textDim)
                         .fixedSize(horizontal: false, vertical: true)
@@ -283,24 +283,24 @@ struct SettingsView: View {
     }
 
     private func save() {
-        guard candidateBaseURL.isEmpty || BackendEndpointPolicy.isAllowed(candidateBaseURL, connectionMethod: connectionMethod.rawValue) else {
-            testState = .failure(NSLocalizedString("Use HTTPS, or choose Same Wi-Fi with a local relay address.", comment: ""))
-            return
-        }
-        BackendConfig.save(
-            baseURL: urlText,
-            token: tokenText,
-            connectionMethod: connectionMethod.rawValue
-        )
-        dismiss()
+        if saveConfiguration() { dismiss() }
     }
 
-    private func resetConnection() {
-        BackendConfig.save(
-            baseURL: urlText,
-            token: tokenText,
-            connectionMethod: connectionMethod.rawValue
-        )
-        runTest()
+    private func saveConfiguration() -> Bool {
+        guard BackendConfig.save(baseURL: candidateBaseURL, token: tokenText,
+                                 connectionMethod: connectionMethod.rawValue) else {
+            testState = .failure(NSLocalizedString("Use HTTPS, or choose Same Wi-Fi with a local relay address.", comment: ""))
+            return false
+        }
+        return true
+    }
+
+    private func refreshConnection() {
+        guard BackendEndpointPolicy.isSameConnection(BackendConfig.baseURLString, token: BackendConfig.token,
+                                                      as: candidateBaseURL, token: tokenText) else {
+            testState = .failure(NSLocalizedString("Save the changed connection before refreshing.", comment: ""))
+            return
+        }
+        if saveConfiguration() { runTest() }
     }
 }

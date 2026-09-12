@@ -140,6 +140,29 @@ else
   warn "Tailscale was not detected; this is expected for manual or same-Wi-Fi setups"
 fi
 
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  # Passive Windows inspection must not enter a stopped distro and make an
+  # outage disappear merely because Doctor was run. No task/start/network edits.
+  if command -v powershell.exe >/dev/null 2>&1 &&
+     printf '%s' "${WSL_DISTRO_NAME:-}" | powershell.exe -NoProfile -NonInteractive -Command '
+       $ErrorActionPreference="Stop"
+       try {
+         $distro=[Console]::In.ReadToEnd()
+         if ([string]::IsNullOrWhiteSpace($distro)) { exit 1 }
+         $task=Get-ScheduledTask -TaskName "Ceviz WSL Lifetime" -TaskPath "\" -ErrorAction Stop
+         $arguments="--distribution " + [char]34 + $distro + [char]34 + " --exec /bin/sleep infinity"
+         if ($task.State -ne "Running" -or @($task.Actions).Count -ne 1 -or
+             $task.Actions[0].Execute -ne (Join-Path $env:SystemRoot "System32\wsl.exe") -or
+             $task.Actions[0].Arguments -cne $arguments) { exit 1 }
+         $running=@(wsl.exe --list --running --quiet) | ForEach-Object { $_.Replace([string][char]0, "").Trim() }
+         if ($LASTEXITCODE -ne 0 -or $distro -cnotin $running) { exit 1 }
+       } catch { exit 1 }' >/dev/null 2>&1; then
+    pass "Independent Windows WSL lifetime task and selected distro are running"
+  else
+    fail "Persistent WSL availability is not established; see the Windows lifetime repair in deploy/README.md (nothing restarted)"
+  fi
+fi
+
 printf '\nSummary: %d failure(s), %d warning(s).\n' "$FAILURES" "$WARNINGS"
 printf 'No credentials or command contents were printed.\n'
 

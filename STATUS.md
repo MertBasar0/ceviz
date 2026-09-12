@@ -1,6 +1,52 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **11 Eylül 2026**
+Son güncelleme: **12 Eylül 2026**
+
+## Yardımcı servis güncellemesi — 12 Eylül yayın hazırlığı
+
+Hedef yardımcı servis etiketi **ceviz-helper-v2026.9.12-beta.1**. Uygulama
+**2026.6.5 (1789005793)** değişmiyor; yeni TestFlight paketi veya kişisel
+Ceviz/Gateway güncellemesi yapılmıyor. GitHub kontrolleri ve yayımlanmış
+kaynağın son doğrulaması henüz bekliyor.
+
+- Güncellemenin sahibi `deploy/update.py`: Linux/WSL kalıcı systemd kullanıcı
+  servisi, açık bakım onayı, boşta ve teslimi belirsiz iş yokluğu kontrolü.
+  Tam backend/contract kopyası doğrulanıyor; tek giriş dosyası atomik olarak
+  değişiyor. Geri dönüş yalnız kodu kapsıyor; iş/SQLite kayıtları silinmiyor
+  veya eski bir kopyaya sarılmıyor.
+- Eski kurucunun tekrar çalıştırılması gerçek izole serviste özel ajan/dil
+  ayarlarını değiştirdi ve çalışan süreci yenilemedi. Yeni kurucu mevcut
+  servis/token (bozuk sembolik bağlantı dahil) bulursa değişiklik yapmadan duruyor.
+  Yeni kurulum Python 3.11+ kontrolü yapıyor ve OpenClaw için gerekli shell
+  PATH'ini systemd servisine doğru tırnaklayarak aktarıyor.
+- Son kaynak için Windows tam Python paketi **180 test, 162 geçti / 18 platform
+  atlandı**; Linux odaklı kurucu/güncelleme paketi **27/27**, bildirim sınırı
+  Node paketi **3/3** geçti. Bağımsız kaynak/test incelemesinin bulguları aynı
+  kırmızıdan yeşile testlerle kapatıldı; hazır autoreview/test-audit araçları
+  bu ortamda bulunmadığından bağımsız elle inceleme kullanıldı.
+- Gerçek WSL/systemd, ayrı geçici kullanıcı ve sahte OpenClaw CLI sınırında:
+  eski `040d1df` kurulumu → güncel yardımcı servis; kayıtları olan ve henüz
+  konuşma SQLite dosyası olmayan iki kohort; özel unit/drop-in/ortam, token,
+  bağımlılıklar ve geçmiş korunması; 401/200 erişim; oturum/geçmiş; bakım onayı,
+  yanlış kurulum ve aktif/belirsiz teslimde durma; ikinci güncellemede yeniden
+  başlatmama doğrulandı. Gerçek servis yeniden başlatılıp aynı gönderim kimliği
+  tekrarlandığında sahte Gateway sınırına yalnız bir `chat.send` ulaştı.
+- Bilerek bozuk başlangıç gerçek süreçte hata verdi ve otomatik eski-kod
+  kurtarma geçti. Güncelleyici etkinleştirme sonrasında gerçekten SIGKILL ile
+  kesildi; bekleyen kayıt korundu, yeni güncelleme reddedildi ve `--recover`
+  ayar/veriyi değiştirmeden önceki kodu geri getirdi.
+- Aynı izole kullanıcı/işletim sisteminde ikinci, yeni venv/token ile sıfır
+  uygulama kurulumu geçti. Boşluk, yüzde ve tırnak içeren CLI PATH'i gerçek
+  serviste ve yeniden başlatma sonrasında korundu. Bu, ikinci temiz işletim
+  sistemi veya gerçek telefon/mikrofon/Whisper model kalitesi testi değildir.
+- Sınırlar: otomatik güncelleme macOS/nohup/özel başlatıcıyı veya bağımlılık
+  değişikliğini kapsamıyor. Yeni kurucuda özel karakterli kurulum dizinlerinin
+  systemd yolu ayrı takip işi; rehber normal Linux home yolunu kullanıyor.
+  Eski checkout'un deploy betikleri/Git kimliği değiştirilmediği için yeni
+  sürümlerde yayımlanan güncelleyici indirilir; eski kurucu tekrar çalıştırılmaz.
+
+Yayın ve son kullanıcı yolu: [yardımcı servis notları](docs/release-notes-helper-2026.9.12-beta.1.md),
+[İngilizce kurulum/güncelleme/kurtarma rehberi](deploy/README.md#update-existing-installation).
 
 ## Güncel dış Beta — güvenli devam ve telefon konuşmaları
 

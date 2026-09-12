@@ -4,6 +4,8 @@ ceviz-*-pairing.png
 # Local credentials and generated artifacts.
 .auth-token
 .venv/
+# Local code snapshots, update locks and recovery receipts (never user state).
+.ceviz-updates/
 __pycache__/
 *.py[cod]
 backend.log

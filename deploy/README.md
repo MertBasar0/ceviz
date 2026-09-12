@@ -1,62 +1,196 @@
-# Watch Ceviz — Kurulum
+# Ceviz — Installation and safe updates
 
-OpenClaw'ın çalıştığı makinede, repo kökünde:
+A fresh installation and an update to a working installation are different
+operations. Run these commands on the OpenClaw machine as the user who runs
+Ceviz. Do not run the updater with `sudo`.
+
+Release preparation: the intended helper tag is
+`ceviz-helper-v2026.9.12-beta.1`. The versioned download commands below become
+usable after that tag is published. Final validation and publication are not
+yet claimed; see the [helper release notes](../docs/release-notes-helper-2026.9.12-beta.1.md).
+
+## Fresh installation
+
+You need Python **3.11+**, `venv`, Git and OpenClaw. If Ceviz is already
+installed, skip this section and use the existing-installation update guide.
+
+Use an ordinary Linux home-directory path, such as `$HOME/ceviz`, without
+spaces, percent signs or other special characters. The fresh installer's
+generated service paths do not yet support arbitrary directory names. This is
+separate from spaces in the shell's `PATH`, which the installer quotes when
+passing it to the service.
 
 ```bash
+git clone --branch ceviz-helper-v2026.9.12-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
+cd ceviz
 bash deploy/install.sh
 ```
 
-Script şunları yapar:
+The installer creates a Python environment and installs dependencies, including
+CUDA libraries when it detects a GPU. It generates a pairing token, creates a
+service, configures the selected connection method and displays a pairing QR.
+Linux/WSL uses a systemd user service when available. The installer's `nohup`
+fallback, macOS and other non-systemd installations are outside the automatic
+updater's supported scope.
 
-1. Python venv + bağımlılıklar (GPU varsa CUDA lib'leri de kurar, model `large-v3` olur; yoksa CPU + `small`)
-2. Erişim token'ı üretir (`.auth-token`, ikinci çalıştırmada korunur)
-3. `systemd --user` servisini yazıp başlatır (boot'ta otomatik; systemd yoksa `nohup`)
-4. Tailscale varsa backend'i tailnet'e `/ceviz` olarak yayınlar
-5. Telefonda okutacağın **QR** + adres/token bilgisini basar
+On iPhone, open **Ceviz → Settings → Scan pairing QR → Test connection → Save**.
+The QR contains the backend address and bearer token; do not share it. Updating
+an existing installation does not require pairing again.
 
-Telefonda: **Ceviz → Ayarlar (dişli) → QR İLE EŞLEŞ** → scriptin bastığı QR'ı okut → **BAĞLANTIYI TEST ET** → **KAYDET**.
-Token telefonda Keychain'de saklanır; uygulama silinip yeniden kurulsa bile kalır.
+<a id="mevcut-kurulumu-guncelle"></a>
+<a id="update-existing-installation"></a>
+
+## Update an existing installation
+
+Automatic updating supports only Linux/WSL installations using the same user's
+persistent `watch-ceviz-backend.service` **systemd user service**. macOS,
+`nohup`, custom launch commands, local backend modifications or different
+Python dependencies require assisted updating. Re-running the installer is not
+a safe alternative.
+
+First set the actual installation directory; `/absolute/path/to/ceviz` below
+is a placeholder. Download the new updater into a separate temporary directory
+and run its read-only check:
+
+```bash
+CEVIZ_INSTALL_DIR="/absolute/path/to/ceviz"
+CEVIZ_UPDATE_DIR="$(mktemp -d)"
+curl --fail --location --proto '=https' --tlsv1.2 \
+  'https://raw.githubusercontent.com/MertBasar0/ceviz/ceviz-helper-v2026.9.12-beta.1/deploy/update.py' \
+  --output "$CEVIZ_UPDATE_DIR/update.py" &&
+python3 "$CEVIZ_UPDATE_DIR/update.py" --install-dir "$CEVIZ_INSTALL_DIR" --check
+```
+
+`--check` does not stop the service, download a source release or change files
+and settings. Do not continue if a job is running or conversation delivery is
+unconfirmed. Review the result in Ceviz and contact support if it remains
+unresolved; never delete tracking records to bypass this check. `READY` means
+the installation was idle when checked, not that every later update check has
+passed or that new requests have been prevented.
+
+After a successful check, **close Ceviz on both iPhone and Watch** and stop
+requests from Shortcuts or any other Ceviz client. Keep this maintenance window
+until the updater reports `UPDATED`, `UP TO DATE`, or successful `RECOVERED`.
+In the same terminal, explicitly confirm that no requests will be sent:
+
+```bash
+read -r -p 'All Ceviz clients are closed and no commands will be sent until maintenance finishes. Type UPDATE to confirm: ' CEVIZ_CONFIRM
+if [ "$CEVIZ_CONFIRM" = "UPDATE" ]; then
+  python3 "$CEVIZ_UPDATE_DIR/update.py" \
+    --install-dir "$CEVIZ_INSTALL_DIR" \
+    --revision ceviz-helper-v2026.9.12-beta.1 \
+    --yes-maintenance
+fi
+```
+
+The updater resolves the full Git commit identity and verifies a complete
+snapshot of the backend and contracts. It replaces only `backend/main.py` with
+a launcher for that snapshot, rather than overwriting runtime modules one at a
+time. Only the Ceviz service is briefly stopped and started. Authentication,
+capabilities, the session list and, when a suitable session exists, history are
+checked read-only; no real command is sent.
+
+Pairing, existing service/environment settings, the Python environment,
+Tailscale/relay/network settings, job history and conversation delivery records
+are preserved. OpenClaw's Gateway, model and permissions are not changed. If a
+release changes Python dependencies, automatic updating stops without installing
+packages and asks for assisted updating.
+
+Use this tool for later updates too. Do not use `git pull`, `git reset`, old
+file copies or `install.sh` to update a managed installation. Keep
+`.ceviz-updates`: it contains running source snapshots, code backups and update
+receipts. These are not backups of conversation text or tokens, but they contain
+local paths and job identifiers; do not publish them as support logs.
+
+The original checkout's deployment scripts and Git revision stay unchanged;
+the running helper version is recorded by the updater, not by `git log` in
+that checkout. Download the updater from the published guide for each release.
+An older checkout's Doctor may lack the new capability check or suggest an
+installer rerun: do not follow that suggestion. Use the downloaded updater's
+`--check` and its verified update result for the current maintenance flow.
+
+### Recover an interrupted update
+
+If activation fails, the updater attempts to restore the previous code. If the
+process was interrupted or reports `RECOVERY REQUIRED`, keep all clients idle.
+Use the same downloaded updater and the same installation:
+
+```bash
+python3 "$CEVIZ_UPDATE_DIR/update.py" \
+  --install-dir "$CEVIZ_INSTALL_DIR" --recover --yes-maintenance
+```
+
+`--recover` restores only the verified previous code of a pending update. It
+does not rewind job/conversation state, delete delivery guards or resend
+commands. Recovery may refuse if settings or state changed; contact support
+before sending new commands. Without a pending update, this is not a general
+downgrade command.
+
+If the temporary directory or terminal is gone, download the same published
+updater again from the HTTPS URL above and set the real installation directory
+again. Leave the records in `.ceviz-updates` intact. The previous code restored
+by recovery may not include the newer Conversations features.
+
+### Trusted local source for maintainers
+
+For a reviewed offline/staged update, a maintainer can add
+`--source /path/to/trusted/ceviz` and set `--revision` to an exact 40-character
+commit or published helper release tag. The selected Git commit is used, not
+uncommitted files in that checkout. This does not bypass maintenance approval,
+idle checks or settings/state protection. Normal users should omit `--source`;
+the updater fetches only the official Ceviz GitHub repository into a temporary
+directory.
 
 ## Ceviz Doctor
 
-Kurulumdan sonra veya bağlantı sorunu yaşadığında repo kökünde çalıştır:
+After installation, or when pairing or delivery fails, run this from the
+installation directory:
 
 ```bash
 bash deploy/doctor.sh
 ```
 
-Doctor; OpenClaw ve Python erişimini, sanal ortam bağımlılıklarını, token
-dosyasını ve izinlerini, servis durumunu, kimlik doğrulamalı yerel backend
-isteğini ve Tailscale bağlantısını salt okunur biçimde kontrol eder. Destek için
-çıktıyı paylaşabilirsin: token değerini, APNs token'ını veya komut içeriğini
-yazdırmaz.
+Doctor checks OpenClaw and Python availability, virtual-environment
+dependencies, token existence/permissions, service status, authenticated local
+access, helper capabilities and Tailscale. It is read-only and does not print
+token values, APNs tokens or command contents. Follow its repair guidance;
+do not reinstall over a working installation.
 
-### Bağlantı modu
+### Connection mode for a fresh installation
 
-- `WATCH_CEVIZ_NETWORK_MODE=tailscale`: önerilen; farklı ağlardan özel tailnet erişimi.
-- `WATCH_CEVIZ_NETWORK_MODE=relay`: WSL2 + Windows için aynı Wi-Fi LAN relay'i; Windows UAC onayı ister.
-- `WATCH_CEVIZ_NETWORK_MODE=manual`: kendi VPN/tunnel/reverse proxy adresinizi kullanın.
-- `auto` (varsayılan): interaktif terminalde seçim sorar; CI/non-interactive kurulumda uygun yöntemi algılar.
+- `WATCH_CEVIZ_NETWORK_MODE=tailscale`: recommended private tailnet access
+  across different networks.
+- `WATCH_CEVIZ_NETWORK_MODE=relay`: WSL2 + Windows same-LAN relay; requires
+  Windows UAC approval.
+- `WATCH_CEVIZ_NETWORK_MODE=manual`: your existing VPN/tunnel/reverse-proxy URL.
+- `auto` (default): asks in an interactive terminal; detects an available
+  method during non-interactive installation.
 
-## Ortam değişkenleri (opsiyonel)
+## Optional fresh-installation environment variables
 
-| Değişken | Varsayılan | Açıklama |
+| Variable | Default | Purpose |
 |---|---|---|
-| `WATCH_CEVIZ_PORT` | `8080` | Backend portu |
-| `WATCH_CEVIZ_NETWORK_MODE` | `auto` | `tailscale`, `relay`, `manual` veya otomatik seçim |
-| `WATCH_CEVIZ_WHISPER_MODEL` | GPU'da `large-v3`, CPU'da `small` | STT modeli |
-| `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | STT dili |
-| `OPENCLAW_WATCH_AGENT` | `main` | Komutların gideceği OpenClaw ajanı |
+| `WATCH_CEVIZ_PORT` | `8080` | Backend port |
+| `WATCH_CEVIZ_NETWORK_MODE` | `auto` | `tailscale`, `relay`, `manual`, or automatic selection |
+| `WATCH_CEVIZ_WHISPER_MODEL` | `large-v3` with GPU, otherwise `small` | Speech-to-text model |
+| `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | Default speech-to-text language |
+| `OPENCLAW_WATCH_AGENT` | `main` | OpenClaw agent used for Watch commands |
 
-## WSL2 + Windows notu
+The updater does not reselect these values or write them into your existing
+service.
 
-Tailscale Windows host'ta çalışıyorsa (WSL2 kurulumu), `tailscale` WSL PATH'inde
-olmayabilir. Bu durumda script Tailscale adımını atlar; `tailscale serve` komutunu
-**Windows tarafında** bir kez elle çalıştır:
+## WSL2 + Windows connection note
+
+When Tailscale runs on Windows, it may not be on WSL's `PATH`. The current
+installer can detect Windows Tailscale and set up a Windows relay for that
+route. For an assisted/manual setup with a Windows-reachable backend on port
+8080, the corresponding Windows-side command is:
 
 ```powershell
 tailscale serve --bg --set-path=/ceviz http://127.0.0.1:8080
 ```
 
-Ardından telefona `https://<makine-adı>.<tailnet>.ts.net/ceviz` adresini ve `.auth-token`
-içindeki token'ı gir (ya da bu ikisinden bir QR üretip okut).
+Only use that address after verifying Windows can reach the backend there;
+custom WSL networking may require the relay setup instead. Pair iPhone with
+`https://<machine-name>.<tailnet>.ts.net/ceviz` and its private token. These are
+initial networking instructions, not part of the code-only update.

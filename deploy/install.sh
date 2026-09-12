@@ -18,6 +18,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"          # Ceviz repo root
 cd "$APP_DIR"
 
+# Installation is not an update: re-running it used to replace the service's
+# custom environment and did not reliably restart an already-active process.
+# Refuse before pip, token, service or network changes; update.py owns upgrades.
+if [ -e "$APP_DIR/.auth-token" ] || [ -L "$APP_DIR/.auth-token" ] || \
+   { command -v systemctl >/dev/null 2>&1 && \
+     [ "$(systemctl --user show watch-ceviz-backend.service -p LoadState --value 2>/dev/null)" = loaded ]; }; then
+  echo "!! Existing Ceviz installation detected. No settings or services changed." >&2
+  echo "   Follow the existing-installation update instructions in deploy/README.md." >&2
+  exit 1
+fi
+
 PORT="${WATCH_CEVIZ_PORT:-8080}"
 NETWORK_MODE="${WATCH_CEVIZ_NETWORK_MODE:-auto}"
 VENV="$APP_DIR/.venv"
@@ -38,6 +49,21 @@ else
 fi
 
 # --- 1) venv + bagimliliklar ---
+INSTALL_PY=python3
+[ -x "$PY" ] && INSTALL_PY="$PY"
+if ! "$INSTALL_PY" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+  echo "!! Python 3.11 or newer is required by the pinned dependencies. No packages or settings changed." >&2
+  exit 1
+fi
+if [[ "$PATH" == *$'\n'* || "$PATH" == *$'\r'* ]]; then
+  echo "!! PATH contains a line break; choose a normal OpenClaw CLI path before installing." >&2
+  exit 1
+fi
+# systemd does not inherit the installing shell's PATH. Preserve it explicitly,
+# including WSL paths with spaces; escape unit quoting and %-specifiers.
+SYSTEMD_PATH="${PATH//\\/\\\\}"
+SYSTEMD_PATH="${SYSTEMD_PATH//\"/\\\"}"
+SYSTEMD_PATH="${SYSTEMD_PATH//%/%%}"
 if [ ! -x "$PY" ]; then
   echo "==> Python venv olusturuluyor"
   python3 -m venv "$VENV"
@@ -89,6 +115,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
     echo "Type=simple"
     echo "WorkingDirectory=$APP_DIR"
     echo "Environment=HOME=$HOME"
+    printf 'Environment="PATH=%s"\n' "$SYSTEMD_PATH"
     echo "Environment=WATCH_CEVIZ_STT_ENGINE=auto"
     echo "Environment=WATCH_CEVIZ_WHISPER_MODEL=$WHISPER_MODEL"
     echo "Environment=WATCH_CEVIZ_WHISPER_LANGUAGE=$LANG_ENV"
@@ -103,12 +130,11 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
     echo "WantedBy=default.target"
   } > "$UNIT_DIR/watch-ceviz-backend.service"
   systemctl --user daemon-reload
-  systemctl --user enable --now watch-ceviz-backend >/dev/null 2>&1 || systemctl --user restart watch-ceviz-backend
+  systemctl --user enable --now watch-ceviz-backend >/dev/null
   command -v loginctl >/dev/null 2>&1 && loginctl enable-linger "$(whoami)" >/dev/null 2>&1 || true
   echo "==> Servis calisiyor (systemctl --user status watch-ceviz-backend)"
 else
   echo "==> systemd yok — nohup ile baslatiliyor"
-  pkill -f "backend/main.py $PORT" 2>/dev/null || true
   LD_LIBRARY_PATH="$LD_LIBS" WATCH_CEVIZ_AUTH_TOKEN="$TOKEN" \
     WATCH_CEVIZ_WHISPER_MODEL="$WHISPER_MODEL" WATCH_CEVIZ_WHISPER_LANGUAGE="$LANG_ENV" \
     WATCH_CEVIZ_STT_ENGINE=auto OPENCLAW_WATCH_AGENT="$AGENT_ENV" \

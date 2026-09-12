@@ -32,19 +32,26 @@ model](docs/security-model.md) before pairing a production OpenClaw setup.
 - iPhone with iOS 16 or later
 - Apple Watch with watchOS 9 or later
 - OpenClaw installed and available on the backend machine's `PATH`
-- Python 3 with `venv` support
+- Python 3.11 or newer with `venv` support, and Git
 - Tailscale, a private VPN, or local-network access to the backend machine
 
-WSL2 is currently the most thoroughly validated installation path. macOS and
-bare Linux are supported beta targets and still need broader real-world
-feedback.
+WSL2 is currently the most thoroughly validated installation path. Automatic
+updates support Linux/WSL installations managed by Ceviz's `systemd --user`
+service. macOS and non-systemd installations need assisted updates; the updater
+refuses them without stopping a process.
 
 ## Install the backend
 
-Run these commands on the machine where OpenClaw is installed:
+For a **new installation only**, run these commands on the machine where
+OpenClaw is installed. If Ceviz is already installed, use the update section
+below; do not reinstall over a working service.
+
+Release preparation: `ceviz-helper-v2026.9.12-beta.1` is the intended helper
+release. The following versioned commands become usable after its tag is
+published; publication and final validation are not yet claimed here.
 
 ```bash
-git clone https://github.com/MertBasar0/ceviz.git
+git clone --branch ceviz-helper-v2026.9.12-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
 cd ceviz
 bash deploy/install.sh
 ```
@@ -70,6 +77,32 @@ bash deploy/doctor.sh
 It checks the OpenClaw CLI, Python environment, local Whisper dependencies,
 token permissions, backend service, authenticated local endpoint, and Tailscale
 status without printing credentials or command contents.
+
+## Update an existing backend
+
+Use the [existing-installation update guide](deploy/README.md#update-existing-installation).
+It downloads the release's updater to a temporary directory rather than
+overwriting your current checkout. Start with its read-only `--check` mode;
+close Ceviz on both devices and stop all other Ceviz requests before confirming
+the short maintenance window.
+
+The updater keeps your pairing token, service settings, Python environment,
+network configuration and runtime state. It verifies a complete source snapshot,
+switches one managed launcher, restarts only the Ceviz user service, and checks
+authenticated access and conversation discovery. It does not send a test command
+or change OpenClaw, its Gateway, model or permissions.
+
+Active or unconfirmed delivery, customized runtime code, changed dependencies,
+or an unsupported service setup stop automatic updating and require assistance.
+Do not use `git pull`, `git reset`, or the fresh installer to update a managed
+installation. Keep `.ceviz-updates`: it holds the verified snapshots and
+code-only recovery records. If interrupted, use the same updater's `--recover`
+mode as described in the guide; recovery never rewinds conversation/job state
+or removes delivery guards.
+
+This helper release accompanies the existing external TestFlight app
+**2026.6.5 (1789005793)**; updating the helper does not create a new phone/Watch
+build. See [helper release notes](docs/release-notes-helper-2026.9.12-beta.1.md).
 
 ## Choose a connection
 

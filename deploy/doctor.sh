@@ -37,10 +37,10 @@ if [ -x "$VENV_PY" ]; then
   if "$VENV_PY" -c 'import faster_whisper, qrcode' >/dev/null 2>&1; then
     pass "Local Whisper and QR dependencies import successfully"
   else
-    fail "Backend dependencies are incomplete; rerun deploy/install.sh"
+    fail "Backend dependencies are incomplete; use the repair guidance in deploy/README.md, not an installer rerun"
   fi
 else
-  fail "Ceviz virtual environment is missing; run deploy/install.sh"
+  fail "Ceviz virtual environment is missing; see deploy/README.md for new-installation versus existing-installation help"
 fi
 
 TOKEN=""
@@ -64,7 +64,7 @@ if [ -f "$TOKEN_FILE" ]; then
     *) warn "Pairing token permissions are $TOKEN_MODE; use chmod 600 .auth-token" ;;
   esac
 else
-  fail "Pairing token is missing; run deploy/install.sh"
+  fail "Pairing token is missing; see deploy/README.md before creating or replacing pairing settings"
 fi
 
 if command -v git >/dev/null 2>&1 && git -C "$APP_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -92,17 +92,33 @@ fi
 
 if [ "$SERVICE_ACTIVE" -eq 1 ] && [ -x "$VENV_PY" ] && [ -n "$TOKEN" ]; then
   if printf '%s' "$TOKEN" | CEVIZ_DOCTOR_PORT="$PORT" "$VENV_PY" -c '
-import os, sys, urllib.request
+import json, os, sys, urllib.error, urllib.request
 token = sys.stdin.read()
 url = "http://127.0.0.1:%s/api/v1/jobs/active" % os.environ["CEVIZ_DOCTOR_PORT"]
 req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
 with urllib.request.urlopen(req, timeout=5) as response:
     if response.status != 200:
         raise SystemExit(1)
+capabilities = urllib.request.Request(
+    "http://127.0.0.1:%s/api/v1/capabilities" % os.environ["CEVIZ_DOCTOR_PORT"],
+    headers={"Authorization": "Bearer " + token})
+try:
+    with urllib.request.urlopen(capabilities, timeout=5) as response:
+        features = json.load(response)
+except urllib.error.HTTPError as error:
+    raise SystemExit(2 if error.code == 404 else 1)
+if not all(features.get(name) is True for name in
+           ("continuation_v1", "suggestion_approval_v1", "conversations_v1")):
+    raise SystemExit(2)
 ' >/dev/null 2>&1; then
     pass "Authenticated local backend request succeeded"
+    pass "Helper supports Conversations, follow-up and explicit suggestion approval"
   else
-    fail "Authenticated local backend request failed on port $PORT"
+    if [ "$?" -eq 2 ]; then
+      warn "Helper is reachable but needs an update for the new app features; see deploy/README.md"
+    else
+      fail "Authenticated local backend request failed on port $PORT"
+    fi
   fi
 else
   warn "Local authenticated request skipped until service, environment, and token checks pass"

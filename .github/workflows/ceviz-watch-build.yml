@@ -4,6 +4,30 @@ on:
   push:
     branches:
       - main
+    # Helper deployment and documentation have their own checks. Native source,
+    # shared contracts, signing and native proof changes still run this suite.
+    paths:
+      - "apple-watch/**"
+      - "apple-watch-widget/**"
+      - "ios-bridge/**"
+      - "job-state/**"
+      - "watch-transport/**"
+      - "contracts/**"
+      - "project*.yml"
+      - "fastlane/**"
+      - "tests/swift/**"
+      - "tests/phone-ui/**"
+      - "tests/watch-ui/**"
+      - "tests/phone_conversation_ui.py"
+      - "tests/phone_ui_fixture.py"
+      - "tests/watch_capture_ui.py"
+      - "tests/watch_launch_smoke.py"
+      - "tests/test_phone_conversation_ui.py"
+      - "tests/test_phone_ui_fixture.py"
+      - "tests/test_watch_capture_ui.py"
+      - "tests/test_watch_launch_smoke.py"
+      - "tests/fastlane*.rb"
+      - ".github/workflows/ceviz-watch-build.yml"
   workflow_dispatch:
     inputs:
       export_method:
@@ -227,8 +251,9 @@ jobs:
     name: Sign and upload validated TestFlight candidate
     needs: [build, phone_ui]
     # Separate runners keep native proof within its existing time budget.
-    # Both same-SHA proof jobs must succeed before any signing secret is used.
-    if: ${{ !inputs.validation_only && needs.build.result == 'success' && needs.phone_ui.result == 'success' }}
+    # Helper/main publication may run validation, but cannot upload a phone build.
+    # Signing requires an explicit dispatch and both same-SHA native proof jobs.
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.validation_only && needs.build.result == 'success' && needs.phone_ui.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 30
     steps:

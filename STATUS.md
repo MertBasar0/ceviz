@@ -2,15 +2,72 @@
 
 Son güncelleme: **12 Eylül 2026**
 
-## Yardımcı servis güncellemesi — 12 Eylül yayın hazırlığı
+## Yardımcı servis güncellemesi — 12 Eylül yayımlandı
 
-Hedef yardımcı servis etiketi **ceviz-helper-v2026.9.12-beta.1**. Uygulama
+Yardımcı servis etiketi **ceviz-helper-v2026.9.12-beta.1** yayımlandı. Uygulama
 **2026.6.5 (1789005793)** değişmiyor; yeni TestFlight paketi veya kişisel
 Ceviz/Gateway güncellemesi yapılmıyor. Kod kaynağı `b117f2e` için
 [Ubuntu/macOS kontrolleri](https://github.com/MertBasar0/ceviz/actions/runs/34706593707)
-iki ortamda **180/180 Python + 3/3 Node** ile geçti. Yayımlanmış kaynağın son
-indirme/gerçek güncelleme doğrulaması henüz bekliyor.
+iki ortamda **180/180 Python + 3/3 Node** ile geçti. Son yayın kaynağı
+**3bb022c17af737cb6f679442e221a14c6008fb18**, aynı tam SHA için
+[son CI](https://github.com/MertBasar0/ceviz/actions/runs/34706866940) da yeşil.
+Ana dal bu kaynağa ilerletildi; [helper beta yayını](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.9.12-beta.1)
+ve etiketin tam commit karşılığı ayrı ayrı geri okundu.
 
+### Son kullanıcı yolu ve yayın sonrası kanıt
+
+- Gerçek HTTPS etiket bağlantısından indirilen güncelleyici, **varsayılan
+  uzak repo ve varsayılan etiketle**, yerel `--source` geçişi olmadan çalıştı.
+  Gerçek servis yenilendi; tüm korunan dosyalar/ortam/venv aynı kaldı,
+  kimlik doğrulama, yetenekler, oturum ve geçmiş geçti. Aynı komut ikinci kez
+  `UP TO DATE` verdi ve süreci yeniden başlatmadı; yeni Gateway gönderimi **0**.
+- Genel etiket klonu tam **3bb022c** ve daha önce test edilen **c3404f1**
+  backend/contract baytlarıyla eşleşti. Güncelleyici SHA-256
+  `dc4b03531ecf6c92dfbf9cba755bcf70133e89ad006c55e170aad797ee62162e`;
+  kurucu LF SHA-256
+  `d58187c18c35f47714f775b8a217c442b99503803a5ff88dd83ac8f2438761b7`.
+- [Kurulum sayfası](https://basarlabs.com.tr/ceviz/#install) sürüme sabitlenmiş
+  **yeni kurulum** ile **mevcut backend güncelleme** bağlantısını ayırıyor.
+  Site commit'i **6162201**, [Pages dağıtımı](https://github.com/MertBasar0/basarlabs-site/actions/runs/34707077310)
+  başarılı; önce/sonra gerçek tarayıcı görüntüsü incelendi ve canlı sayfadaki
+  bağlantıdan İngilizce güncelleme bölümüne geçiş doğrulandı.
+- Mevcut **1789005793** build'inin yalnız EN/TR “What to Test” metinleri
+  yeni helper sürümüne/rehbere yönlendirildi: **200 + 200**, birebir son geri
+  okuma başarılı, bekleyen değişiklik **0**. Build **VALID**, iç/dış
+  **IN_BETA_TESTING**, inceleme **APPROVED**, Mert/Beta üyeliği ve açık
+  TestFlight bağlantısı kontroller boyunca korundu. Yeni build, yeniden
+  dağıtım veya manuel bildirim yapılmadı.
+- İzole geçici kullanıcı/servis/işaretli home temizlendi; kullanıcı, linger,
+  süreçler ve test portunun kalmadığı doğrulandı. Yerel kanıt/loglar saklandı.
+  Kampanyanın tamamında sahte CLI sınırında **29 RPC / yalnız 1 chat.send**
+  gözlendi. Kişisel Ceviz ve OpenClaw kurulumları test hedefi olmadı.
+- Ana dal geçişi ayrıca uygulama doğrulamasını yeniden tetikledi
+  ([34707041887](https://github.com/MertBasar0/ceviz/actions/runs/34707041887)).
+  Watch/shared işi **başarısız**: backend/Node/Ruby/Swift kontrolleri ve üç
+  simülatör paketi derlendi, normal Watch açılışı geçti; kurulu URL scheme'i
+  doğrulandığı halde `simctl openurl ceviz-watch://capture` **115 /
+  LSApplicationWorkspaceErrorDomain** döndürdü. Kaynak tanı JSON'u ve gerçek
+  42 mm açılış görüntüsü incelendi; hazır başlığı, süre ve mikrofon görünür.
+  Katı varsayılan kapı hatayı fatal tuttu; kayıt/büyük yazı adımına ulaşılmadı.
+  iPhone işi son durum kontrolünde hâlâ çalışıyordu; bu kapanışta tamamlanmış
+  veya geçmiş sayılmıyor. Push olayında Apple imzalama/yükleme yapılamaz;
+  mevcut build dağıtım işi de atlandı.
+- **Açık takip — Watch simülatör URL açılışı:** önceki native doğrulamalarda da
+  kaydedilen 115 hâlâ çözülmüş değil; yeni koşu tüm native kontrollerin geçtiği
+  şeklinde sunulamaz. `c3404f1` → `3bb022c` uygulama/backend/contract ve native
+  test kaynak farkı boş. Bu kanıt gerçek WidgetKit dokunuşunu sınamıyor veya
+  yeni uygulama regresyonunu göstermiyor. Helper güncellemesinin ayrı başarılı
+  kanıtları yukarıda; yeni native yayın öncesinde bu takip yeniden ele alınmalı.
+  Kontrol gevşetilmedi, tekrar koşuyla gizlenmedi ve yeni TestFlight paketi yok.
+
+### Düzeltme ve test kapsamı
+
+- Değişiklik sahipliği: kurucu artık yalnız yeni kurulumu, güncelleyici mevcut
+  servisin kod yaşam döngüsünü yönetiyor. Eski yeniden-kurulum/restart fallback'i
+  ve geniş `pkill` yolu kaldırıldı. İlk kod paketinde üretim betikleri/manifest
+  net **+557 satır**, yerel artifact ignore **+2**, CI **+97**, testler **+1629**.
+  Artış yeni, bağımlılıksız tam-kopya doğrulama/atomik etkinleştirme/kod-only
+  kurtarma sınırına ait; uygulama veya backend çalışma kodunda değişiklik yok.
 - Güncellemenin sahibi `deploy/update.py`: Linux/WSL kalıcı systemd kullanıcı
   servisi, açık bakım onayı, boşta ve teslimi belirsiz iş yokluğu kontrolü.
   Tam backend/contract kopyası doğrulanıyor; tek giriş dosyası atomik olarak
@@ -82,7 +139,8 @@ Test edilen aynı imzalı paket dağıtıldı; yeniden derleme yapılmadı.
   ve açık bağlantı korundu. Test kullanıcıları, genel App Store metadata'sı,
   Gateway/Ceviz servisleri veya bağlantı ayarları değiştirilmedi. `main`'e
   birleştirme, GitHub release/tag ve sosyal duyuru yapılmadı.
-- **Duyuru öncesi kurulum takibi:** README ve ürün sayfasındaki standart
+- **11 Eylül anındaki kurulum takibi — 12 Eylül helper yayınıyla kapandı:**
+  O gün README ve ürün sayfasındaki standart
   kurulum hâlâ `main` dalını klonluyor; yeni yardımcı servis yalnız açık
   `codex/phone-conversations` dalında, test edilen kaynak **c3404f1**.
   Eski yardımcı serviste telefon açık bir güncelleme gereksinimi gösteriyor.

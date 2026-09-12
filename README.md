@@ -46,9 +46,9 @@ For a **new installation only**, run these commands on the machine where
 OpenClaw is installed. If Ceviz is already installed, use the update section
 below; do not reinstall over a working service.
 
-Release preparation: `ceviz-helper-v2026.9.12-beta.1` is the intended helper
-release. The following versioned commands become usable after its tag is
-published; publication and final validation are not yet claimed here.
+These commands use the versioned helper release
+`ceviz-helper-v2026.9.12-beta.1`, matching the existing TestFlight app
+**2026.6.5 (1789005793)**.
 
 ```bash
 git clone --branch ceviz-helper-v2026.9.12-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git

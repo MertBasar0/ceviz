@@ -4,10 +4,10 @@ A fresh installation and an update to a working installation are different
 operations. Run these commands on the OpenClaw machine as the user who runs
 Ceviz. Do not run the updater with `sudo`.
 
-Release preparation: the intended helper tag is
-`ceviz-helper-v2026.9.12-beta.1`. The versioned download commands below become
-usable after that tag is published. Final validation and publication are not
-yet claimed; see the [helper release notes](../docs/release-notes-helper-2026.9.12-beta.1.md).
+This guide targets **ceviz-helper-v2026.9.12-beta.1**, matching the existing
+TestFlight app **2026.6.5 (1789005793)**. See the
+[helper release notes](../docs/release-notes-helper-2026.9.12-beta.1.md) for
+validation coverage and limitations.
 
 ## Fresh installation
 

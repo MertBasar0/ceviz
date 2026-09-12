@@ -6,8 +6,10 @@ Son güncelleme: **12 Eylül 2026**
 
 Hedef yardımcı servis etiketi **ceviz-helper-v2026.9.12-beta.1**. Uygulama
 **2026.6.5 (1789005793)** değişmiyor; yeni TestFlight paketi veya kişisel
-Ceviz/Gateway güncellemesi yapılmıyor. GitHub kontrolleri ve yayımlanmış
-kaynağın son doğrulaması henüz bekliyor.
+Ceviz/Gateway güncellemesi yapılmıyor. Kod kaynağı `b117f2e` için
+[Ubuntu/macOS kontrolleri](https://github.com/MertBasar0/ceviz/actions/runs/34706593707)
+iki ortamda **180/180 Python + 3/3 Node** ile geçti. Yayımlanmış kaynağın son
+indirme/gerçek güncelleme doğrulaması henüz bekliyor.
 
 - Güncellemenin sahibi `deploy/update.py`: Linux/WSL kalıcı systemd kullanıcı
   servisi, açık bakım onayı, boşta ve teslimi belirsiz iş yokluğu kontrolü.

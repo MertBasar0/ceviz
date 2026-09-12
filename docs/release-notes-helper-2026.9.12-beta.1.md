@@ -1,10 +1,6 @@
 # Ceviz Helper 2026.9.12 Beta 1
 
-Release preparation — final source identity, clean-install/update proof and
-publication are pending. Do not describe the helper tag as available until its
-published release has been verified.
-
-Intended tag: `ceviz-helper-v2026.9.12-beta.1`.
+Tag: `ceviz-helper-v2026.9.12-beta.1`.
 Compatible existing app: **Ceviz 2026.6.5 (1789005793)** on iPhone and Apple Watch.
 This is a helper-source release, not a new TestFlight binary or app version.
 
@@ -41,16 +37,35 @@ quality, physical Watch delivery, or exactly-once effects in an external system.
 Neither helper publication nor updating changes OpenClaw Gateway settings,
 model selection, permissions, or the existing TestFlight build.
 
-## Validation status
+## Validation
 
-Pending before publication:
+- [Code-source checks](https://github.com/MertBasar0/ceviz/actions/runs/34706593707)
+  passed on Ubuntu and macOS: 180 Python tests and 3 notification-relay tests
+  per host, plus installer/Doctor/updater syntax. Windows discovered the same
+  180 Python tests: 162 passed and 18 platform/permission cases were skipped.
+- A disposable WSL user ran the real installer, dependency installation,
+  systemd service and backend HTTP flow. Actual old `040d1df` source upgraded
+  with existing jobs/terminal SQLite records preserved; a separate cohort with
+  no conversation journal also upgraded without creating one.
+- Wrong installation, missing maintenance consent, existing-installation
+  reruns and active/unconfirmed delivery refused before service mutation.
+  Authentication, capabilities, sessions/history, idempotent update and
+  delivery-identity replay after a real service restart were checked.
+- An intentionally broken startup rolled back automatically. A real SIGKILL
+  after activation left a pending receipt; explicit recovery restored previous
+  code without rewinding state. Whole-bundle tampering, path escape and foreign
+  virtualenv regressions also passed after independent review.
+- A second fresh application environment/token on the same disposable OS user
+  passed installation and restart, including a CLI PATH with spaces, percent
+  and quote characters. This is not a second clean operating system. Gateway
+  responses were synthetic; no personal Gateway, Whisper model-quality or
+  physical-device behavior was exercised by these deployment tests.
 
-- Final-source Python regression suite and installer/Doctor/updater syntax
-  checks on the supported validation hosts.
-- Isolated real-service installation/update/recovery proof, including preserved
-  settings/state and refusal paths. Synthetic Gateway fixtures are not a claim
-  that a real user command was executed.
-- Independent review, exact source/tag identity and public download/readback.
+The iPhone/Watch app and backend runtime are unchanged from the previously
+device-tested `c3404f1` source. The updater SHA-256 is
+`dc4b03531ecf6c92dfbf9cba755bcf70133e89ad006c55e170aad797ee62162e`.
+The published GitHub release identifies its exact source commit; latest
+publication/download readback is recorded in [STATUS.md](../STATUS.md).
 
 The helper-check workflow contains no Apple credentials, signing, TestFlight
 upload or production service operation. Its macOS unit-test job is not macOS

@@ -1,8 +1,8 @@
 import Foundation
 
 // This executable never links the production Keychain implementation or stores
-// pairing values. Its URLProtocol handles a private scheme and the reserved
-// backend.invalid capability fixture, never a configured real backend.
+// pairing values. Its explicit session protocol handles a private scheme and
+// the reserved backend.invalid capability fixture, never a configured real backend.
 enum KeychainStore {
     static func get(_ key: String) -> String? { nil }
     static func set(_ value: String, for key: String) { preconditionFailure("No Keychain writes in transport tests") }
@@ -86,12 +86,19 @@ private final class Completion: @unchecked Sendable {
 // -o build/tests/backend-transport-tests
 @main
 struct BackendTransportTests {
+    private static let callerConfiguration: URLSessionConfiguration = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HoldingProtocol.self]
+        return configuration
+    }()
+    private static let transport = BackendTransport(configuration: callerConfiguration)
+
     static func request(_ path: String) -> URLRequest {
         URLRequest(url: URL(string: "ceviz-transport-test://fixture" + path)!)
     }
     private static func start(_ path: String) -> (URLSessionDataTask, Completion) {
         let completion = Completion()
-        let task = BackendTransport.shared.dataTask(with: request(path), completionHandler: completion.receive)
+        let task = transport.dataTask(with: request(path), completionHandler: completion.receive)
         task.resume()
         return (task, completion)
     }
@@ -102,32 +109,33 @@ struct BackendTransportTests {
     }
     // Inspect lifecycle ownership under the owner's actual lock; no production
     // count/debug API exists solely to satisfy this cleanup assertion.
-    static func drainingCount() -> Int {
-        let owner = BackendTransport.shared
+    static func drainingSessions() -> [URLSession] {
+        let owner = transport
         let lock = Mirror(reflecting: owner).children.first { $0.label == "lock" }!.value as! NSLock
         lock.lock(); defer { lock.unlock() }
         let draining = Mirror(reflecting: owner).children.first { $0.label == "draining" }!.value
-        return (draining as! [ObjectIdentifier: URLSession]).count
+        return Array((draining as! [ObjectIdentifier: URLSession]).values)
     }
+    static func drainingCount() -> Int { drainingSessions().count }
     static func resetAndCheckCleanup() async throws {
-        BackendTransport.shared.reset()
+        transport.reset()
         try await eventually("Invalidation callbacks must release every retired session") { drainingCount() == 0 }
         try await eventually("No URLProtocol work may escape a test") { HoldingProtocol.isEmpty }
     }
     static func main() async throws {
-        precondition(URLProtocol.registerClass(HoldingProtocol.self))
-        defer {
-            BackendTransport.shared.reset()
-            URLProtocol.unregisterClass(HoldingProtocol.self)
-        }
+        // Snapshot before the first task. Neither this edit nor future resets
+        // may detach the native fixture protocol from the owned transport.
+        _ = transport
+        callerConfiguration.protocolClasses = []
+        defer { transport.reset() }
 
         let (taskA, resultA) = start("/reset-a")
-        try await eventually("Native session A must start through the registered local protocol") { HoldingProtocol.started("/reset-a") }
-        BackendTransport.shared.reset(cancelInFlight: false)
+        try await eventually("Native session A must start through its copied configuration protocol") { HoldingProtocol.started("/reset-a") }
+        transport.reset(cancelInFlight: false)
         let (taskB, resultB) = start("/reset-b")
-        try await eventually("Replacement session B must start") { HoldingProtocol.started("/reset-b") }
+        try await eventually("Replacement session B must retain the copied protocol after caller configuration changed") { HoldingProtocol.started("/reset-b") }
         precondition(!resultA.finished && !resultB.finished, "A graceful refresh must preserve active work")
-        BackendTransport.shared.reset()
+        transport.reset()
         try await eventually("A real reset must cancel BOTH the draining A task and current B task") {
             resultA.cancelled && resultB.cancelled
         }
@@ -136,10 +144,29 @@ struct BackendTransportTests {
 
         let (_, gracefulA) = start("/graceful-a")
         try await eventually("Graceful A must start") { HoldingProtocol.started("/graceful-a") }
-        BackendTransport.shared.reset(cancelInFlight: false)
+        transport.reset(cancelInFlight: false)
         precondition(drainingCount() == 1, "Keep the retired session owned until its native invalidation callback")
+        let sessionA = drainingSessions().first!
+        let configurationA = sessionA.configuration
+        let cookiesA = configurationA.httpCookieStorage!
+        let credentialsA = configurationA.urlCredentialStorage!
+        let cookie = HTTPCookie(properties: [.domain: "backend.invalid", .path: "/",
+            .name: "ceviz-fixture-cookie", .value: "session-a-only", .secure: "TRUE"])!
+        cookiesA.setCookie(cookie)
+        precondition(cookiesA.cookies?.contains(where: { $0.name == cookie.name }) == true)
         let (_, gracefulB) = start("/graceful-b")
         try await eventually("Graceful B must start") { HoldingProtocol.started("/graceful-b") }
+        // Retire B gracefully too so both ACTUAL native configurations can be
+        // inspected through existing ownership, without a production debug API.
+        transport.reset(cancelInFlight: false)
+        let sessionB = drainingSessions().first { $0 !== sessionA }!
+        let configurationB = sessionB.configuration
+        let cookiesB = configurationB.httpCookieStorage!
+        let credentialsB = configurationB.urlCredentialStorage!
+        precondition(cookiesA !== cookiesB && credentialsA !== credentialsB,
+                     "Session generations must not share private cookie/credential stores")
+        precondition(cookiesB.cookies?.contains(where: { $0.name == cookie.name }) != true,
+                     "A's synthetic cookie must not leak into B")
         HoldingProtocol.finish("/graceful-a")
         HoldingProtocol.finish("/graceful-b")
         try await eventually("Both sides of a graceful refresh must finish normally") { gracefulA.succeeded && gracefulB.succeeded }
@@ -147,8 +174,8 @@ struct BackendTransportTests {
         try await resetAndCheckCleanup()
 
         let suspendedResult = Completion()
-        let suspended = BackendTransport.shared.dataTask(with: request("/suspended"), completionHandler: suspendedResult.receive)
-        BackendTransport.shared.reset(cancelInFlight: false)
+        let suspended = transport.dataTask(with: request("/suspended"), completionHandler: suspendedResult.receive)
+        transport.reset(cancelInFlight: false)
         suspended.resume()
         try await eventually("An already-created suspended task remains owned across graceful refresh") { HoldingProtocol.started("/suspended") }
         HoldingProtocol.finish("/suspended")
@@ -157,13 +184,13 @@ struct BackendTransportTests {
 
         let beforeCreate = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return try await BackendTransport.shared.data(for: request("/cancel-before-create"))
+            return try await transport.data(for: request("/cancel-before-create"))
         }
         do { _ = try await beforeCreate.value; preconditionFailure("Pre-cancelled task must fail") }
         catch { precondition(error is CancellationError || (error as? URLError)?.code == .cancelled) }
         precondition(!HoldingProtocol.started("/cancel-before-create"), "Task cancellation before creation must not start HTTP")
 
-        let inFlight = Task { try await BackendTransport.shared.data(for: request("/async-cancel")) }
+        let inFlight = Task { try await transport.data(for: request("/async-cancel")) }
         try await eventually("Async task must start") { HoldingProtocol.started("/async-cancel") }
         inFlight.cancel()
         do { _ = try await inFlight.value; preconditionFailure("Cancelling Swift Task must cancel native HTTP") }
@@ -173,11 +200,11 @@ struct BackendTransportTests {
         precondition(BackendConfig.baseURLString == BackendConfig.unconfiguredBaseURL,
                      "This executable must not run against a configured user's backend")
         let command = BackendConfig.request("/api/v1/shortcuts/command", method: "POST")
-        let guarded = Task { try await BackendTransport.shared.data(for: command, requiring: .continuation) }
+        let guarded = Task { try await transport.data(for: command, requiring: .continuation) }
         try await eventually("Capability GET must start on the captured native session") {
             HoldingProtocol.started("/api/v1/capabilities")
         }
-        BackendTransport.shared.reset(cancelInFlight: false)
+        transport.reset(cancelInFlight: false)
         HoldingProtocol.finish("/api/v1/capabilities", body: Data("{\"continuation_v1\":true,\"suggestion_approval_v1\":false}".utf8))
         do { _ = try await guarded.value; preconditionFailure("Changed generation must refuse before POST") }
         catch {
@@ -190,7 +217,7 @@ struct BackendTransportTests {
 
         for index in 0..<10 {
             let path = "/completion-race-\(index)"
-            let racing = Task { try await BackendTransport.shared.data(for: request(path)) }
+            let racing = Task { try await transport.data(for: request(path)) }
             try await eventually("Completion-race request must start") { HoldingProtocol.started(path) }
             HoldingProtocol.finish(path)
             racing.cancel()

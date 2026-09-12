@@ -76,7 +76,7 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   iddia edilmemeli.
 
 Yerel değişiklik hesabı (`git diff --numstat` + yeni, henüz izlenmeyen kaynaklar):
-üretim **+2073/-453, net +1620**, test **+2140/-6, net +2134**, CI **+25/-1**.
+üretim **+2087/-456, net +1631**, test **+2167/-6, net +2161**, CI **+25/-1**.
 Üretim artışı tek HTTP alım/eşzamanlılık sahibi, açık Watch teslim/liste durumları,
 iptal edilebilir oturum sahipliği ve ağdan bağımsız Windows görev sınırına ait.
 Ek artış metadata-only SQLite kabul/durum sahipleri ve Watch kuyruk/odak
@@ -103,6 +103,29 @@ sağlık yanıtı doğrulamaları aynen duruyor; bağımsız inceleme bunu doğr
 Düzeltme sonrası yerel geniş tekrar **224 test / 206 geçti / 18 atlandı,
 84,603 saniye**, temizleme başarılı. Üretim kodu değişmedi. Yeni uzak doğrulama
 henüz bu düzeltmeyi çalıştırmadı; macOS hatası gizlenmiş/geçmiş sayılmıyor.
+
+### macOS düzeltmesi geçti; native oturum testinin bağlantı kurulumu
+
+`f58693b7c59215d5e071fe98292497e31aa177a0` için
+[helper doğrulaması](https://github.com/MertBasar0/ceviz/actions/runs/34726219694)
+tamamen başarılı: Linux **224 / 214 geçti / 10 atlandı (61,346 sn)**,
+macOS **224 / 214 geçti / 10 atlandı (97,466 sn)**, Windows yaşam-süresi
+**10/10 (14,603 sn)**; iki Unix platformunda Node **3/3**. Eski Apple koşusu
+yeni kaynak doğrulamasına yer açmak için durduruldu; eski iPhone işi geçti sayılmıyor.
+
+[İkinci Apple koşusunda](https://github.com/MertBasar0/ceviz/actions/runs/34726219752)
+Python/Node/Ruby ve Swift durum, Watch odak/kayıt, iki modelde taşıma,
+telefon komutu, Conversation SQLite, **WatchDelivery SQLite** ve capability
+paketleri geçti. `BackendTransportTests` ise ilk test isteği başlamadığı için
+durdu. Global `URLProtocol.registerClass` yerine belirli oturumun
+`configuration.protocolClasses` bağımlılığı kullanılmalı. Oturum sahibi,
+başlangıç yapılandırmasının özel kopyasını alacak şekilde düzeltildi; test
+gerçek URLSession/task/reset yollarını kendi yapılandırmasıyla kullanıyor.
+Her kuşak hâlâ yeni ephemeral çerez/credential deposu alıyor; bir önceki
+kuşağın özel verisi taşınmıyor. Native test bunu da denetliyor. Mevcut ve
+drenajdaki isteklerin birlikte iptali ve normal tamamlanması ayrı kontroller.
+Timeout ve iptal/drenaj doğrulamaları gevşetilmedi. Bu son düzeltmenin native
+tekrarı henüz yapılmadı; üçlü uygulama build'i/ekran kanıtı tamamlanmış değil.
 
 ### Onarım öncesi teşhis — tarihsel kayıt
 

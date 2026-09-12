@@ -111,14 +111,25 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
     static let shared = BackendTransport()
 
     private let lock = NSLock()
+    private let configurationTemplate: URLSessionConfiguration
     // All session access, task creation and invalidation share this lock.
     private lazy var session = makeSession()
     private var draining: [ObjectIdentifier: URLSession] = [:]
 
-    private override init() { super.init() }
+    init(configuration: URLSessionConfiguration = .ephemeral) {
+        // Keep the dependency snapshot private: caller mutations must not change
+        // connection policy or protocol ownership in a later reset generation.
+        configurationTemplate = configuration.copy() as! URLSessionConfiguration
+        super.init()
+    }
 
     private func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
+        let configuration = configurationTemplate.copy() as! URLSessionConfiguration
+        // Configuration copies share these objects. Preserve fresh private
+        // cookie/credential stores for each generation, including pairing reset.
+        let privateStorage = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = privateStorage.httpCookieStorage
+        configuration.urlCredentialStorage = privateStorage.urlCredentialStorage
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 20

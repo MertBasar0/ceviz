@@ -2,10 +2,10 @@
 
 Son güncelleme: **13 Eylül 2026**
 
-## Güvenilirlik onarımı — 13 Eylül, yerel çalışma sürüyor
+## Güvenilirlik onarımı — 13 Eylül, geliştirme dalında Apple doğrulaması sürüyor
 
 Kullanıcı tam onarıma başlanmasını onayladı. Aşağıdaki değişiklikler yalnız
-geliştirme çalışma kopyasında; **canlı kurulum veya yeni build değildir**.
+geliştirme dalında; **canlı kurulum veya yeni TestFlight build'i değildir**.
 Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştirilmedi.
 
 - HTTP alımının sahibi artık bağlantı/başlık/gövde sınırlarını ve sınırlı
@@ -75,8 +75,9 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   kurulumu korunmalı; evrensel “exactly once” veya fiziksel güç kesintisi kanıtı
   iddia edilmemeli.
 
-Yerel değişiklik hesabı (`git diff --numstat` + yeni, henüz izlenmeyen kaynaklar):
-üretim **+2087/-456, net +1631**, test **+2167/-6, net +2161**, CI **+25/-1**.
+Onarım başlangıcı `afc79c71a8aaa564edf39529aa98d6568cb26c71` karşısında
+değişiklik hesabı (`git diff --numstat`):
+üretim **+2091/-453, net +1638**, test **+2206/-6, net +2200**, CI **+25/-1**.
 Üretim artışı tek HTTP alım/eşzamanlılık sahibi, açık Watch teslim/liste durumları,
 iptal edilebilir oturum sahipliği ve ağdan bağımsız Windows görev sınırına ait.
 Ek artış metadata-only SQLite kabul/durum sahipleri ve Watch kuyruk/odak
@@ -125,7 +126,28 @@ Her kuşak hâlâ yeni ephemeral çerez/credential deposu alıyor; bir önceki
 kuşağın özel verisi taşınmıyor. Native test bunu da denetliyor. Mevcut ve
 drenajdaki isteklerin birlikte iptali ve normal tamamlanması ayrı kontroller.
 Timeout ve iptal/drenaj doğrulamaları gevşetilmedi. Bu son düzeltmenin native
-tekrarı henüz yapılmadı; üçlü uygulama build'i/ekran kanıtı tamamlanmış değil.
+tekrarı aşağıda; üçlü uygulama build'i/ekran kanıtı tamamlanmış değil.
+
+### Gerçek URLSession sıfırlama regresyonu ve kuyruk odağı
+
+`12930dd47db7f1c21194af52506986177abce045` için
+[Apple doğrulamasında](https://github.com/MertBasar0/ceviz/actions/runs/34726806021)
+Python **224 / 214 geçti / 10 atlandı (98,945 sn)**, Node **3/3**, Ruby ve
+önceki Swift paketleri geçti. Native oturum testi bu kez gerçek A ve B
+isteklerini başlattı; fakat A tamamlanmaya bırakıldıktan sonraki tam sıfırlamada
+iki isteğin birlikte iptali başarısız oldu. Bu test hatası düzelmiş sayılmıyor.
+Oturum sahibi, zaten kapanmakta olan oturumları ikinci kez geçersizleştirmek
+yerine `getAllTasks` ile kalan görevlerini doğrudan iptal edecek şekilde
+düzeltildi. Mevcut oturum bir kez `invalidateAndCancel` alıyor. Aynı başarısız
+A/B testi korunuyor; eski oturumda henüz başlatılmamış görevin de iptali eklendi.
+Bu düzeltmenin native sonucu bekleniyor; süreler veya kapılar gevşetilmedi.
+
+Bağımsız ek inceleme, çevrimdışıyken B kaydı kuyruktayken A'nın geç alındı
+yanıtının B ekranını değiştirebildiğini gösterdi. Odak artık ilk ağ denemesinde
+değil, kuyruk kaydı anında B'ye geçiyor. Yeni regresyon A yanıtını `begin(B)`
+öncesinde veriyor; B'nin ilk gönderim hakkını ve A'nın yeniden gönderilmemesini
+ayrıca koruyor. Bu son regresyon Windows'ta Swift olmadığı için henüz
+çalıştırılmadı. Canlı servis, eşleştirme, ana dal ve TestFlight değişmedi.
 
 ### Onarım öncesi teşhis — tarihsel kayıt
 

@@ -182,6 +182,18 @@ struct BackendTransportTests {
         try await eventually("The suspended old-session task must complete") { suspendedResult.succeeded }
         try await resetAndCheckCleanup()
 
+        let retiredSuspendedResult = Completion()
+        let retiredSuspended = transport.dataTask(with: request("/retired-suspended"),
+                                                   completionHandler: retiredSuspendedResult.receive)
+        transport.reset(cancelInFlight: false)
+        transport.reset()
+        try await eventually("A later full reset must cancel even a never-resumed task in a retired session") {
+            retiredSuspendedResult.cancelled
+        }
+        retiredSuspended.resume()
+        precondition(retiredSuspended.state == .completed && !HoldingProtocol.started("/retired-suspended"))
+        try await resetAndCheckCleanup()
+
         let beforeCreate = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return try await transport.data(for: request("/cancel-before-create"))

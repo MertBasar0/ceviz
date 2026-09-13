@@ -155,10 +155,15 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
         let previous = session
         draining[ObjectIdentifier(previous)] = previous
         session = makeSession()
-        // Graceful invalidation returns immediately: dropping A here would
-        // let A's tasks escape a later identity-changing reset of B.
-        if cancelInFlight { draining.values.forEach { $0.invalidateAndCancel() } }
-        else { previous.finishTasksAndInvalidate() }
+        if cancelInFlight {
+            // A retired session is already invalidating. Cancel its outstanding
+            // tasks directly; a second invalidation must not be relied on to
+            // upgrade an earlier graceful drain into cancellation.
+            for retired in draining.values where retired !== previous {
+                retired.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
+            }
+            previous.invalidateAndCancel()
+        } else { previous.finishTasksAndInvalidate() }
     }
 
     func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?) {

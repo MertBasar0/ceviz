@@ -90,6 +90,8 @@ struct WatchDeliveryTracking {
     var blocksResultUpdates: Bool { isPresentingAttempt || hasUnconfirmedFocus }
 
     mutating func registerNew(_ commandID: String, precedingCommandIDs: [String] = []) {
+        // Queueing already presents this capture, even before WC is reachable.
+        self.commandID = commandID
         deferred.formUnion(precedingCommandIDs.filter { $0 != commandID && !unsubmitted.contains($0) })
         unsubmitted.insert(commandID)
         allowsSubmission = true

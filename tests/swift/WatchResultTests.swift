@@ -7,6 +7,7 @@ struct WatchResultTests {
         testContinuationSelection()
         testDeliveryRecovery()
         testQueuePasses()
+        testQueuedFocusBeforeTransport()
         testJobsRecovery()
         testLateTerminalReceiptPresentation()
         var tracking = WatchResultTracking()
@@ -264,6 +265,32 @@ struct WatchResultTests {
         delivery.reset()
         precondition(!delivery.receiveReset(at: 10), "Clearing delivery state must retain the monotonic reset cutoff")
         precondition(delivery.receiveReset(at: 11))
+    }
+
+    private static func testQueuedFocusBeforeTransport() {
+        let date = Date(timeIntervalSince1970: 40_000)
+        let queue = ["A", "B"].map {
+            QueuedCommand(id: $0, audioData: "YXVkaW8=", timestamp: date, retryCount: 0, recoveryProtocol: 1)
+        }
+        var delivery = WatchDeliveryTracking()
+        delivery.registerNew("A")
+        let first = delivery.begin("A", now: date)
+        precondition(delivery.markDispatched("A", generation: first))
+        precondition(delivery.deferAttempt("A", generation: first))
+        precondition(delivery.isFocused("A"))
+
+        // queueCommand presents B immediately, but an unreachable iPhone means
+        // processQueue cannot begin B before A's delayed receipt arrives.
+        delivery.registerNew("B", precedingCommandIDs: queue.map(\.id))
+        precondition(!delivery.isBusy)
+        precondition(!delivery.accept("A"), "An old receipt cannot replace a newer queued capture before its first transport attempt")
+        precondition(delivery.isFocused("B") && delivery.blocksResultUpdates)
+        precondition(delivery.nextCommand(in: [queue[1]])?.id == "B")
+        precondition(delivery.nextOperation(for: "B") == .submit && delivery.nextOperation(for: "A") == .reconcile,
+                     "Changing presentation focus cannot grant a replay or consume B's first-send authority")
+        let second = delivery.begin("B", now: date)
+        precondition(delivery.markDispatched("B", generation: second))
+        precondition(delivery.accept("B") && !delivery.hasUnconfirmedFocus)
     }
 
     private static func testJobsRecovery() {

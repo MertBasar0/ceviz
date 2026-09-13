@@ -77,7 +77,10 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
 
 Onarım başlangıcı `afc79c71a8aaa564edf39529aa98d6568cb26c71` karşısında
 değişiklik hesabı (`git diff --numstat`):
-üretim **+2091/-453, net +1638**, test **+2206/-6, net +2200**, CI **+25/-1**.
+üretim **+2105/-453, net +1652**, test **+2241/-6, net +2235**, CI **+58/-19**.
+Test/CI hesabında 26 satırlık Swift komut listesinin ortak betiğe taşınması var;
+bu bir yeni test paketi değil. Son üretim artışı oluşturulmuş fakat henüz
+başlatılmamış ağ görevlerinin aynı sahipte iptal/temizleme takibine ait.
 Üretim artışı tek HTTP alım/eşzamanlılık sahibi, açık Watch teslim/liste durumları,
 iptal edilebilir oturum sahipliği ve ağdan bağımsız Windows görev sınırına ait.
 Ek artış metadata-only SQLite kabul/durum sahipleri ve Watch kuyruk/odak
@@ -148,6 +151,24 @@ değil, kuyruk kaydı anında B'ye geçiyor. Yeni regresyon A yanıtını `begin
 öncesinde veriyor; B'nin ilk gönderim hakkını ve A'nın yeniden gönderilmemesini
 ayrıca koruyor. Bu son regresyon Windows'ta Swift olmadığı için henüz
 çalıştırılmadı. Canlı servis, eşleştirme, ana dal ve TestFlight değişmedi.
+
+`c3edf91dfaf60078c370e74d63c72074f0d9512f` için
+[sonraki Apple koşusunda](https://github.com/MertBasar0/ceviz/actions/runs/34727343006)
+yeni kuyruk-odağı regresyonu ve önceki Swift paketleri geçti. Native ağ testi
+artık A/B iptalini, normal tamamlanmayı, kuşaklar arasında çerez/credential
+ayrımını ve eski oturumdaki askıda görevin normal çalışmasını geçti; yeni
+**hiç başlatılmamış görevin iptali** kontrolünde durdu. Bu, yerel görev
+enumerasyonu üzerinden sıfırlamanın bu durumu kapatmadığını kanıtlıyor;
+Darwin'in dahili görev listesinin içeriği ayrıca gözlemlenmedi.
+
+Son düzeltmede tüm görevler tek oluşturma sınırında, aynı kilit altında
+sahipleniliyor; tamamlanınca tüketici callback'inden önce kayıttan çıkıyor.
+Tam sıfırlama bu görevleri iptal ediyor, her oturum yalnız bir kez kapanmaya
+alınıyor. İkinci invalidation ve sonradan görev enumerasyonu kaldırıldı.
+Hiç başlatılmamış görev testi değiştirilmedi; görev kaydı temizliği de
+denetleniyor. Native tekrar henüz sonuçlanmadı. Hızlı Apple sözleşme kontrolü,
+tam build ile aynı Swift komut listesini kullanacak; tam build/ekran kapısı
+yerinde duruyor ve bu kontrol TestFlight yüklemiyor.
 
 ### Onarım öncesi teşhis — tarihsel kayıt
 

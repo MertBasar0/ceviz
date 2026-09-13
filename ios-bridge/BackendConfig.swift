@@ -115,6 +115,7 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
     // All session access, task creation and invalidation share this lock.
     private lazy var session = makeSession()
     private var draining: [ObjectIdentifier: URLSession] = [:]
+    private var tasks: [UUID: URLSessionDataTask] = [:]
 
     init(configuration: URLSessionConfiguration = .ephemeral) {
         // Keep the dependency snapshot private: caller mutations must not change
@@ -146,7 +147,7 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
     ) -> URLSessionDataTask {
         lock.lock()
         defer { lock.unlock() }
-        return session.dataTask(with: request, completionHandler: completionHandler)
+        return createTask(with: request, completion: completionHandler)
     }
 
     func reset(cancelInFlight: Bool = true) {
@@ -155,15 +156,11 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
         let previous = session
         draining[ObjectIdentifier(previous)] = previous
         session = makeSession()
-        if cancelInFlight {
-            // A retired session is already invalidating. Cancel its outstanding
-            // tasks directly; a second invalidation must not be relied on to
-            // upgrade an earlier graceful drain into cancellation.
-            for retired in draining.values where retired !== previous {
-                retired.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
-            }
-            previous.invalidateAndCancel()
-        } else { previous.finishTasksAndInvalidate() }
+        // Own tasks from creation, not a later native enumeration: even a
+        // never-resumed task belongs here. Invalidate each session exactly once;
+        // later full resets cancel its still-owned tasks, not the session again.
+        if cancelInFlight { tasks.values.forEach { $0.cancel() } }
+        previous.finishTasksAndInvalidate()
     }
 
     func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?) {
@@ -213,7 +210,24 @@ final class BackendTransport: NSObject, URLSessionDelegate, @unchecked Sendable 
         // Checking identity separately from creation leaves a window in which
         // reset invalidates the captured session before its task exists.
         if let selectedSession, selectedSession !== session { throw BackendCapabilityError.connectionChanged }
-        return session.dataTask(with: request, completionHandler: completion)
+        return createTask(with: request, completion: completion)
+    }
+
+    // Both creation entry points hold lock. Remove before invoking the caller,
+    // so callbacks may start/reset transport without leaking a completed task.
+    private func createTask(with request: URLRequest,
+                            completion: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
+        let id = UUID()
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            if let self {
+                self.lock.lock()
+                self.tasks.removeValue(forKey: id)
+                self.lock.unlock()
+            }
+            completion(data, response, error)
+        }
+        tasks[id] = task
+        return task
     }
 
     private final class TaskCancellation: @unchecked Sendable {

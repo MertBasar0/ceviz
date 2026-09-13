@@ -117,9 +117,17 @@ struct BackendTransportTests {
         return Array((draining as! [ObjectIdentifier: URLSession]).values)
     }
     static func drainingCount() -> Int { drainingSessions().count }
+    static func ownedTaskCount() -> Int {
+        let owner = transport
+        let lock = Mirror(reflecting: owner).children.first { $0.label == "lock" }!.value as! NSLock
+        lock.lock(); defer { lock.unlock() }
+        let tasks = Mirror(reflecting: owner).children.first { $0.label == "tasks" }!.value
+        return (tasks as! [UUID: URLSessionDataTask]).count
+    }
     static func resetAndCheckCleanup() async throws {
         transport.reset()
         try await eventually("Invalidation callbacks must release every retired session") { drainingCount() == 0 }
+        precondition(ownedTaskCount() == 0, "Completed/cancelled tasks must leave no owned task entries")
         try await eventually("No URLProtocol work may escape a test") { HoldingProtocol.isEmpty }
     }
     static func main() async throws {

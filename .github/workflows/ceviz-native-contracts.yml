@@ -1,0 +1,40 @@
+name: Ceviz Native Contracts
+
+on:
+  push:
+    branches:
+      - "codex/**"
+    paths:
+      - "ios-bridge/**"
+      - "apple-watch/**"
+      - "job-state/**"
+      - "watch-transport/**"
+      - "tests/swift/**"
+      - "tests/run_swift_contracts.sh"
+      - ".github/workflows/ceviz-native-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Validate Swift contracts on Apple
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Use the same pinned toolchain as the full native build gate.
+          PINNED=/Applications/Xcode_26.6.app
+          [ -d "$PINNED" ] || { echo "Required Xcode 26.6 is not installed"; exit 1; }
+          sudo xcode-select -s "$PINNED/Contents/Developer"
+          xcodebuild -version
+
+      - name: Run Swift job state regression tests
+        run: bash tests/run_swift_contracts.sh

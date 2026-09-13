@@ -2,7 +2,7 @@
 
 Son güncelleme: **13 Eylül 2026**
 
-## Güvenilirlik onarımı — 13 Eylül, geliştirme dalında Apple doğrulaması sürüyor
+## Güvenilirlik onarımı — 13 Eylül, kod doğrulandı; Watch URL kapısı açık
 
 Kullanıcı tam onarıma başlanmasını onayladı. Aşağıdaki değişiklikler yalnız
 geliştirme dalında; **canlı kurulum veya yeni TestFlight build'i değildir**.
@@ -22,7 +22,8 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   iş listesinin yükleniyor/hata/yenileme durumları hazırlandı. Telefon daha
   küçük, ölçülmüş üst sınırı olan özet liste gönderiyor; saat yeni işleri önce
   gösteriyor. Aynı bağlantıyı yenileme, bekleyen kayıtları temizleyen gerçek
-  eşleştirme değişiminden ayrıldı. **Apple derlemesi/cihaz kanıtı henüz yok.**
+  eşleştirme değişiminden ayrıldı. Swift kontrolleri geçti; tam Apple
+  uygulama/ekran ve gerçek cihaz kanıtı aşağıdaki kapılara bağlı.
 - Windows/WSL ömür yönetimi LAN relay'den ayrıldı: görev, aracı PowerShell
   süreci olmadan doğrudan seçilen dağıtımın WSL istemcisini izliyor. Windows
   Tailscale yolu kimliği doğrulanmış localhost hedefini kullanıyor; bozuk DNS
@@ -37,8 +38,8 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   bağlantı değişikliği mevcut ve önceki oturumları birlikte iptal ediyor.
   Görev yaratımı/sıfırlama yarışı aynı kilit altında; capability kontrolündeki
   eski oturum yeni bağlantıya komut taşıyamıyor. Kaynaklar bağımsız incelendi;
-  yeni native oturum/iptal/temizleme regresyonları CI'ya eklendi ancak
-  **Swift bulunmayan bu Windows ortamında derlenmedi veya çalıştırılmadı**.
+  yeni native oturum/iptal/temizleme regresyonları Apple CI'da geçti.
+  Swift bulunmayan Windows ortamında native test çalıştırılmadı.
 - **13 Eylül ek onayı alındı:** Watch sesli gönderimlerinin telefon/backend
   SQLite kimlik kaydı, yalnız geliştirme dalına commit/push ve Apple doğrulaması
   ile bulunmayan özel inceleme araçları yerine bağımsız kaynak incelemesi ve
@@ -60,10 +61,11 @@ Mevcut Gateway, kimlik bilgileri, işler ve TestFlight dağıtımı değiştiril
   sonra süreç ölümü içeriyor; gerçek kullanıcı komutu/Whisper/Gateway yok.
   Bağımsız telefon incelemesinde bulunan çift depo kaybı/yeniden bağlama açığı
   kayıt kimliği sabitlemesiyle kapatıldı ve native regresyona eklendi.
-- **Tamamlanma kapısı:** yeni Swift kayıt testleri ve Apple doğrulaması henüz
-  tamamlanmadı; çalışma kopyası dağıtıma hazır değil. Önceki
-  Watch simülatörü URL açılış hatası açık takip olarak korunuyor; test kapısı
-  gevşetilmedi. Yeni Swift kaynaklarının derlenmiş/çalışmış olduğu iddia edilmiyor.
+- **Tamamlanma kapısı:** Swift kayıt/taşıma testleri, üç uygulamanın derlemesi
+  ve iPhone UI **9/9** geçti; 25 iPhone görüntüsü incelendi. Tam Apple koşusu
+  Watch simülatörünün URL açılışında **115** ile başarısız bitti. Sonraki Watch
+  ekran testleri çalışmadı; test kapısı gevşetilmedi ve dağıtıma hazır sayılmıyor.
+  Gerçek telefon/saat ağ kesintisi ve kadran dokunuşu denemesi ayrıca gerekli.
 - **Ayrı açık takip:** HTTP'nin 10 saniyelik süresi yalnız istek alımını
   kapsar. Süresiz takılan yerel STT işlemini durdurma/izole etme henüz
   çözülmedi; mevcut testler bekleyen STT sırasında diğer yolların yanıtını ve
@@ -169,6 +171,58 @@ Hiç başlatılmamış görev testi değiştirilmedi; görev kaydı temizliği d
 denetleniyor. Native tekrar henüz sonuçlanmadı. Hızlı Apple sözleşme kontrolü,
 tam build ile aynı Swift komut listesini kullanacak; tam build/ekran kapısı
 yerinde duruyor ve bu kontrol TestFlight yüklemiyor.
+
+### Swift onarımı Apple ortamında doğrulandı
+
+`3fd8195bb750896de2d813590b2c67eb55112f31` için
+[hızlı Apple doğrulaması](https://github.com/MertBasar0/ceviz/actions/runs/34727749386)
+başarılı. Xcode **26.6 / 17F113** üzerinde ortak listedeki **12 derleme/test
+çifti** çalıştı: A/B ve hiç başlatılmamış görev iptali, graceful tamamlama,
+görev/oturum temizliği, iptal-tamamlama yarışları, kayıt kimliği/restart
+sınırları, kuyruk odağı ve iki modelde sınırlı Watch iş listesi geçti.
+Bu sonuç simülatör ekranı veya gerçek cihaz ağ kesintisi testi değildir.
+
+Aynı SHA için [tam Apple koşusu](https://github.com/MertBasar0/ceviz/actions/runs/34727830269)
+`validation_only=true`, `candidate_for_device_check=false` ile tamamlandı;
+Watch URL adımı nedeniyle genel sonucu başarısız.
+Önceki başarısız koşuların kalan iPhone işleri yeni kaynak doğrulamasına yer
+açmak için iptal edildi; iPhone başarısı sayılmıyor. Helper/runtime/test
+kaynaklarının tamamı üç platformda geçen `f58693b` ile birebir aynı kaldı.
+Ana dal, canlı WSL/servisler, eşleştirme ve TestFlight hâlâ değiştirilmedi.
+
+Tam koşuda **iPhone + Watch + komplikasyon Release simülatör derlemesi geçti**.
+Watch'ın 42 mm normal soğuk açılış görüntüsü elle incelendi: “Ready to listen”,
+“Up to 15 s”, “Offline” ve mikrofon düğmesi görünür, düğme ekran içinde.
+Bu yalnız yapılandırılmamış açılış/layout kanıtı; ses, ağ kurtarma veya gerçek
+komplikasyon dokunuşu kanıtı değil.
+
+Watch URL kapısı yine **115** ile durdu. Doğru kurulu şema/imza ve uygulama
+sahnesi doğrulandı; `lsd` 00:35:16 UTC'de `ceviz-watch` için kayıtlı handler
+bulamadığını bildirdi. Bu, geçmiş `34707041887` ile aynı native yönlendirme
+sınırı; uygulamanın URL handler'ına ulaşılmadı. Simülatör boot sırasında exit0
+ile “Data Migration Failed” da bildirdi; bu başarı sayılmadı, sonraki kurulum,
+açılış ve görüntü ayrı kontrol edildi. Hatanın Darwin kök nedeni veya gerçek
+WidgetKit dokunuşu sonucu kanıtlanmadı. **Watch capture/larger-text UI adımları
+bu kapıdan sonra çalışmadı; geçilmiş sayılmıyor.** Ham artefakt ve görsel
+inceleme notu özel yerel audit klasöründe korunuyor.
+
+iPhone UI işi aynı kod SHA'sında **9/9 geçti (520,334 sn)**: kuyrukta çift
+gönderimin önlenmesi, EN/TR liste/geçmiş, doğru oturuma gönderim, başarısız
+işin başarı görünmemesi, eski hedefin reset sonrası reddi, belirsiz teslimde
+yeniden göndermeme ve uygulama/helper yeniden açılışında bu korumanın sürmesi.
+Son iki upload/distribution işi **skipped**; TestFlight build'i üretilmedi.
+Görüntü arşivi seçmeli olarak alındı: 25 PNG, manifest, context ve build/test
+günlükleri. **25/25 PNG tek tek açılıp manifest ile eşleştirildi**; görünür
+uygulama alanında kesik kontrol, okunmaz metin, yanlış teslimat durumu veya
+boş kare bulunmadı. Liste/geçmiş, EN/TR metinler, belirsiz teslimin restart
+sonrasında korunması ve inceleme seçeneği doğrulandı. Normal QWERTY klavyeli
+iki tam ekranda yazma alanı ve Gönder düğmesi klavyenin üstünde görünür.
+Altı kasıtlı ölçüm kırpımı tam ekran kanıtı sayılmadı. Reset uyarısı karesinin
+altındaki iOS kaydırarak yazma tanıtımı normal klavye kanıtı sayılmadı;
+o karede uygulamanın reset uyarısı ve korunmuş taslağı görünür.
+Bu kayıt güncellemesi yalnız belgedir; doğrulanan üretim kodu SHA'sı yukarıdaki
+`3fd8195` olarak kaldı. Canlı kurulum ve gerçek cihaz denemesi için ayrı onay
+gerekli; dış beta açılmadı.
 
 ### Onarım öncesi teşhis — tarihsel kayıt
 

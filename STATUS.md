@@ -1,6 +1,77 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **13 Eylül 2026**
+Son güncelleme: **19 Eylül 2026**
+
+## 19 Eylül — kişisel aday ve kontrollü servis güncellemesi
+
+Kullanıcı yalnız kendi iç TestFlight adayı ile yerel Ceviz servisi/WSL
+süreklilik görevini onayladı. Dış Beta, ana dal ve OpenClaw Gateway/model/
+bağlantı ayarları bu bakımın dışında; aşağıdaki 13 Eylül bölümü tarihsel kayıttır.
+
+- Yerel helper, tam `4b9dd16f018751c6e0d3bc490353ece4a1ccf951` kaynağına
+  güncellendi. Eski kurtarılmış kurulumun ham dosya özetleri ve önceki güvenilir
+  Git kaynağı eşleşmesi özel bakım adaptörüyle denetlendi; genel güncelleyicinin
+  kilit, boş iş kuyruğu, veri koruması, atomik geçiş ve geri alma kapıları
+  değiştirilmedi. Adaptörün Linux testleri **17/17** geçti; Windows tekrarında
+  17 test başarılı, üç symlink alt kontrolü platform nedeniyle atlandı.
+- Güncelleyici eşleştirme/ayar/iş geçmişini ve konuşma keşfi/geçmiş erişimini
+  doğruladı. Geçiş tamamlandıktan sonra yeni Watch kayıt yeteneği doğrulandı;
+  mevcut **50** işin kimlik/durumları korundu, etkin veya belirsiz iş yoktu.
+  Mevcut Tailscale `/ceviz` yolu bu bilgisayarın `localhost:8080` hizmetine
+  ait olduğu doğrulandıktan sonra yetkili GET başarılı, yetkisiz GET **401**
+  bulundu. Gerçek komut veya ses yeniden gönderilmedi. Helper manifestinin
+  eski sürüm etiketi değişmedi; bu kurulumun kimliği yukarıdaki tam SHA'dır,
+  yeni herkese açık helper yayını değildir.
+- Apple aday koşusu **35461915830**, aynı tam SHA ile başladı. Yalnız bilinen
+  Watch simülatörü URL **115** sınırı cihaz denemesi adayı kapsamında açık
+  tutuldu; diğer kapılar kaldırılmadı. iPhone UI **9/9** geçti (386,926 sn),
+  25 görüntü incelendi. Watch 40mm normal/büyük yazı kısa testleri geçti;
+  manuel kayıt **10,236 sn / 25.224 bayt** tamamlandı. İkinci kayıt için
+  dokunuştan sonra kayıt ekranı açılmadı ve test başarısız oldu. Otomatik
+  15 saniye ve 49mm senaryoları doğrulanmadı; imzalama/yükleme çalışmadı.
+  **Yeni TestFlight build'i yok.** Aynı uygulama PID'si/mikrofon merkezine
+  dokunuş sentezlenmiş, ancak ikinci uygulama eylem kaydı yok. Native teslim
+  zinciri henüz kanıtlanmadı; ScrollView/recorder/simülatör kök nedeni
+  varsayılmadı. 33 Watch görüntüsü incelendi. İlk “Send kenarı kırpılıyor”
+  şüphesi tam çözünürlük/piksel kontrolünde çürütüldü; arayüz yaması yapılmadı.
+- Canlı Windows denemesi iki ayrı sorun ortaya çıkardı: WSL dağıtım adının
+  tırnaklanması mevcut WSL ayrıştırıcısında dağıtımı bulamıyor; düzeltme gerçek
+  süreçle ve Windows paketiyle (**10/10**) doğrulandı. Doğrudan etkileşimli
+  görev çalışınca kullanıcıya boş terminal açtı. Yalnız yeni Ceviz görevi
+  durdurulup devre dışı bırakıldı, kendi WSL istemcileri sonlandı. Başka WSL
+  oturumları veya Gateway durdurulmadı. Penceresiz S4U deneme görevi kaydı
+  `Access denied` verdi; görev oluşturulmadı, yetki/ilke değiştirilmedi.
+  Kullanıcı daha sonra dar kapsamlı yönetici kayıt denemesini onayladı.
+  Aynı kullanıcı/S4U/**Limited** ile 12 saniyelik doğal bitiş ve 37 saniyelik
+  görevi erken durdurma geçti: Windows session 0, Linux UID1000, iki tarafta
+  süreç temizliği ve mevcut Ceviz/Gateway PID+başlama kimliği koruması
+  doğrulandı. İki geçici görev kaldırıldı. Parola/ilke/ağ değiştirilmedi.
+  Kullanıcı kalıcı göreve uygulamayı ve kurucuda açık `-NonInteractive`
+  seçeneğini de onayladı. Yeni seçenek ile principal-mode koruması öncesinde
+  iki regresyon testinde beş alt senaryo kırmızıydı; son Windows paketi
+  bağımsız tekrarda **12/12** geçti (27,686 sn). `1813a63` tırnak düzeltmesini,
+  `908e2e5` açık S4U seçeneğini kaydeder; üretim delta sırasıyla +4/-2 ve +8/-3.
+  Yedekli, yalnız bu cihaza özel geçiş tamamlandı: kalıcı görev **Running /
+  S4U / Limited**, yeni Linux yaşam-süresi süreci UID1000; mevcut Ceviz ve
+  Gateway süreç kimlikleri/başlama zamanları aynı. Son Tailscale doğrulaması
+  başarılı. Soğuk WSL başlangıcı, reboot/logoff ve fiziksel ağ kesintisi hâlâ
+  ayrı doğrulama gerektiriyor.
+  Dakika tetiklerinden sonra aynı tek görev örneği ve Linux süreci korunuyor.
+  `LastTaskResult=0x800710E0` genel ret kodu, bu çalışan sürecin çıkış kodu
+  olarak yorumlanmıyor; kapalı Operational geçmişi açılmadı. Kaybolan görev
+  sonrasında otomatik yeniden başlama henüz bu gözlemle kanıtlanmış değil.
+- Fiziksel saat/telefon ağ kesintisi, yeniden bağlanma ve kadran dokunuşu
+  hâlâ cihaz kanıtı gerektiriyor. TestFlight için açık Watch ekran hatası
+  çözülmeden yeni aday yüklenmeyecek; başarısız kaydın dar native dokunma
+  aralığı ayrıca incelenecek.
+  Yalnız bu başarısız koşunun değişmez artefakt kimliğini doğrulayıp iki adet
+  sekiz saniyelik kayıt aralığını okuyan tanılama hazırlandı. Uygulama/test
+  yeniden çalıştırmaz, ham kayıt yayımlamaz, başarısız dağıtım kapısını
+  değiştirmez. Linux **22/22**, bağımsız Windows tekrarında **20 geçti +
+  2 symlink kontrolü atlandı**; native okuyucu henüz Mac'te çalıştırılmadı.
+- Son salt okunur Apple kontrolünde en yeni build hâlâ **1789005793**,
+  `VALID`, Mert + dış Beta gruplarında. Yeni upload yok; ana dal hâlâ
+  `afc79c71a8aaa564edf39529aa98d6568cb26c71`.
 
 ## Güvenilirlik onarımı — 13 Eylül, kod doğrulandı; Watch URL kapısı açık
 

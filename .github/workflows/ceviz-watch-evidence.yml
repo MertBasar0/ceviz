@@ -1,0 +1,65 @@
+name: Ceviz retained Watch touch evidence
+
+on:
+  push:
+    branches: [codex/phone-conversations]
+    paths:
+      - .github/workflows/ceviz-watch-evidence.yml
+      - tests/watch_touch_audit.py
+      - tests/test_watch_touch_audit.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  retained_evidence:
+    if: github.repository == 'MertBasar0/ceviz' && github.ref == 'refs/heads/codex/phone-conversations'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate diagnostic isolation and privacy
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s tests -p test_watch_touch_audit.py -v
+
+      - name: Verify the immutable failed run and artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tests/watch_touch_audit.py verify-provenance
+
+      - name: Download only the retained failed-run diagnostic artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '10590107782'
+          run-id: '35461915830'
+          repository: MertBasar0/ceviz
+          github-token: ${{ github.token }}
+          path: build/watch-touch-audit-input
+
+      - name: Select the original Xcode diagnostic reader
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_26.6.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - name: Project two retained native touch windows without rerunning the app
+        run: python3 tests/watch_touch_audit.py inspect
+
+      - name: Preserve only the privacy-filtered evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceviz-retained-watch-touch-evidence-35461915830
+          path: |
+            build/watch-touch-audit/provenance.json
+            build/watch-touch-audit/touch-evidence.json
+          retention-days: 7
+          if-no-files-found: error

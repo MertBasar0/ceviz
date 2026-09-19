@@ -58,6 +58,9 @@ begin
                        conflict.message.include?(":development") && conflict.message.include?(":adhoc"),
                        "Negative control did not reproduce the real Fastlane conflicting-options error")
   puts "Real Fastlane profile configuration: all 3 modes accepted; original conflicting-key regression rejected"
+  # The selected Xcode, not an assumed export-key spelling, owns this contract.
+  # This read-only preflight runs before native UI tests or signing credentials.
+  require_internal_only_export_support if ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"] == "true"
 ensure
   saved_environment.each { |name, value| ENV[name] = value }
 end

@@ -37,7 +37,7 @@ on:
         default: "app-store"
         type: string
       candidate_for_device_check:
-        description: "Internal device-check candidate only: preserve unresolved Watch URL evidence; do not distribute externally"
+        description: "Internal Only candidate: Watch URL and manual/second/15s capture await device testing; other checks stay required"
         required: false
         default: false
         type: boolean
@@ -58,7 +58,7 @@ concurrency:
 
 jobs:
   build:
-    name: Validate Watch and shared contracts
+    name: ${{ inputs.candidate_for_device_check && 'Check internal candidate (device tests pending)' || 'Validate Watch and shared contracts' }}
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[distribution-only]') }}
     # Sabit imaj etiketi (macos-26) bir gun runner atanmadan iptal edilmeye
     # basladi; macos-latest her zaman desteklenen bir imaji gosterir.
@@ -108,6 +108,8 @@ jobs:
         run: gem install fastlane --no-document
 
       - name: Validate real Fastlane profile option configuration
+        env:
+          CEVIZ_DEVICE_CHECK_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_for_device_check }}
         run: |
           ruby -c tests/fastlane_profile_options_test.rb
           ruby tests/fastlane_profile_options_test.rb
@@ -170,7 +172,14 @@ jobs:
           python3 tests/watch_capture_ui.py --project build/previous --baseline
 
       - name: Validate actual Watch capture UI and larger text
-        run: python3 tests/watch_capture_ui.py
+        env:
+          CEVIZ_DEVICE_CHECK_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_for_device_check }}
+        run: |
+          if [ "$CEVIZ_DEVICE_CHECK_CANDIDATE" = "true" ]; then
+            python3 tests/watch_capture_ui.py --candidate-for-device-check
+          else
+            python3 tests/watch_capture_ui.py
+          fi
 
       - name: Upload Watch capture UI proof
         if: always()
@@ -231,7 +240,7 @@ jobs:
           if-no-files-found: warn
 
   release:
-    name: Sign and upload validated TestFlight candidate
+    name: ${{ inputs.candidate_for_device_check && 'Upload Internal Only device-check candidate' || 'Sign and upload validated TestFlight candidate' }}
     needs: [build, phone_ui]
     # Separate runners keep native proof within its existing time budget.
     # Helper/main publication may run validation, but cannot upload a phone build.
@@ -297,6 +306,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           ASC_KEY_PATH: /Users/runner/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
           EXPORT_METHOD: ${{ inputs.export_method }}
+          CEVIZ_DEVICE_CHECK_CANDIDATE: ${{ inputs.candidate_for_device_check }}
         run: fastlane ios beta
 
       - name: Upload IPA artifact

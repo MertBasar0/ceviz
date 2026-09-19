@@ -1,3 +1,5 @@
+require "open3"
+
 default_platform(:ios)
 
 # Every embedded executable needs its own installed provisioning profile.
@@ -90,7 +92,16 @@ def configure_manual_signing(profiles, method)
   end
 end
 
-def build_ceviz(api_key, method)
+def require_internal_only_export_support
+  output, errors, status = Open3.capture3("xcodebuild", "-help")
+  help = output + errors
+  contract = help.match(/^\s*testFlightInternalTestingOnly\s*:\s*Bool\s*\n(?:[^\n]*\n){0,3}/)
+  UI.user_error!("Selected Xcode does not advertise the internal-only export contract") unless status.success? && contract
+  UI.message("Native internal-only export contract: #{contract[0].strip}")
+end
+
+def build_ceviz(api_key, method, internal_only: false)
+  require_internal_only_export_support if internal_only
   ensure_watch_push_capability
   ensure_widget_bundle_id
   profiles = provision(api_key, method)
@@ -111,7 +122,8 @@ def build_ceviz(api_key, method)
     export_options: {
       signingStyle: "manual",
       teamID: ENV["TEAM_ID"],
-      provisioningProfiles: profiles
+      provisioningProfiles: profiles,
+      **(internal_only ? { testFlightInternalTestingOnly: true } : {})
     }
   )
 end
@@ -125,12 +137,27 @@ platform :ios do
 
   desc "CevizWatch -> TestFlight (watch app icin temiz kurulum yolu)"
   lane :beta do
+    candidate = case ENV.fetch("CEVIZ_DEVICE_CHECK_CANDIDATE", "false")
+                when "true" then true
+                when "false" then false
+                else UI.user_error!("Device-check candidate must be explicitly true or false")
+                end
     key = asc_key
-    build_ceviz(key, "app-store")
+    build_ceviz(key, "app-store", internal_only: candidate)
+    if candidate
+      # Check the exact plist generated for this archive, not another file or
+      # merely our requested hash. A missing/changed export blocks the upload.
+      value, _, status = Open3.capture3("/usr/libexec/PlistBuddy", "-c", "Print :testFlightInternalTestingOnly",
+                                       Gym::PackageCommandGeneratorXcode7.config_path)
+      UI.user_error!("Generated export is not Internal Only; upload stopped") unless status.success? && value.strip == "true"
+      UI.success("Verified generated Internal Only export; physical Watch checks remain pending")
+    end
     upload_to_testflight(
       api_key: key,
       skip_waiting_for_build_processing: true,
       skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
       ipa: lane_context[SharedValues::IPA_OUTPUT_PATH]
     )
   end

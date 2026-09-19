@@ -1,6 +1,7 @@
 # Secretless boundary test: load the real lane with Apple and Xcode actions replaced.
 # Run with: ruby tests/fastlane_signing_test.rb
 $signing_events = []
+$ceviz_lanes = {}
 
 module UI
   def self.message(_message); end
@@ -12,6 +13,15 @@ end
 
 module SharedValues
   SIGH_NAME = :sigh_name
+  IPA_OUTPUT_PATH = :ipa_output_path
+end
+
+module Gym
+  class PackageCommandGeneratorXcode7
+    def self.config_path
+      "/tmp/ceviz-generated-export.plist"
+    end
+  end
 end
 
 module Spaceship
@@ -43,7 +53,9 @@ end
 
 def default_platform(_name); end
 def desc(_text); end
-def lane(_name); end
+def lane(name, &block)
+  $ceviz_lanes[name] = block
+end
 def platform(_name)
   yield
 end
@@ -60,6 +72,14 @@ def update_code_signing_settings(**options)
 end
 def build_app(**options)
   $signing_events << [:build, options]
+  lane_context[SharedValues::IPA_OUTPUT_PATH] = "fixture.ipa"
+end
+def app_store_connect_api_key(**options)
+  $signing_events << [:asc_key, options]
+  :test_api_key
+end
+def upload_to_testflight(**options)
+  $signing_events << [:upload, options]
 end
 def check(condition, message)
   raise message unless condition
@@ -67,6 +87,8 @@ end
 
 load File.expand_path("../fastlane/Fastfile", __dir__)
 saved_team = ENV["TEAM_ID"]
+saved_candidate = ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"]
+saved_capture = Open3.method(:capture3)
 ENV["TEAM_ID"] = "TESTTEAM"
 
 begin
@@ -120,6 +142,74 @@ begin
   end
   check($signing_events.length == previous_profiles, "Unknown modes must not request profiles")
 
+  native_help = "Available keys for -exportOptionsPlist:\n\ttestFlightInternalTestingOnly : Bool\n\tRestrict distribution to internal TestFlight testing.\n"
+  help_success = true
+  export_value = "true\n"
+  export_success = true
+  command_status = Struct.new(:success?)
+  Open3.define_singleton_method(:capture3) do |*command|
+    $signing_events << [:native, command]
+    case command
+    when ["xcodebuild", "-help"]
+      [native_help, "", command_status.new(help_success)]
+    when ["/usr/libexec/PlistBuddy", "-c", "Print :testFlightInternalTestingOnly", Gym::PackageCommandGeneratorXcode7.config_path]
+      [export_value, "", command_status.new(export_success)]
+    else
+      raise "Unexpected native command: #{command.inspect}"
+    end
+  end
+
+  [nil, "false", "true"].each do |candidate|
+    $signing_events.clear
+    ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"] = candidate
+    $ceviz_lanes.fetch(:beta).call
+    archive = $signing_events.find { |kind, _| kind == :build }.last
+    options = archive.fetch(:export_options)
+    if candidate == "true"
+      check(options[:testFlightInternalTestingOnly] == true, "Candidate archive must be Internal Only")
+      kinds = $signing_events.map(&:first)
+      check(kinds.index(:native) < kinds.index(:profile), "Native support must be verified before signing requests")
+      check(kinds.last(3) == [:build, :native, :upload], "Generated export must be verified after archive and before upload")
+    else
+      check(!options.key?(:testFlightInternalTestingOnly), "Normal export must not acquire a candidate restriction")
+      check($signing_events.none? { |kind, _| kind == :native }, "Normal export must not depend on candidate probes")
+    end
+    upload = $signing_events.last
+    check(upload == [:upload, { api_key: :test_api_key, skip_waiting_for_build_processing: true,
+                               skip_submission: true, distribute_external: false,
+                               notify_external_testers: false, ipa: "fixture.ipa" }],
+          "Beta lane must upload only the produced IPA without group assignment or external distribution")
+  end
+
+  ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"] = "true"
+  [[:help_missing, "", true, "true\n", true, false],
+   [:help_failed, native_help, false, "true\n", true, false],
+   [:export_false, native_help, true, "false\n", true, true],
+   [:export_missing, native_help, true, "", false, true]].each do |name, help, help_ok, value, export_ok, archived|
+    $signing_events.clear
+    native_help, help_success, export_value, export_success = help, help_ok, value, export_ok
+    begin
+      $ceviz_lanes.fetch(:beta).call
+      raise "Candidate upload must stop for #{name}"
+    rescue RuntimeError => error
+      expected = archived ? "Generated export is not Internal Only; upload stopped" : "Selected Xcode does not advertise the internal-only export contract"
+      raise unless error.message == expected
+    end
+    check($signing_events.none? { |kind, _| kind == :upload }, "Failed #{name} must not upload")
+    check($signing_events.any? { |kind, _| kind == :build } == archived, "Failed #{name} stopped at wrong boundary")
+    check(archived || $signing_events.none? { |kind, _| kind == :profile }, "Failed native contract must not request signing profiles")
+  end
+
+  $signing_events.clear
+  ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"] = "maybe"
+  begin
+    $ceviz_lanes.fetch(:beta).call
+    raise "Unknown candidate mode must stop"
+  rescue RuntimeError => error
+    raise unless error.message == "Device-check candidate must be explicitly true or false"
+  end
+  check($signing_events.empty?, "Invalid candidate mode must stop before Apple or build actions")
+
   Spaceship::ConnectAPI::BundleId.records.delete(WIDGET_BUNDLE_ID)
   Spaceship::ConnectAPI::BundleId.fail_create = true
   previous_archives = $signing_events.count { |kind, _| kind == :build }
@@ -135,4 +225,6 @@ begin
   puts "Fastlane signing boundary tests passed"
 ensure
   ENV["TEAM_ID"] = saved_team
+  ENV["CEVIZ_DEVICE_CHECK_CANDIDATE"] = saved_candidate
+  Open3.define_singleton_method(:capture3, saved_capture)
 end

@@ -200,7 +200,9 @@ def require_capture_durations(metrics):
             raise RuntimeError(f"Actual capture file metadata does not match the 9s/15s scenarios: {metric}")
 
 
-def main(project, baseline=False):
+def main(project, baseline=False, *, candidate_for_device_check=False):
+    if baseline and candidate_for_device_check:
+        raise ValueError("Baseline reproduction cannot defer device-check scenarios")
     root = Path.cwd()
     context = json.loads((root / "build/watch-launch-smoke/context.json").read_text())
     output = root / "build/watch-capture-ui" / ("before" if baseline else "after")
@@ -214,6 +216,25 @@ def main(project, baseline=False):
     active_pair = WatchSimulatorPair()
     try:
         for screen, size, mode in capture_runs(baseline):
+            if candidate_for_device_check and (screen, size, mode) == (40, "device-default", "finish"):
+                # Explicit internal-device handoff, not a successful native test.
+                # Keep the original failure and normal strict matrix unchanged.
+                evidence.append({
+                    "screen_mm": screen, "content_size": size, "mode": mode,
+                    "executed": False, "status": "pending_device_validation",
+                    "candidate_for_device_check": True,
+                    "external_distribution": "blocked_pending_device_validation",
+                    "prior_failure": {"run_id": 35461915830,
+                                      "source_sha": "4b9dd16f018751c6e0d3bc490353ece4a1ccf951",
+                                      "test": FINISH_TEST,
+                                      "stage": "second_start_recording_not_observed"},
+                    "required_device_checks": ["manual_send_with_six_seconds_remaining",
+                                               "second_start_without_app_relaunch",
+                                               "automatic_15_second_finish_and_retained_result"],
+                })
+                print("::warning::40mm manual/automatic finish scenario was NOT RUN for this internal device-check candidate. "
+                      "The prior second-start failure is unresolved; device validation is required and external distribution remains blocked.", flush=True)
+                continue
             # Re-read pair ownership: a previous run may have safely created a pair.
             inventory = json.loads(simctl("list", "devices", "available", "--json", capture=True))["devices"]
             pairs = list(json.loads(simctl("list", "pairs", "--json", capture=True))["pairs"].values())
@@ -308,5 +329,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--baseline", action="store_true")
+    parser.add_argument("--candidate-for-device-check", action="store_true",
+                        help="Defer only the known 40mm finish scenario to explicit internal-device validation; not a passing test")
     args = parser.parse_args()
-    main(args.project.resolve(), args.baseline)
+    main(args.project.resolve(), args.baseline, candidate_for_device_check=args.candidate_for_device_check)

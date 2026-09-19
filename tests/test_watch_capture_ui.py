@@ -65,6 +65,94 @@ class WatchContainerIsolationTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
 
 
+class InternalCandidateTests(unittest.TestCase):
+    def run_candidate(self, failure=None, runs=None):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            context = root / "build/watch-launch-smoke/context.json"
+            context.parent.mkdir(parents=True)
+            context.write_text(json.dumps({"sdk_versions": {}}))
+            output = root / "build/watch-capture-ui/after"
+            (output / "derived/Build/Products/Release-watchsimulator/CevizWatchApp.app").mkdir(parents=True)
+            commands = []
+            selected = []
+
+            def choose(inventory, pairs, versions, screen):
+                selected.append(screen)
+                return {"watch": {"udid": f"watch{screen}", "name": f"Apple Watch ({screen}mm)"},
+                        "phone": {"udid": f"phone{screen}"}, "watch_runtime": "watchOS", "needs_pair": False}
+
+            def run(command, **kwargs):
+                commands.append(command)
+                if failure == "build" and command[:2] == ["xcodebuild", "build-for-testing"]:
+                    raise subprocess.CalledProcessError(65, command)
+                if failure == "timeout" and command[:2] == ["xcodebuild", "test-without-building"]:
+                    raise subprocess.TimeoutExpired(command, 720)
+                code = 65 if failure == "short" and command[:2] == ["xcodebuild", "test-without-building"] else 0
+                return subprocess.CompletedProcess(command, code)
+
+            with patch.object(capture.Path, "cwd", return_value=root), \
+                    patch.object(capture, "capture_runs", wraps=capture.capture_runs) as plan, \
+                    patch.object(capture, "select_watch", side_effect=choose), \
+                    patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
+                    patch.object(capture, "WatchSimulatorPair") as owner, patch.object(capture, "reinstall_watch") as reinstall, \
+                    patch.object(capture, "capture_log_stream", return_value=nullcontext()) as collector, \
+                    patch.object(capture.subprocess, "run", side_effect=run), \
+                    patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}), \
+                    patch("builtins.print"):
+                if runs is not None:
+                    plan.return_value = runs
+                if failure == "cleanup":
+                    owner.return_value.close.side_effect = RuntimeError("Owned simulator cleanup failed")
+                exception = {"build": subprocess.CalledProcessError, "timeout": subprocess.TimeoutExpired,
+                             "short": RuntimeError, "cleanup": RuntimeError, "metadata": RuntimeError}.get(failure)
+                with self.assertRaises(exception) if exception else nullcontext():
+                    capture.main(root, candidate_for_device_check=True)
+                owner.return_value.close.assert_called_once()
+                return json.loads((output / "context.json").read_text()), commands, selected, reinstall.call_count, collector.call_count
+
+    def test_only_known_finish_is_deferred_and_all_four_short_cases_execute(self):
+        evidence, commands, selected, reinstalls, collectors = self.run_candidate()
+        self.assertEqual(selected, [40, 40, 49, 49])
+        self.assertEqual((reinstalls, collectors), (4, 0))
+        self.assertEqual([row["status"] for row in evidence],
+                         ["passed", "passed", "pending_device_validation", "passed", "passed"])
+        deferred = evidence[2]
+        self.assertIs(deferred["executed"], False)
+        self.assertEqual(deferred["prior_failure"]["run_id"], 35461915830)
+        self.assertEqual(deferred["prior_failure"]["source_sha"], "4b9dd16f018751c6e0d3bc490353ece4a1ccf951")
+        self.assertEqual(deferred["external_distribution"], "blocked_pending_device_validation")
+        self.assertNotIn("capture_file_metrics", deferred)
+        native_tests = [command for command in commands if command[:2] == ["xcodebuild", "test-without-building"]]
+        self.assertEqual([[item for item in command if item.startswith("-only-testing:")] for command in native_tests],
+                         [capture.test_selection("short"), capture.test_selection("short", "larger-settings")] * 2)
+        self.assertNotIn(f"-only-testing:{capture.FINISH_TEST}", [item for command in commands for item in command])
+
+    def test_baseline_candidate_conflict_stops_before_files_or_native_actions(self):
+        with patch.object(capture.Path, "cwd") as cwd, patch.object(capture.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "Baseline reproduction"):
+                capture.main(Path("unused"), baseline=True, candidate_for_device_check=True)
+        cwd.assert_not_called()
+        run.assert_not_called()
+
+    def test_candidate_does_not_swallow_short_build_timeout_or_cleanup_failures(self):
+        for failure in ("short", "build", "timeout", "cleanup"):
+            with self.subTest(failure=failure):
+                evidence, _, _, _, _ = self.run_candidate(failure)
+                self.assertEqual(evidence[-1]["status"], "failed")
+                if failure == "cleanup":
+                    self.assertIn("cleanup_errors", evidence[-1])
+
+    def test_other_finish_cases_are_not_deferred_or_exempt_from_metadata(self):
+        for scenario in ((49, "device-default", "finish"), (40, "larger-settings", "finish")):
+            with self.subTest(scenario=scenario):
+                evidence, commands, _, _, collectors = self.run_candidate("metadata", [scenario])
+                self.assertEqual(collectors, 1)
+                self.assertEqual(evidence[0]["status"], "failed")
+                self.assertIn("Actual file metadata missing", evidence[0]["failure"])
+                self.assertIn(f"-only-testing:{capture.FINISH_TEST}", [item for command in commands for item in command])
+
+
 class ActualCaptureMetadataTests(unittest.TestCase):
     def test_numeric_file_metadata_preserves_real_sizes_without_codec_size_guesses(self):
         log = "\n".join(f"Capture finalized: duration_seconds={duration} bytes={size} codec=1633772320 sample_rate=16000 channels=1"

@@ -2,6 +2,39 @@
 
 Son güncelleme: **19 Eylül 2026**
 
+## 19 Eylül gece — yalnız iç cihaz denemesi onayı
+
+Kullanıcı, bilinen ikinci kayıt ve otomatik 15 saniyelik kayıt kontrollerini
+kendi saatinde denemeye devrederek **yalnız kişisel iç TestFlight adayı**
+hazırlanmasını açıkça onayladı. Aşağıdaki önceki kapı kararının bu dar kapsamı
+değişti; dış Beta ve ana dal değişmeyecek. Henüz yeni build yüklenmedi.
+
+- Yalnız 40mm/normal yazı manuel→ikinci→otomatik kayıt senaryosu
+  `executed=false / pending_device_validation` kaydıyla devrediliyor.
+  Önceki başarısız koşu `35461915830` ve kaynak `4b9dd16` korunuyor;
+  başarıya çevrilmiyor. 40mm/49mm normal ve büyük yazı kısa testleri,
+  iPhone testleri, derleme ve diğer hata/temizlik kontrolleri zorunlu.
+  Normal tam test matrisi değişmedi. Önceden bilinen Watch URL 115 sınırı
+  da fiziksel kadran kontrolü bekliyor.
+- Mevcut aday seçeneği Apple'ın `testFlightInternalTestingOnly=true`
+  dışa aktarımına bağlandı. Seçilen Xcode'un bu sözleşmeyi sunması ve
+  gerçek arşiv için üretilen plist'te değerin doğru olması yükleme öncesi
+  zorunlu. Yükleme sonrası Apple `buildAudienceType=INTERNAL_ONLY`,
+  işleme durumu ve yalnız Mert grubunun erişimi ayrıca doğrulanacak.
+- Yerel Watch/Python paketi: **90 geçti + 2 Windows symlink kontrolü
+  atlandı** (92 test, 10,748 sn). Gerçek beta lane'ini çalıştıran anahtarsız
+  Ruby sınır testi geçti: normal/aday yolları; eksik veya başarısız native
+  sözleşme; yanlış/eksik üretilmiş export değeri; geçersiz aday seçeneği.
+  Ruby yalnız özel artefakt klasörüne açıldı; sistem kurulumu değiştirilmedi.
+  Xcode ve gerçek Fastlane seçeneği Apple ortamında henüz doğrulanacak.
+- Kullanıcı aynı bilgisayarı yeniden başlattığını bildirdi. Salt okunur
+  kontrolde Windows son açılışı **19 Eylül 13:18 +03**, kalıcı görev
+  örneği/süreçleri ve Ceviz/Gateway Linux süreç kimlikleri önceki kontrolle
+  aynıydı. Bu nedenle yeni soğuk başlangıç **kanıtlandı sayılmadı**.
+  Görev Running/S4U/Limited; helper sağlıklı, 50 eski iş korunmuş ve yeni
+  etkin/belirsiz iş yok. Yetkili Tailscale GET 200, yetkisiz GET 401.
+  Bu kontrolde servis/WSL başlatma veya yeniden başlatma yapılmadı.
+
 ## 19 Eylül — kişisel aday ve kontrollü servis güncellemesi
 
 Kullanıcı yalnız kendi iç TestFlight adayı ile yerel Ceviz servisi/WSL

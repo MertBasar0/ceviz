@@ -84,10 +84,22 @@ bağlantı ayarları bu bakımın dışında; aşağıdaki 13 Eylül bölümü t
   mesajlarını sınıflandırır; dokunma evresi veya düğme eylemi çıkarımı yapmaz.
   Yerel Linux **25/25**, iki bağımsız Windows tekrarında **23 geçti + 2
   symlink kontrolü atlandı**; uygulama/üretim kodu değişmedi.
+  `28b8040` ile **35465725070** native incelemesi de geçti. İkinci dokunuşta
+  `shouldSend=1`, `ignoreInteractionEvents=0`, `systemGestureStateChange=0`,
+  tek pencereye yönlendirme kaydı var. İlkinde 11/9, ikincide 6/4 UIKit
+  satırı/sınıflandırılan satır; ikisinde de saklanmış `AudioCapture` satır
+  sayısı sıfır. Düğmenin neden tetiklenmediği bu kayıttan kanıtlanamıyor.
+  Yeni ürün yaması, otomatik yeniden deneme veya TestFlight yüklemesi yok.
+  Açık takip: özgün manuel→ikinci kayıt sırasını gerçek dokunma teslimiyle
+  ayıran native/cihaz kanıtı; süre/başarı kapıları gevşetilmeyecek.
 - Aynı `91d480c` üzerindeki helper koşusu **35464986402** başarılı:
   Windows yaşam-süresi paketi **12/12**; Linux ve macOS genel Python
   paketlerinde ayrı ayrı **236 geçti + 12 platform kontrolü atlandı**
   (68,382 sn / 99,148 sn). Bildirim ve sözdizimi adımları da geçti.
+  Son `28b8040` koşusu **35465725087** de tamamen geçti: Windows **12/12**
+  (20,903 sn); Linux/macOS ayrı ayrı **239 geçti + 12 platform kontrolü
+  atlandı** (61,892 sn / 99,895 sn). Kalıcı penceresiz görev/kurucu tamam;
+  Watch adayının yukarıdaki ayrı kapısı açık kaldı.
 - Son salt okunur Apple kontrolünde en yeni build hâlâ **1789005793**,
   `VALID`, Mert + dış Beta gruplarında. Yeni upload yok; ana dal hâlâ
   `afc79c71a8aaa564edf39529aa98d6568cb26c71`.

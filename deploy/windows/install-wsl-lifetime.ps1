@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][ValidatePattern('^[^"\\\x00-\x1f]+$')][string]$Distro)
+param([Parameter(Mandatory=$true)][ValidatePattern('^[^\s"\\\x00-\x1f]+$')][string]$Distro)
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Distro) -or $Distro -ne $Distro.Trim()) { throw 'Invalid WSL distribution name' }
 # Listing is passive: do not enter a stopped distro merely to inspect it.
@@ -25,7 +25,9 @@ foreach ($path in @($directory, $versions)) {
 }
 # The scheduler owns the foreground WSL client directly, not a wrapper which
 # could be killed while leaving its child untracked. No custom runtime is copied.
-$arguments = '--distribution "' + $Distro + '" --exec /bin/sleep infinity'
+# WSL's distro parser preserves literal quotes; names cannot contain spaces.
+# Pass the validated token unchanged: microsoft/WSL#9792.
+$arguments = '--distribution ' + $Distro + ' --exec /bin/sleep infinity'
 $tasks = @(Get-ScheduledTask -TaskPath '\' -ErrorAction Stop | Where-Object TaskName -eq $taskName)
 if ($tasks.Count -gt 1) { throw 'Ambiguous Ceviz lifetime task identity' }
 $existing = if ($tasks.Count) { $tasks[0] } else { $null }

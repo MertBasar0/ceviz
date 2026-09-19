@@ -46,7 +46,7 @@ Get-ChildItem -LiteralPath DIRECTORY -Filter '*.ps1' | ForEach-Object {
         self.assertEqual(self.run_powershell(source)["errors"], [])
 
     def test_relay_requires_explicit_unambiguous_distro_before_any_host_action(self):
-        for distro in (None, "", " ", " Fixture Distro", "Fixture Distro "):
+        for distro in (None, "", " ", " FixtureDistro", "FixtureDistro "):
             with self.subTest(distro=distro):
                 source = r'''
 $ErrorActionPreference='Stop'
@@ -77,9 +77,9 @@ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 function global:wsl.exe {
     if (($args -join ' ') -cne '--list --quiet') { throw 'Non-passive WSL command denied' }
     $global:calls.Add('wsl-list'); $global:LASTEXITCODE=0
-    if ($global:mode -eq 'unknown-distro') { 'Other Distro' }
+    if ($global:mode -eq 'unknown-distro') { 'OtherDistro' }
     elseif ($global:mode -eq 'list-failure') { $global:LASTEXITCODE=1 }
-    else { 'Fixture Distro' }
+    else { 'FixtureDistro' }
 }
 function global:Start-Process { throw 'Live process launch denied' }
 function global:Stop-Process { throw 'Live process stop denied' }
@@ -124,7 +124,7 @@ function global:Register-ScheduledTask {
     if ($TaskName -ne 'Ceviz WSL Lifetime' -or $TaskPath -ne '\' -or
         [bool]$Force -ne [bool]$global:existing -or
         $Action.Execute -ne (Join-Path $env:SystemRoot 'System32\wsl.exe') -or
-        $Action.Arguments -cne '--distribution "Fixture Distro" --exec /bin/sleep infinity') { throw 'Wrong registration owner or foreground process' }
+        $Action.Arguments -cne '--distribution FixtureDistro --exec /bin/sleep infinity') { throw 'Wrong registration owner or foreground process' }
     $global:calls.Add('register')
     if ($global:mode -eq 'registration-failure') { throw 'fixture-registration-failure' }
     $global:registered=[pscustomobject]@{Actions=@($Action);Triggers=@($Trigger);Principal=$Principal;Settings=$Settings;State='Ready'}
@@ -144,12 +144,12 @@ function global:Start-ScheduledTask {
 function global:Start-Sleep {}
 EXISTING
 $failed=$false; $messages=@(); $failure=''
-try { $messages=@(& SCRIPT -Distro 'Fixture Distro') }
+try { $messages=@(& SCRIPT -Distro 'FixtureDistro') }
 catch { $failed=$true; $failure=$_.Exception.Message }
 'CEVIZ_TEST_RESULT=' + (@{failed=$failed;failure=$failure;calls=@($global:calls);messages=@($messages)} | ConvertTo-Json -Compress)
 '''
         existing_source = r'''
-$oldArguments='--distribution "Fixture Distro" --exec /bin/sleep infinity'
+$oldArguments='--distribution FixtureDistro --exec /bin/sleep infinity'
 $global:existing=[pscustomobject]@{
     TaskName='Ceviz WSL Lifetime'
     Description='Ceviz WSL lifetime; independent of LAN, Tailscale and firewall'
@@ -158,7 +158,8 @@ $global:existing=[pscustomobject]@{
     State='Ready';Settings=[pscustomobject]@{Enabled=$true}
 }
 if ($global:mode -eq 'different-owner') { $global:existing.Principal.UserId='S-1-0-0' }
-if ($global:mode -eq 'different-distro') { $global:existing.Actions[0].Arguments=$oldArguments.Replace('Fixture Distro','Other Distro') }
+if ($global:mode -eq 'different-distro') { $global:existing.Actions[0].Arguments=$oldArguments.Replace('FixtureDistro','OtherDistro') }
+if ($global:mode -eq 'quoted-distro') { $global:existing.Actions[0].Arguments='--distribution "FixtureDistro" --exec /bin/sleep infinity' }
 if ($global:mode -eq 'running') { $global:existing.State='Running' }
 if ($global:mode -eq 'disabled') { $global:existing.Settings.Enabled=$false }
 if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execute='powershell.exe' }
@@ -187,7 +188,7 @@ if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execu
                     self.assertNotIn("register", result["calls"])
 
     def test_unknown_or_maintenance_task_is_not_overwritten(self):
-        for mode in ("different-owner", "different-distro", "running", "disabled", "different-executable"):
+        for mode in ("different-owner", "different-distro", "quoted-distro", "running", "disabled", "different-executable"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
                 root = Path(temporary)
                 result = self.run_powershell(self.registration_fixture(root, mode, existing=True))
@@ -202,9 +203,10 @@ if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execu
             self.assertEqual(result["calls"], ["wsl-list", "register", "start-task"])
 
     def test_invalid_distro_rejected_before_any_wsl_or_task_call(self):
-        for distro in ('Fixture" Distro', 'Fixture\\Distro', 'Fixture\nDistro'):
+        for distro in ('Fixture"Distro', 'Fixture\\Distro', 'Fixture\nDistro',
+                       'Fixture Distro', 'Fixture\tDistro', 'Fixture\u00a0Distro'):
             with self.subTest(distro=distro), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
-                source = self.registration_fixture(Path(temporary)).replace("-Distro 'Fixture Distro')", "-Distro " + literal(distro) + ")")
+                source = self.registration_fixture(Path(temporary)).replace("-Distro 'FixtureDistro')", "-Distro " + literal(distro) + ")")
                 result = self.run_powershell(source)
                 self.assertTrue(result["failed"], result)
                 self.assertEqual(result["calls"], [])
@@ -253,7 +255,7 @@ function global:Remove-NetFirewallRule {}
 function global:New-NetFirewallRule {}
 $caught = $false
 $failure = ''
-try { & SCRIPT -Distro 'Fixture Distro' -ListenPort 0 }
+try { & SCRIPT -Distro 'FixtureDistro' -ListenPort 0 }
 catch { $failure = $_.Exception.Message; $caught = $failure -eq 'fixture-network-lost' }
 'CEVIZ_TEST_RESULT=' + (@{ caught = $caught; failure = $failure; events = @($global:events) } | ConvertTo-Json -Compress)
 '''.replace("SCRIPT", literal(ROOT / "deploy/windows/ceviz-backend-relay.ps1"))

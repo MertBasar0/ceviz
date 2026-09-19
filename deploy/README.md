@@ -214,13 +214,20 @@ An enabled systemd service does **not** keep WSL alive. The repaired setup uses
 an independent **Ceviz WSL Lifetime** Windows scheduled task. It holds one
 foreground WSL client for the selected distribution, starts at Windows logon,
 and checks once per minute whether another instance can start. Its action runs
-`System32\wsl.exe --distribution "YOUR_DISTRO" --exec /bin/sleep infinity`
+`System32\wsl.exe --distribution YOUR_DISTRO --exec /bin/sleep infinity`
 directly, so the tracked process is the foreground client, not a PowerShell
 wrapper with a separately owned child. `IgnoreNew`
 prevents overlapping task instances; there is no task execution time limit or
 network/idle/battery prerequisite. The Windows user must be logged in and the
 computer awake. Windows sleep, logoff or a disconnected VPN still interrupts
 access; task state alone is not backend health or command-delivery proof.
+
+The task's raw argument string must not wrap the distribution name in quotes:
+WSL treats those quotes as part of the name and reports
+`WSL_E_DISTRO_NOT_FOUND`. Distribution names cannot contain whitespace; the
+installer rejects such input before addressing WSL or Task Scheduler. This
+differs from quoting a PowerShell string such as `-Distro 'YOUR_DISTRO'` below.
+See the [WSL maintainer's argument-parsing explanation](https://github.com/microsoft/WSL/issues/9792).
 
 First inspect from **Windows PowerShell**, before opening a Linux terminal:
 

@@ -2,6 +2,47 @@
 
 Son güncelleme: **20 Eylül 2026**
 
+## 20 Eylül — kişisel iç TestFlight adayı hazır
+
+**2026.6.5 (1789855234)** Apple işlemesini tamamladı ve yalnız tek kişilik
+**Mert** iç grubunda erişilebilir. Apple kaydı `VALID`, `IN_BETA_TESTING`,
+`buildAudienceType=INTERNAL_ONLY`, dış durum `NOT_APPLICABLE`; doğrudan
+eklenmiş tester yok. Dış **Beta** grubuna atanmadı. Bu build dış dağıtıma
+çevrilemez; cihaz doğrulamasından sonra dış Beta için ayrı build gerekir.
+
+- Donmuş kaynak: `d8d5372a91588fe58c85d5328373ea140bdaa8b6`, yalnız
+  `codex/phone-conversations`. [Apple koşusu 35469482962](https://github.com/MertBasar0/ceviz/actions/runs/35469482962)
+  başarılı; mevcut build'i dışarı dağıtan iş atlandı. Xcode 26.6/17F113
+  native sözleşmesi ve gerçekten üretilmiş export plist'indeki
+  `testFlightInternalTestingOnly=true` yükleme öncesi doğrulandı.
+- iPhone UI **9/9** geçti (521,856 sn); 25 görüntünün tamamı incelendi.
+  Watch 40mm/49mm normal ve büyütülmüş yazı kısa senaryolarının **4/4'ü**
+  geçti. 58 kayıt ekranı/ayar görüntüsü ve bir soğuk açılış görüntüsünün
+  tamamı incelendi; okunabilirlik veya düğme kırpılması sorunu bulunmadı.
+  İki büyük yazı koşusunda sistem yazı ayarlarının geri yüklenmesi de
+  doğrulandı. Bunlar ikinci kayıt/otomatik bitiş/kadran kanıtı değildir.
+- Apple Python paketi **243 geçti + 12 platform kontrolü atlandı**;
+  Swift sözleşmeleri, gerçek Fastlane profil kontrolü ve anahtarsız dağıtım
+  sınır testleri geçti. [Helper koşusu 35469483016](https://github.com/MertBasar0/ceviz/actions/runs/35469483016)
+  Windows **12/12**, Linux ve macOS **243 geçti + 12 atlandı** ile başarılı.
+- Ana dal `afc79c71a8aaa564edf39529aa98d6568cb26c71` olarak korundu.
+  Bu son hazırlıkta (`fd2821a`→`d8d5372`) uygulama/backend üretim kodu
+  değişmedi; yayın sınırı Fastlane +30/-3, iş akışı +14/-4,
+  test/test desteği +240/-10 satır.
+  Ek yayın kodu yalnız onaylı iç dağıtım sınırını ve gerçek export kanıtını
+  uygular. Yerel Ceviz/Gateway servisi, model, eşleştirme ve ağ ayarları
+  bu son kontrolde değiştirilmedi.
+
+**Cihazda bekleyenler:** Uygulamayı/servisi silmeden iPhone ve Watch'u
+güncelle; sayaçta altı saniye kalınca gönder, uygulamayı kapatmadan ikinci
+kaydı başlat ve 15 saniye dolunca otomatik bitişi dene; kadrandan kaydı aç.
+İnternet kesilip geri geldikten sonra yeni komutun ulaşmasını ve bekleyen
+isteğin görünür durumunu kontrol et. Windows yeniden başlatması ardından
+terminal açmadan otomatik servis erişimi de henüz kanıtlanmadı.
+Bilinen ikinci kayıt/15 saniye senaryosu `executed=false /
+pending_device_validation`; Watch URL 115 ve gerçek kadran dokunuşu da
+bekliyor. Bunlar otomatik testte başarılı sayılmadı; dış Beta değişmedi.
+
 ## 20 Eylül — iç aday doğrulamasındaki bağlantı testi sıralaması
 
 İlk aday `7b3f78d` / Apple koşusu **35468995726**, imzalamadan önce genel
@@ -20,16 +61,17 @@ korunuyor. Aynı sıralama yedi yavaş yükleme testine de uygulandı.
 Sekiz çalışan, dokuzuncu isteğe 503 ve bağlantı kapanınca toparlanma
 iddiaları korunuyor; ilk kabul gecikmesi regresyonun parçası oldu.
 Windows gerçek HTTP paketi **13/13** geçti (30,049 sn); bağımsız Linux
-özel tekrarı toplam 300 ms enjekte gecikmeyle geçti. Yeni Apple koşusu,
-bilinen cihaz kontrolleri hariç aynı zorunlu kapılarla yeniden çalışacak.
-Henüz yeni TestFlight yüklemesi yok.
+özel tekrarı toplam 300 ms enjekte gecikmeyle geçti. Sonraki Apple koşusu,
+bilinen cihaz kontrolleri hariç aynı zorunlu kapılarla geçti; yükleme ve
+kişisel erişim sonucu yukarıdaki güncel bölümde kayıtlıdır.
 
 ## 19 Eylül gece — yalnız iç cihaz denemesi onayı
 
 Kullanıcı, bilinen ikinci kayıt ve otomatik 15 saniyelik kayıt kontrollerini
 kendi saatinde denemeye devrederek **yalnız kişisel iç TestFlight adayı**
 hazırlanmasını açıkça onayladı. Aşağıdaki önceki kapı kararının bu dar kapsamı
-değişti; dış Beta ve ana dal değişmeyecek. Henüz yeni build yüklenmedi.
+değişti; dış Beta ve ana dal korunacak. Bu onay anında henüz build
+yüklenmemişti; tamamlanan yükleme yukarıdaki güncel bölümde kayıtlıdır.
 
 - Yalnız 40mm/normal yazı manuel→ikinci→otomatik kayıt senaryosu
   `executed=false / pending_device_validation` kaydıyla devrediliyor.

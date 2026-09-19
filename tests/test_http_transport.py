@@ -68,6 +68,21 @@ class HTTPFixture(unittest.TestCase):
         client.sendall(data)
         return client
 
+    def pending_connections(self, requests):
+        # Exercise admitted workers, not an unrelated kernel listen-queue burst.
+        # Keep the existing two-second admission budget for the whole group.
+        deadline = time.monotonic() + 2
+        clients = []
+        for count, data in enumerate(requests, 1):
+            clients.append(self.connect(data))
+            remaining = self.transport.MAX_CONNECTIONS - count
+            while time.monotonic() < deadline and (
+                    self.server._connections._value != remaining or len(vars(self.server).get("_threads", ())) != count):
+                time.sleep(0.01)
+            self.assertEqual(self.server._connections._value, remaining)
+            self.assertEqual(len(vars(self.server).get("_threads", ())), count)
+        return clients
+
     def capabilities(self):
         client = http.client.HTTPConnection(*self.server.server_address, timeout=1)
         try:
@@ -119,8 +134,9 @@ class HTTPIngressTests(HTTPFixture):
         paths = ["/api/v1/watch/command", "/api/v1/shortcuts/command", "/api/v1/push/register",
                  "/api/v1/sessions/message", "/api/v1/jobs/missing/cancel", "/api/v1/jobs/missing/summarize"]
         started = time.monotonic()
-        clients = [self.connect(self.headers(path, "Content-Length: 4096\r\n")) for path in paths]
-        clients.append(self.connect(b"GET /api/v1/capabilities HTTP/1.1\r\nX-Trickle: "))
+        clients = self.pending_connections(
+            [self.headers(path, "Content-Length: 4096\r\n") for path in paths] +
+            [b"GET /api/v1/capabilities HTTP/1.1\r\nX-Trickle: "])
         stop = threading.Event()
 
         def trickle(client):
@@ -190,11 +206,19 @@ class HTTPIngressTests(HTTPFixture):
 
     def test_eight_connections_bound_workers_and_release_after_disconnect(self):
         self.assertEqual(self.transport.MAX_CONNECTIONS, 8)
-        for _ in range(8):
-            self.connect(b"GET /api/v1/capabilities HTTP/1.1\r\nX-Pending: ")
-        deadline = time.monotonic() + 2
-        while self.server._connections._value and time.monotonic() < deadline:
-            time.sleep(0.01)
+        process_request = self.server.process_request
+        first = True
+
+        def delayed_first_accept(request, address):
+            nonlocal first
+            if first:
+                first = False
+                # Reproduce scheduler lag without changing backlog or timeouts.
+                time.sleep(0.15)
+            return process_request(request, address)
+
+        with patch.object(self.server, "process_request", side_effect=delayed_first_accept):
+            self.pending_connections([b"GET /api/v1/capabilities HTTP/1.1\r\nX-Pending: "] * 8)
         self.assertEqual(self.server._connections._value, 0)
         self.assertEqual(len(self.server._threads), 8)
         refused = self.connect(b"")

@@ -1,6 +1,28 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **19 Eylül 2026**
+Son güncelleme: **20 Eylül 2026**
+
+## 20 Eylül — iç aday doğrulamasındaki bağlantı testi sıralaması
+
+İlk aday `7b3f78d` / Apple koşusu **35468995726**, imzalamadan önce genel
+Python paketindeki sekiz bağlantı testinde durdu. Python 3.14.7 macOS'ta
+sekizinci bağlantı kurulurken bir saniyelik zaman aşımı görüldü; aynı kaynak
+helper koşusunda **35468979561** Windows 12/12, Linux/macOS 243 geçti +
+12 platform kontrolü atlandı. Bu sonuç başarısız Apple kapısını kaldırmadı.
+
+CPython 3.12 ve 3.14'te kabul kuyruğu beş; test, sekiz çalışan kabul
+edilmeden sekiz soket açıyordu. İlk kabulü yalnız 150 ms geciktiren izole
+gerçek TCP tekrarı Linux'ta aynı sekizinci bağlantı hatasını üretti.
+Sadece test kurulumu düzeltildi: her eksik istekte hem kabul edilen çalışan
+hem kalan slot sayısı doğrulanıyor; bütün grup için mevcut iki saniye sınırı
+korunuyor. Aynı sıralama yedi yavaş yükleme testine de uygulandı.
+Üretim kodu, kuyruk/çalışan sınırları ve bağlantı süreleri değiştirilmedi.
+Sekiz çalışan, dokuzuncu isteğe 503 ve bağlantı kapanınca toparlanma
+iddiaları korunuyor; ilk kabul gecikmesi regresyonun parçası oldu.
+Windows gerçek HTTP paketi **13/13** geçti (30,049 sn); bağımsız Linux
+özel tekrarı toplam 300 ms enjekte gecikmeyle geçti. Yeni Apple koşusu,
+bilinen cihaz kontrolleri hariç aynı zorunlu kapılarla yeniden çalışacak.
+Henüz yeni TestFlight yüklemesi yok.
 
 ## 19 Eylül gece — yalnız iç cihaz denemesi onayı
 

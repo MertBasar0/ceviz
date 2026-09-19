@@ -1,4 +1,7 @@
-param([Parameter(Mandatory=$true)][ValidatePattern('^[^\s"\\\x00-\x1f]+$')][string]$Distro)
+param(
+    [Parameter(Mandatory=$true)][ValidatePattern('^[^\s"\\\x00-\x1f]+$')][string]$Distro,
+    [switch]$NonInteractive
+)
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Distro) -or $Distro -ne $Distro.Trim()) { throw 'Invalid WSL distribution name' }
 # Listing is passive: do not enter a stopped distro merely to inspect it.
@@ -8,6 +11,8 @@ if ($LASTEXITCODE -ne 0 -or $Distro -cnotin $distros) { throw 'Selected WSL dist
 $taskName = 'Ceviz WSL Lifetime'
 $description = 'Ceviz WSL lifetime; independent of LAN, Tailscale and firewall'
 $principalId = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$logonType = if ($NonInteractive) { 'S4U' } else { 'Interactive' }
+$principal = New-ScheduledTaskPrincipal -UserId $principalId -LogonType $logonType -RunLevel Limited
 function Get-TaskPrincipalSid([string]$Value) {
     if ($Value.StartsWith('S-1-', [StringComparison]::Ordinal)) { return [Security.Principal.SecurityIdentifier]::new($Value).Value }
     [Security.Principal.NTAccount]::new($Value).Translate([Security.Principal.SecurityIdentifier]).Value
@@ -35,8 +40,9 @@ $previous = $null
 if ($existing) {
     $actions = @($existing.Actions)
     if ($existing.Description -ne $description -or (Get-TaskPrincipalSid $existing.Principal.UserId) -ne $principalId -or
+        $existing.Principal.LogonType -ne $principal.LogonType -or $existing.Principal.RunLevel -ne $principal.RunLevel -or
         $actions.Count -ne 1 -or $actions[0].Execute -ne $wsl -or $actions[0].Arguments -cne $arguments) {
-        throw 'Existing task is not the same Ceviz lifetime component and distro; no overwrite'
+        throw 'Existing task is not the same Ceviz lifetime component, principal mode and distro; no overwrite'
     }
     if ($existing.State -eq 'Running' -or -not $existing.Settings.Enabled) {
         throw 'Existing lifetime task is running or disabled for maintenance; inspect it before an explicit upgrade'
@@ -57,7 +63,6 @@ if ($previous) {
 $action = New-ScheduledTaskAction -Execute $wsl -Argument $arguments
 $logon = New-ScheduledTaskTrigger -AtLogOn -User $principalId
 $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
-$principal = New-ScheduledTaskPrincipal -UserId $principalId -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `
     -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $registration = @{ TaskName = $taskName; TaskPath = '\'; Action = $action; Trigger = @($logon, $repeat)

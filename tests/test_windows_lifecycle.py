@@ -66,11 +66,12 @@ try { $messages=@(& SCRIPT ARGUMENTS) } catch { $failed=$true }
                 self.assertEqual(result["events"], [], "Missing/ambiguous distro must not select or touch a host")
                 self.assertEqual(result["messages"], [])
 
-    def registration_fixture(self, directory, mode="success", existing=False):
+    def registration_fixture(self, directory, mode="success", existing=False, non_interactive=False):
         source = r'''
 $ErrorActionPreference='Stop'
 $env:LOCALAPPDATA=DIRECTORY
 $global:mode=MODE
+$global:expectedLogon=EXPECTED_LOGON
 $global:calls=[System.Collections.Generic.List[string]]::new()
 $global:registered=$null; $global:existing=$null; $global:exports=0
 $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -110,7 +111,7 @@ function global:New-ScheduledTaskTrigger {
 }
 function global:New-ScheduledTaskPrincipal {
     param($UserId,$LogonType,$RunLevel)
-    if ($LogonType -ne 'Interactive' -or $RunLevel -ne 'Limited') { throw 'Wrong privilege boundary' }
+    if ($LogonType -ne $global:expectedLogon -or $RunLevel -ne 'Limited') { throw 'Wrong privilege boundary' }
     [pscustomobject]@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel}
 }
 function global:New-ScheduledTaskSettingsSet {
@@ -129,6 +130,12 @@ function global:Register-ScheduledTask {
     if ($global:mode -eq 'registration-failure') { throw 'fixture-registration-failure' }
     $global:registered=[pscustomobject]@{Actions=@($Action);Triggers=@($Trigger);Principal=$Principal;Settings=$Settings;State='Ready'}
     if ($global:mode -eq 'readback-failure') { $global:registered.Settings.RunOnlyIfNetworkAvailable=$true }
+    if ($global:mode -in @('readback-logon','readback-runlevel')) {
+        $global:registered.Principal=[pscustomobject]@{UserId=$Principal.UserId;LogonType=$Principal.LogonType;RunLevel=$Principal.RunLevel}
+        if ($global:mode -eq 'readback-logon') {
+            $global:registered.Principal.LogonType=if ($global:expectedLogon -eq 'S4U') {'Interactive'} else {'S4U'}
+        } else { $global:registered.Principal.RunLevel='Highest' }
+    }
     if ($global:mode -eq 'named-principal') {
         $global:registered.Principal.UserId=[Security.Principal.WindowsIdentity]::GetCurrent().Name
         $global:registered.Triggers[0].UserId=$global:registered.Principal.UserId
@@ -144,7 +151,7 @@ function global:Start-ScheduledTask {
 function global:Start-Sleep {}
 EXISTING
 $failed=$false; $messages=@(); $failure=''
-try { $messages=@(& SCRIPT -Distro 'FixtureDistro') }
+try { $messages=@(& SCRIPT -Distro 'FixtureDistro' EXTRA_ARGUMENT) }
 catch { $failed=$true; $failure=$_.Exception.Message }
 'CEVIZ_TEST_RESULT=' + (@{failed=$failed;failure=$failure;calls=@($global:calls);messages=@($messages)} | ConvertTo-Json -Compress)
 '''
@@ -153,11 +160,13 @@ $oldArguments='--distribution FixtureDistro --exec /bin/sleep infinity'
 $global:existing=[pscustomobject]@{
     TaskName='Ceviz WSL Lifetime'
     Description='Ceviz WSL lifetime; independent of LAN, Tailscale and firewall'
-    Principal=[pscustomobject]@{UserId=$sid}
+    Principal=[pscustomobject]@{UserId=$sid;LogonType=$global:expectedLogon;RunLevel='Limited'}
     Actions=@([pscustomobject]@{Execute=(Join-Path $env:SystemRoot 'System32\wsl.exe');Arguments=$oldArguments})
     State='Ready';Settings=[pscustomobject]@{Enabled=$true}
 }
 if ($global:mode -eq 'different-owner') { $global:existing.Principal.UserId='S-1-0-0' }
+if ($global:mode -eq 'different-logon') { $global:existing.Principal.LogonType=if ($global:expectedLogon -eq 'S4U') {'Interactive'} else {'S4U'} }
+if ($global:mode -eq 'different-runlevel') { $global:existing.Principal.RunLevel='Highest' }
 if ($global:mode -eq 'different-distro') { $global:existing.Actions[0].Arguments=$oldArguments.Replace('FixtureDistro','OtherDistro') }
 if ($global:mode -eq 'quoted-distro') { $global:existing.Actions[0].Arguments='--distribution "FixtureDistro" --exec /bin/sleep infinity' }
 if ($global:mode -eq 'running') { $global:existing.State='Running' }
@@ -165,7 +174,31 @@ if ($global:mode -eq 'disabled') { $global:existing.Settings.Enabled=$false }
 if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execute='powershell.exe' }
 ''' if existing else ""
         return (source.replace("DIRECTORY", literal(directory)).replace("MODE", literal(mode))
+                .replace("EXPECTED_LOGON", literal("S4U" if non_interactive else "Interactive"))
+                .replace(" EXTRA_ARGUMENT", " -NonInteractive" if non_interactive else "")
                 .replace("EXISTING", existing_source).replace("SCRIPT", literal(ROOT / "deploy/windows/install-wsl-lifetime.ps1")))
+
+    def test_noninteractive_lifetime_is_explicit_limited_and_never_falls_back(self):
+        for mode in ("success", "named-principal", "registration-failure"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
+                result = self.run_powershell(self.registration_fixture(Path(temporary), mode, non_interactive=True))
+                self.assertEqual(result["failed"], mode == "registration-failure", result)
+                self.assertEqual(result["calls"].count("register"), 1, result)
+                self.assertEqual(result["calls"], ["wsl-list", "register"] if result["failed"]
+                                 else ["wsl-list", "register", "start-task"])
+                if result["failed"]:
+                    self.assertEqual(result["messages"], [])
+
+    def test_existing_lifetime_principal_mode_cannot_change_implicitly(self):
+        for non_interactive in (False, True):
+            for mode in ("different-logon", "different-runlevel"):
+                with self.subTest(non_interactive=non_interactive, mode=mode), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
+                    root = Path(temporary)
+                    result = self.run_powershell(self.registration_fixture(root, mode, existing=True,
+                                                                          non_interactive=non_interactive))
+                    self.assertTrue(result["failed"], result)
+                    self.assertNotIn("register", result["calls"])
+                    self.assertFalse((root / "Ceviz").exists(), "Principal changes must stop before backup/mutation")
 
     def test_task_install_is_network_independent_and_readback_verified(self):
         with tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
@@ -177,15 +210,18 @@ if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execu
             self.assertFalse((root / "Ceviz").exists(), "The direct task action needs no runtime files")
 
     def test_task_failures_do_not_report_installed_success(self):
-        for mode in ("unknown-distro", "list-failure", "registration-failure", "readback-failure", "start-failure", "not-running"):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
-                result = self.run_powershell(self.registration_fixture(Path(temporary), mode))
-                self.assertTrue(result["failed"], result)
-                self.assertEqual(result["messages"], [])
-                if mode in ("unknown-distro", "list-failure", "registration-failure", "readback-failure"):
-                    self.assertNotIn("start-task", result["calls"])
-                if mode in ("unknown-distro", "list-failure"):
-                    self.assertNotIn("register", result["calls"])
+        for non_interactive in (False, True):
+            for mode in ("unknown-distro", "list-failure", "registration-failure", "readback-failure",
+                         "readback-logon", "readback-runlevel", "start-failure", "not-running"):
+                with self.subTest(non_interactive=non_interactive, mode=mode), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
+                    result = self.run_powershell(self.registration_fixture(Path(temporary), mode,
+                                                                          non_interactive=non_interactive))
+                    self.assertTrue(result["failed"], result)
+                    self.assertEqual(result["messages"], [])
+                    if mode not in ("start-failure", "not-running"):
+                        self.assertNotIn("start-task", result["calls"])
+                    if mode in ("unknown-distro", "list-failure"):
+                        self.assertNotIn("register", result["calls"])
 
     def test_unknown_or_maintenance_task_is_not_overwritten(self):
         for mode in ("different-owner", "different-distro", "quoted-distro", "running", "disabled", "different-executable"):
@@ -212,15 +248,17 @@ if ($global:mode -eq 'different-executable') { $global:existing.Actions[0].Execu
                 self.assertEqual(result["calls"], [])
 
     def test_same_task_upgrade_backs_up_definition_without_copying_runtime(self):
-        with tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
-            root = Path(temporary)
-            result = self.run_powershell(self.registration_fixture(root, existing=True))
-            self.assertFalse(result["failed"], result)
-            self.assertEqual(result["calls"], ["wsl-list", "backup-read", "backup-read", "register", "start-task"])
-            self.assertEqual(list((root / "Ceviz/wsl-lifetime").glob("*.ps1")), [])
-            backups = list((root / "Ceviz/wsl-lifetime").glob("task-backup-*.xml"))
-            self.assertEqual(len(backups), 1)
-            self.assertEqual(backups[0].read_text(), "<Task>previous</Task>")
+        for non_interactive in (False, True):
+            with self.subTest(non_interactive=non_interactive), tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:
+                root = Path(temporary)
+                result = self.run_powershell(self.registration_fixture(root, existing=True,
+                                                                      non_interactive=non_interactive))
+                self.assertFalse(result["failed"], result)
+                self.assertEqual(result["calls"], ["wsl-list", "backup-read", "backup-read", "register", "start-task"])
+                self.assertEqual(list((root / "Ceviz/wsl-lifetime").glob("*.ps1")), [])
+                backups = list((root / "Ceviz/wsl-lifetime").glob("task-backup-*.xml"))
+                self.assertEqual(len(backups), 1)
+                self.assertEqual(backups[0].read_text(), "<Task>previous</Task>")
 
     def test_task_drift_after_backup_stops_before_registration(self):
         with tempfile.TemporaryDirectory(prefix="ceviz-lifetime-test-") as temporary:

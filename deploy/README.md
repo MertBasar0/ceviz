@@ -218,9 +218,11 @@ and checks once per minute whether another instance can start. Its action runs
 directly, so the tracked process is the foreground client, not a PowerShell
 wrapper with a separately owned child. `IgnoreNew`
 prevents overlapping task instances; there is no task execution time limit or
-network/idle/battery prerequisite. The Windows user must be logged in and the
-computer awake. Windows sleep, logoff or a disconnected VPN still interrupts
-access; task state alone is not backend health or command-delivery proof.
+network/idle/battery prerequisite. The default **Interactive** mode requires the
+Windows user to be logged in and opens a visible console window. The explicit
+**S4U** option below uses a non-interactive desktop. Neither mode can keep the
+computer awake or repair a disconnected VPN; task state alone is not backend
+health or command-delivery proof.
 
 The task's raw argument string must not wrap the distribution name in quotes:
 WSL treats those quotes as part of the name and reports
@@ -249,6 +251,28 @@ with the exact registered name shown above:
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\deploy\windows\install-wsl-lifetime.ps1 -Distro 'YOUR_DISTRO'
 ```
 
+That command selects the default Interactive task: PowerShell's own
+`-NonInteractive` flag before `-File` only disables prompts. For an explicitly
+approved, host-validated windowless task, pass the **installer's** switch after
+`-File` instead:
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\deploy\windows\install-wsl-lifetime.ps1 -Distro 'YOUR_DISTRO' -NonInteractive
+```
+
+This selects S4U for the **current Windows account**, always at `Limited` run
+level, and stores no password. S4U requires the account's existing batch-logon
+right; its Windows token cannot access network resources or EFS-encrypted files.
+The direct `/bin/sleep` action needs neither, but each host's WSL installation
+and file locations still need validation. No credential, right or policy is
+changed, no launcher is copied, and a failed registration never falls back to
+Interactive mode. The installer does not elevate itself. If elevated
+registration has been explicitly approved for that host, open Windows
+PowerShell **as administrator under the same account** and run the selected
+command there; do not supply another administrator's account. Windows remains
+the authority for registration permissions, rather than an installer rule that
+all S4U hosts require administrator rights.
+
 This registers and starts only the independent lifetime task. It does not
 rewrite the Ceviz service, pairing token, jobs, conversation records, Python
 environment, Gateway settings or Tailscale target. Starting WSL can naturally
@@ -256,11 +280,13 @@ start its already-enabled Linux services. The old LAN relay is not required
 for Tailscale and is not restarted by this command. Its retirement, if needed,
 is a separate reviewed Windows maintenance action.
 
-An existing task is replaced only when its exact component, Windows user and
-distro match; its previous XML definition remains available under
+An existing task is replaced only when its exact component, Windows user,
+logon mode, run level and distro match; its previous XML definition remains available under
 `%LOCALAPPDATA%\Ceviz\wsl-lifetime`. No custom lifetime runtime is copied.
 Unknown, modified, running or disabled-for-maintenance tasks require operator
-review before replacement. A registration/start/readback error is a failure,
+review before replacement. Changing between Interactive and S4U is a separate
+explicitly approved migration, not an automatic replacement or a force option.
+A registration/start/readback error is a failure,
 not a successful repair: retain the backups and inspect Task Scheduler before
 continuing. The code-only helper updater deliberately does not install or
 update Windows tasks and does not overwrite deployment scripts in old checkouts.
@@ -275,9 +301,14 @@ works. Do not re-pair, clear pending requests or resend an unconfirmed command
 to test host availability.
 
 Real-host validation must also check the task's stop/restart behavior and
-whether the interactive Windows session shows a console window; isolated tests
-do not prove these Task Scheduler/WSL behaviors. A window-free launch is not
-claimed until that approved maintenance check passes.
+that S4U creates no window in the interactive session. Verify disappearance of
+both the exact Windows client and its Linux sleep process when the task stops;
+Windows task state alone does not establish Linux child cleanup. Isolated tests
+do not prove these Task Scheduler/WSL behaviors. The approved maintainer-host
+probe verified warm-distro S4U execution, natural exit and stop cleanup without
+changing the existing helper or Gateway processes. This is not cold-start,
+reboot, logoff or general WSL-version compatibility proof. Validate those
+boundaries separately before relying on unattended availability.
 
 If a fresh installation stops during its network or task step, a service/token
 may already have been created. Do not rerun `install.sh`, delete that token or
@@ -291,6 +322,8 @@ alone is not proof that such a recovered installation lost its token.
 Microsoft documents the relevant boundaries: [systemd and WSL lifetime](https://learn.microsoft.com/en-us/windows/wsl/systemd),
 [Windows localhost access to WSL](https://learn.microsoft.com/en-us/windows/wsl/networking), and
 [Task Scheduler settings](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).
+Also see [S4U's non-interactive logon and access restrictions](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/ne-taskschd-task_logon_type)
+and [task registration security requirements](https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks).
 
 ### Voice delivery recovery (unreleased repair candidate)
 

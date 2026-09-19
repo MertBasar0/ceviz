@@ -56,6 +56,7 @@ bağlantı ayarları bu bakımın dışında; aşağıdaki 13 Eylül bölümü t
   Gateway süreç kimlikleri/başlama zamanları aynı. Son Tailscale doğrulaması
   başarılı. Soğuk WSL başlangıcı, reboot/logoff ve fiziksel ağ kesintisi hâlâ
   ayrı doğrulama gerektiriyor.
+  Kullanıcı kalıcı geçişten sonra yeni boş terminal açılmadığını doğruladı.
   Dakika tetiklerinden sonra aynı tek görev örneği ve Linux süreci korunuyor.
   `LastTaskResult=0x800710E0` genel ret kodu, bu çalışan sürecin çıkış kodu
   olarak yorumlanmıyor; kapalı Operational geçmişi açılmadı. Kaybolan görev
@@ -68,7 +69,25 @@ bağlantı ayarları bu bakımın dışında; aşağıdaki 13 Eylül bölümü t
   sekiz saniyelik kayıt aralığını okuyan tanılama hazırlandı. Uygulama/test
   yeniden çalıştırmaz, ham kayıt yayımlamaz, başarısız dağıtım kapısını
   değiştirmez. Linux **22/22**, bağımsız Windows tekrarında **20 geçti +
-  2 symlink kontrolü atlandı**; native okuyucu henüz Mac'te çalıştırılmadı.
+  2 symlink kontrolü atlandı**. `91d480c` tanılaması Apple koşusu
+  **35464986412** üzerinde Xcode **26.6 / 17F113** ile geçti: kaynak
+  doğrulandı, iki aralık da 4 MiB sınırı altında okundu. İkinci dokunuşta
+  sistemde `contacts_cancel_requested` sınıfı var, ilkinde yok; ikisinde de
+  sentezleme/tamamlanma ve uygulama PID'sine ait `UIEvent` kayıtları var.
+  Bunlar tek başına gerçek dokunma fazını veya uygulama kök nedenini
+  kanıtlamıyor. Canlı `AudioCapture` akışındaki ilk başarılı kayıt işaretleri
+  saklanmış sistem arşivindeki bu sorguda görünmüyor; yokluğu uygulamanın
+  çalışmadığına kanıt sayılmıyor. Test iki dokunuş arasında uygulamayı
+  yeniden başlatmıyor/arka plana almıyor; sonuç bekleme ve ekran kanıtı
+  toplama nedeniyle yaklaşık 74 saniye geçiyor.
+  Aynı iki sorguya eklenen dar UIKit alanları yalnız gözlenen yönlendirme
+  mesajlarını sınıflandırır; dokunma evresi veya düğme eylemi çıkarımı yapmaz.
+  Yerel Linux **25/25**, iki bağımsız Windows tekrarında **23 geçti + 2
+  symlink kontrolü atlandı**; uygulama/üretim kodu değişmedi.
+- Aynı `91d480c` üzerindeki helper koşusu **35464986402** başarılı:
+  Windows yaşam-süresi paketi **12/12**; Linux ve macOS genel Python
+  paketlerinde ayrı ayrı **236 geçti + 12 platform kontrolü atlandı**
+  (68,382 sn / 99,148 sn). Bildirim ve sözdizimi adımları da geçti.
 - Son salt okunur Apple kontrolünde en yeni build hâlâ **1789005793**,
   `VALID`, Mert + dış Beta gruplarında. Yeni upload yok; ana dal hâlâ
   `afc79c71a8aaa564edf39529aa98d6568cb26c71`.

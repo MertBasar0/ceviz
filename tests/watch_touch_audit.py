@@ -68,6 +68,16 @@ NATIVE_RULES = (
 )
 COMPILED_RULES = tuple((owner, name, re.compile(pattern, re.I)) for owner, name, pattern in NATIVE_RULES)
 FRAMEWORK_SYMBOLS = ("UITouch", "UIEvent", "XCSynthesizedEventRecord", "XCEventGenerator", "XCTRunnerDaemonSession", "IOHIDEvent")
+UIKIT_PREFIX = "[com.apple.UIKit:EventDispatch] "
+CAPTURE_PREFIX = "[com.mertbasar.ceviz.watch:AudioCapture] "
+# Literal native log fields, not public UIKit API semantics or touch phases.
+# Shapes were observed in the retained 34043752041 UIKit EventDispatch records.
+UIKIT_EVALUATION = re.compile(
+    r"Evaluating dispatch of UIEvent: (?:0x)?[0-9A-Fa-f]+; type: (\d{1,3}); "
+    r"subtype: (\d{1,3}); backing type: (\d{1,3}); shouldSend: ([01]); "
+    r"ignoreInteractionEvents: ([01]), systemGestureStateChange: ([01])"
+)
+UIKIT_WINDOWS = re.compile(r"Sending UIEvent type: (\d{1,3}); subtype: (\d{1,3}); to windows: (\d{1,2})")
 
 
 class AuditFailure(RuntimeError):
@@ -198,6 +208,8 @@ def project_events(payload, window):
     events = []
     recognized = 0
     counts = Counter()
+    app_categories = {"uikit_event_dispatch_rows": 0, "uikit_projected_rows": 0,
+                      "audio_capture_rows": 0, "known_capture_events": 0}
     for timestamp, process, raw_pid, message in compact_records(rows):
         if process not in PROCESSES or len(raw_pid) > 10:
             continue
@@ -212,8 +224,27 @@ def project_events(payload, window):
             continue
         recognized += 1
         kinds = []
+        dispatch_fields = None
         if process == "CevizWatchApp" and (app_event := APP_EVENT.match(message)):
             kinds.append("app_" + app_event[1])
+            app_categories["known_capture_events"] += 1
+        if process == "CevizWatchApp" and message.startswith(CAPTURE_PREFIX):
+            app_categories["audio_capture_rows"] += 1
+        if process == "CevizWatchApp" and message.startswith(UIKIT_PREFIX):
+            app_categories["uikit_event_dispatch_rows"] += 1
+            uikit_body = message[len(UIKIT_PREFIX):]
+            evaluation = UIKIT_EVALUATION.fullmatch(uikit_body)
+            windows = UIKIT_WINDOWS.fullmatch(uikit_body)
+            if evaluation and all(int(value) <= 255 for value in evaluation.groups()[:3]):
+                kinds.append("native_uikit_dispatch_evaluation")
+                dispatch_fields = dict(zip(("type", "subtype", "backing_type", "shouldSend",
+                                            "ignoreInteractionEvents", "systemGestureStateChange"),
+                                           map(int, evaluation.groups())))
+            elif windows and all(int(value) <= 255 for value in windows.groups()[:2]) and int(windows[3]) <= 64:
+                kinds.append("native_uikit_window_routing")
+                dispatch_fields = dict(zip(("type", "subtype", "window_count"), map(int, windows.groups())))
+            if dispatch_fields is not None:
+                app_categories["uikit_projected_rows"] += 1
         # Compact output can prefix an eventMessage with its subsystem/category.
         # This prefix is discarded, never emitted or used as a dynamic label.
         body = re.sub(r"^\[[A-Za-z0-9_.-]+(?::[A-Za-z0-9_. -]+)?\]\s*", "", message, count=1)
@@ -227,6 +258,8 @@ def project_events(payload, window):
                  "not_established"}
         if symbols:
             event["framework_symbols"] = symbols
+        if dispatch_fields is not None:
+            event["uikit_log_fields"] = dispatch_fields
         if len(events) == MAX_EVENTS:
             raise AuditFailure("event_limit_exceeded")
         events.append(event)
@@ -234,6 +267,7 @@ def project_events(payload, window):
     status = "collected" if events else "no_classified_events" if recognized else "no_matching_records"
     return {"status": status, "name": name, "start_utc": start, "end_utc": end, "query_bytes": len(payload),
             "read_rows": len(rows), "recognized_rows": recognized, "event_counts": dict(sorted(counts.items())),
+            "app_category_counts": app_categories,
             "events": events, "meaning": "Log classifications only; synthesis is not proof of delivery, and absence is not proof of a cause."}
 
 

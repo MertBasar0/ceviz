@@ -208,6 +208,53 @@ class PrivacyProjectionTests(unittest.TestCase):
         with self.assertRaisesRegex(audit.AuditFailure, "event_limit_exceeded"):
             audit.project_events(payload, audit.WINDOWS[1])
 
+    def test_observed_uikit_dispatch_fields_are_literal_not_touch_phase_or_delivery(self):
+        proof = self.project(
+            line(audit.UIKIT_PREFIX + "Evaluating dispatch of UIEvent: 10C4DB780; type: 0; subtype: 0; "
+                 "backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0",
+                 "CevizWatchApp", audit.APP_PID),
+            line(audit.UIKIT_PREFIX + "Sending UIEvent type: 0; subtype: 0; to windows: 1",
+                 "CevizWatchApp", audit.APP_PID),
+        )
+        self.assertEqual(proof["events"][0]["uikit_log_fields"], {
+            "type": 0, "subtype": 0, "backing_type": 11, "shouldSend": 1,
+            "ignoreInteractionEvents": 0, "systemGestureStateChange": 0,
+        })
+        self.assertEqual(proof["events"][1]["uikit_log_fields"], {"type": 0, "subtype": 0, "window_count": 1})
+        self.assertEqual(proof["app_category_counts"]["uikit_projected_rows"], 2)
+        for forbidden in ("10C4DB780", "touch_phase", '"delivered"'):
+            self.assertNotIn(forbidden, json.dumps(proof))
+
+    def test_uikit_wrong_producer_quoted_or_out_of_range_shapes_are_not_projected(self):
+        valid = audit.UIKIT_PREFIX + "Sending UIEvent type: 0; subtype: 0; to windows: 1"
+        for message, process, pid in (
+            (valid, "Carousel", 1234), (valid, "CevizWatchApp", audit.APP_PID + 1),
+            ("quoted " + valid, "CevizWatchApp", audit.APP_PID),
+            (valid.replace("com.apple.UIKit", "unrelated"), "CevizWatchApp", audit.APP_PID),
+            (valid.replace("type: 0", "type: 999"), "CevizWatchApp", audit.APP_PID),
+            (valid.replace("windows: 1", "windows: 99"), "CevizWatchApp", audit.APP_PID),
+            (valid + " secret-transcript", "CevizWatchApp", audit.APP_PID),
+            (audit.UIKIT_PREFIX + "Sending UIEvent type: 0; subtype: 0; to window: <secret-window>; contextId: hidden",
+             "CevizWatchApp", audit.APP_PID),
+        ):
+            with self.subTest(message=message, process=process, pid=pid):
+                proof = self.project(line(message, process, pid))
+                self.assertTrue(all("uikit_log_fields" not in event for event in proof["events"]))
+                self.assertEqual(proof["app_category_counts"]["uikit_projected_rows"], 0)
+                self.assertNotIn("secret", json.dumps(proof))
+
+    def test_capture_category_presence_is_distinct_from_known_action_and_archive_absence(self):
+        proof = self.project(
+            line(audit.CAPTURE_PREFIX + "Capture event: primary_action", "CevizWatchApp", audit.APP_PID),
+            line(audit.CAPTURE_PREFIX + "unrecognized private capture detail", "CevizWatchApp", audit.APP_PID),
+        )
+        self.assertEqual(proof["app_category_counts"]["audio_capture_rows"], 2)
+        self.assertEqual(proof["app_category_counts"]["known_capture_events"], 1)
+        self.assertNotIn("private capture", json.dumps(proof))
+        empty = self.project()
+        self.assertEqual(empty["app_category_counts"]["audio_capture_rows"], 0)
+        self.assertEqual(empty["status"], "no_matching_records")
+
 
 class NativeReadIsolationTests(unittest.TestCase):
     def test_exact_export_archive_and_two_windows_without_app_launch(self):

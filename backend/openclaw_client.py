@@ -11,6 +11,26 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import logging
+
+logger = logging.getLogger("watch_ceviz.openclaw_client")
+
+try:
+    from ceviz_pusula import CevizPusula
+    _pusula_router: CevizPusula | None = None
+
+    def _get_pusula() -> CevizPusula | None:
+        global _pusula_router
+        if _pusula_router is None:
+            try:
+                _pusula_router = CevizPusula()
+            except Exception as exc:
+                logger.warning(f"[pusula] Failed to initialize CevizPusula: {exc}")
+                _pusula_router = None
+        return _pusula_router
+except Exception as e:
+    logger.warning(f"[pusula] Could not import ceviz_pusula: {e}")
+    _get_pusula = lambda: None
 
 from job_outcome import normalize_job_outcome
 
@@ -113,6 +133,45 @@ class OpenClawClient:
             "--message",
             prompt,
         ]
+
+        # cevizPusula: Semantic model routing
+        user_transcript = (payload.get("transcript") or "").strip()
+        pusula = _get_pusula()
+        if pusula and user_transcript:
+            try:
+                continuation = (payload.get("_continuation_context") or "").strip()
+                recent_job = self._get_recent_job_context()
+
+                context_payload: dict[str, Any] = {}
+                if continuation:
+                    context_payload["continuation"] = continuation
+                if recent_job:
+                    context_payload["recent_job"] = recent_job
+                    context_payload["last_tier_time"] = recent_job.get("created_at", 0)
+
+                decision = pusula.route(user_transcript, context=context_payload)
+                if decision.model:
+                    command.extend(["--model", decision.model])
+                if decision.thinking:
+                    command.extend(["--thinking", decision.thinking])
+
+                flags = []
+                if decision.escalated:
+                    flags.append("ESCALATED")
+                if decision.hysteresis_applied:
+                    flags.append("HYSTERESIS")
+                if decision.context_used:
+                    flags.append("CONTEXT")
+                flags_str = f" [{', '.join(flags)}]" if flags else ""
+
+                logger.info(
+                    f"[pusula] '{user_transcript[:40]}' -> {decision.group}{flags_str} | "
+                    f"model: {decision.model} (thinking: {decision.thinking}) | "
+                    f"calls: {decision.jev_calls} | {decision.latency_ms}ms"
+                )
+            except Exception as pusula_err:
+                logger.warning(f"[pusula] Routing error, proceeding with agent defaults: {pusula_err}")
+
         try:
             process = subprocess.Popen(  # noqa: S603
                 command,
@@ -176,6 +235,46 @@ class OpenClawClient:
     # calisiyorsun?" sorusuna kendi transkriptinden bakip "is yok" diyor,
     # zorlandiginda hafizadan eski isleri anlatiyordu. Cozum: session
     # indeksinden CANLI durumu okuyup prompt'a gercek veri olarak vermek.
+
+    @staticmethod
+    def _get_recent_job_context(max_age_seconds: float = 900.0) -> dict[str, Any] | None:
+        """Son 15 dakika icindeki son isi pusula baglami icin ceker."""
+        try:
+            jobs_path = Path.home() / ".openclaw" / "ceviz-state" / "jobs.json"
+            if not jobs_path.is_file():
+                return None
+            data = json.loads(jobs_path.read_text(encoding="utf-8"))
+            jobs = data.get("jobs", [])
+            if not jobs:
+                return None
+
+            now = time.time()
+            for job in reversed(jobs):
+                created_at = job.get("created_at") or 0
+                if not isinstance(created_at, (int, float)):
+                    continue
+                if (now - created_at) > max_age_seconds:
+                    break
+                status = job.get("status")
+                if status in ("completed", "failed"):
+                    model_used = None
+                    inv = job.get("invocation") or {}
+                    cmd = inv.get("command") or []
+                    for idx, arg in enumerate(cmd):
+                        if arg == "--model" and idx + 1 < len(cmd):
+                            model_used = cmd[idx + 1]
+                            break
+                    return {
+                        "transcript": job.get("transcript") or job.get("name") or "",
+                        "watch_summary": job.get("watch_summary") or "",
+                        "canned_result": job.get("canned_result") or "",
+                        "created_at": created_at,
+                        "model": model_used,
+                        "status": status,
+                    }
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def _last_user_message(session_path: Path, max_tail: int = 200_000) -> str:

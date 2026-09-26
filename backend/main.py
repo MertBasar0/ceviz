@@ -877,30 +877,21 @@ def _sync_job_status_impl(job: dict, now: float) -> None:
             apply_task_result(job, result)
         except Exception as exc:
             logging.exception("Failed to parse OpenClaw result for job %s", job["id"])
-            if locale_code(job) == "en":
-                detail = (
-                    "The OpenClaw call ended, but its response could not be parsed.\n\n"
-                    f"Error: {exc}\n\nLog excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-                )
-            else:
-                detail = (
-                    "OpenClaw çağrısı tamamlandı ama yanıt çözümlenemedi.\n\n"
-                    f"Hata: {exc}\n\nLog özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-                )
-            mark_result_unconfirmed(job, detail)
+            summary, detail = openclaw_client.parse_failure(
+                invocation["log_path"],
+                return_code=0,
+                locale=job.get("locale", ""),
+                parse_error=str(exc),
+            )
+            mark_result_unconfirmed(job, detail, summary=summary)
         return
 
-    if locale_code(job) == "en":
-        detail = (
-            f"The OpenClaw call exited with code {return_code}. Its task outcome is unconfirmed.\n\n"
-            f"Log excerpt:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-        )
-    else:
-        detail = (
-            f"OpenClaw çağrısı {return_code} koduyla sonlandı. Görev sonucu doğrulanamadı.\n\n"
-            f"Log özeti:\n{openclaw_client.read_log_tail(invocation['log_path'])}"
-        )
-    mark_result_unconfirmed(job, detail)
+    summary, detail = openclaw_client.parse_failure(
+        invocation["log_path"],
+        return_code=return_code,
+        locale=job.get("locale", ""),
+    )
+    mark_result_unconfirmed(job, detail, summary=summary)
 
 
 def apply_task_result(job: dict, result: TaskResult) -> None:

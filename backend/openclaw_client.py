@@ -406,6 +406,123 @@ class OpenClawClient:
 
         return lines
 
+    def parse_failure(
+        self,
+        log_path: str,
+        return_code: int = 1,
+        locale: str = "",
+        parse_error: str | None = None,
+    ) -> tuple[str, str]:
+        """Başarısız OpenClaw çağrısından kullanıcı dostu (watch_summary, phone_report) üretir.
+
+        Prompt metnini veya dahili sistem loglarını kullanıcı ekranına sızdırmaz.
+        JSON içindeki gerçek hata mesajını (503 Overloaded, Rate Limit, Timeout vb.)
+        çıkarıp anlaşılır mesajlar üretir.
+        """
+        is_tr = self._locale_code(locale) == "tr"
+        error_msg = ""
+        is_timeout = False
+
+        p = Path(log_path)
+        if p.exists():
+            try:
+                raw_output = p.read_text(encoding="utf-8", errors="replace")
+                data = json.loads(raw_output)
+                if isinstance(data, dict):
+                    if data.get("status") == "timeout" or data.get("stopReason") == "timeout":
+                        is_timeout = True
+
+                    # 1. meta.error
+                    meta_err = data.get("result", {}).get("meta", {}).get("error")
+                    if isinstance(meta_err, dict):
+                        error_msg = meta_err.get("message") or meta_err.get("kind") or ""
+
+                    # 2. direct error
+                    if not error_msg:
+                        dir_err = data.get("error")
+                        if isinstance(dir_err, dict):
+                            error_msg = dir_err.get("message") or dir_err.get("kind") or ""
+                        elif isinstance(dir_err, str):
+                            error_msg = dir_err
+
+                    # 3. payloads text if error
+                    if not error_msg and data.get("status") == "error":
+                        payloads = data.get("result", {}).get("payloads", [])
+                        for pay in payloads:
+                            if isinstance(pay, dict) and pay.get("text"):
+                                error_msg = pay["text"].strip()
+                                break
+            except Exception:
+                pass
+
+        if is_timeout:
+            if is_tr:
+                summary = "İstek zaman aşımına uğradı."
+                detail = "OpenClaw çağrısı zaman aşımına uğradı (model belirlenen süre içinde yanıt vermedi). Lütfen tekrar deneyin."
+            else:
+                summary = "Request timed out."
+                detail = "The OpenClaw call timed out waiting for the model. Please try again."
+            return summary, detail
+
+        err_lower = (error_msg or "").lower()
+        if "overloaded" in err_lower or "503" in err_lower:
+            if is_tr:
+                summary = "Model servisi aşırı yüklendi (503). Lütfen az sonra tekrar deneyin."
+                detail = (
+                    "Yapay zekâ servisi (NVIDIA NIM) şu anda aşırı yoğunluk nedeniyle yanıt veremedi "
+                    "(503 Service Temporarily Overloaded).\n\n"
+                    "Bu durum sağlayıcı kaynaklı geçici bir yoğunluktur. Lütfen birkaç saniye bekleyip komutunuzu tekrar iletin."
+                )
+            else:
+                summary = "AI service is overloaded (503). Please retry shortly."
+                detail = (
+                    "The upstream AI provider reported high load (503 Service Temporarily Overloaded).\n\n"
+                    "This is a temporary provider issue. Please wait a few moments and try again."
+                )
+            return summary, detail
+
+        if "rate limit" in err_lower or "429" in err_lower:
+            if is_tr:
+                summary = "İstek limiti aşıldı (429). Lütfen biraz bekleyin."
+                detail = "Yapay zekâ servisi istek sınırına ulaştı (Rate Limit 429). Lütfen kısa bir süre bekleyip tekrar deneyin."
+            else:
+                summary = "Rate limit reached (429). Please wait."
+                detail = "The AI service reached its rate limit (429). Please wait a moment and try again."
+            return summary, detail
+
+        if error_msg:
+            clean_msg = error_msg.strip()
+            if is_tr:
+                summary = f"Model hatası: {clean_msg[:120]}"
+                detail = f"Model çağrısı sırasında bir hata oluştu:\n\n{clean_msg}"
+            else:
+                summary = f"Model error: {clean_msg[:120]}"
+                detail = f"An error occurred during the model call:\n\n{clean_msg}"
+            return summary, detail
+
+        if parse_error:
+            if is_tr:
+                summary = "Model yanıtı çözümlenemedi."
+                detail = f"OpenClaw yanıtı işlenirken bir ayrıştırma hatası oluştu:\n{parse_error}"
+            else:
+                summary = "Failed to parse model response."
+                detail = f"An error occurred while parsing the OpenClaw response:\n{parse_error}"
+            return summary, detail
+
+        if is_tr:
+            summary = f"İşlem tamamlanamadı (kod: {return_code})."
+            detail = (
+                f"OpenClaw işlemi {return_code} koduyla sonlandı ve görev sonucu doğrulanamadı.\n"
+                "Model yanıt üretememiş veya bağlantı kesilmiş olabilir. Lütfen komutunuzu tekrar deneyin."
+            )
+        else:
+            summary = f"Operation failed (code: {return_code})."
+            detail = (
+                f"The OpenClaw call exited with code {return_code} and could not produce a confirmed result.\n"
+                "Please try again."
+            )
+        return summary, detail
+
     def read_log_tail(self, log_path: str, max_chars: int = 1200) -> str:
         if not Path(log_path).exists():
             return ""

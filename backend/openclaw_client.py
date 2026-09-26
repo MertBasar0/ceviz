@@ -147,7 +147,6 @@ class OpenClawClient:
                     context_payload["continuation"] = continuation
                 if recent_job:
                     context_payload["recent_job"] = recent_job
-                    context_payload["last_tier_time"] = recent_job.get("created_at", 0)
 
                 decision = pusula.route(user_transcript, context=context_payload)
                 if decision.model:
@@ -158,15 +157,16 @@ class OpenClawClient:
                 flags = []
                 if decision.escalated:
                     flags.append("ESCALATED")
-                if decision.hysteresis_applied:
-                    flags.append("HYSTERESIS")
                 if decision.context_used:
                     flags.append("CONTEXT")
+                if decision.fallback:
+                    flags.append("FALLBACK")
                 flags_str = f" [{', '.join(flags)}]" if flags else ""
+                light_p = "" if decision.light_probability is None else f" | light p={decision.light_probability:.2f}"
 
                 logger.info(
-                    f"[pusula] '{user_transcript[:40]}' -> {decision.group}{flags_str} | "
-                    f"model: {decision.model} (thinking: {decision.thinking}) | "
+                    f"[pusula] '{user_transcript[:40]}' -> {decision.group} ({decision.reason}){flags_str} | "
+                    f"model: {decision.model} (thinking: {decision.thinking}){light_p} | "
                     f"calls: {decision.jev_calls} | {decision.latency_ms}ms"
                 )
             except Exception as pusula_err:

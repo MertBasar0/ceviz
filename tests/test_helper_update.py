@@ -314,6 +314,15 @@ class HelperUpdateTests(unittest.TestCase):
         self.assertEqual(update.lifecycle([]), [])
         self.assertEqual(update.lifecycle([{"id": "done", "status": "completed"}]), [("done", "completed")])
 
+    def test_restart_may_trim_history_to_the_persisted_cap_but_never_change_jobs(self):
+        # 2026-09-28: a helper holding 55 jobs reloaded its newest 50 and blocked update and recovery.
+        before = [(f"job-{i:02d}", "completed") for i in range(55)]
+        self.assertTrue(update.jobs_preserved(before, before[5:]))
+        self.assertTrue(update.jobs_preserved(before[:3], before[:3]))
+        self.assertFalse(update.jobs_preserved(before[:3], before[:2]), "Below the cap nothing may disappear")
+        self.assertFalse(update.jobs_preserved(before, before[5:-1] + [("job-new", "completed")]))
+        self.assertFalse(update.jobs_preserved(before, before[6:] + [("job-05", "failed")]))
+
     def test_unsupported_platform_and_unknown_service_refuse_before_mutation(self):
         with patch.object(update.sys, "platform", "darwin"), patch.object(update, "command") as commands:
             with self.assertRaisesRegex(update.UpdateError, "Linux/WSL"):

@@ -187,6 +187,19 @@ def lifecycle(jobs):
     return sorted((row["id"], row["status"]) for row in jobs)
 
 
+# Ceviz persists only its newest 50 jobs (backend MAX_PERSISTED_JOBS), so a process
+# holding more in memory reloads a trimmed history after restart.
+PERSISTED_JOB_LIMIT = 50
+
+
+def jobs_preserved(before, after):
+    """No job may appear or change status; trimmed history may only drop jobs at the persistence cap."""
+    before, after = set(map(tuple, before)), set(map(tuple, after))
+    if not after <= before:
+        return False
+    return after == before or len(after) == PERSISTED_JOB_LIMIT
+
+
 class Installation:
     def __init__(self, root):
         require(sys.platform == "linux", "Automatic update currently supports Linux/WSL systemd user services. Contact support for manual/macOS installations.")
@@ -286,7 +299,7 @@ class Installation:
                 time.sleep(0.2)
         require(current["entry"] == expected_entry and current["environment_hash"] == receipt["environment_hash"], "Restarted Ceviz environment/code differs.")
         require(str(current["state"]) == receipt["state_dir"] and current["port"] == receipt["port"], "Ceviz connection/state location changed.")
-        require(lifecycle(jobs) == [tuple(row) for row in receipt["jobs"]], "Job identities changed during update.")
+        require(jobs_preserved(receipt["jobs"], lifecycle(jobs)), "Job identities changed during update.")
         try:
             self.api(current, "/api/v1/jobs/active", token="")
         except HTTPError as unauthorized:

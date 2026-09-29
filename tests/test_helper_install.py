@@ -168,7 +168,13 @@ class HelperInstallerTests(unittest.TestCase):
             executable = shutil.which(name)
             if executable is None:
                 self.skipTest("Read-only fixture prerequisite missing: " + name)
-            (self.tools / name).symlink_to(executable)
+            if name != "grep":
+                (self.tools / name).symlink_to(executable)
+        # These cases model a plain Linux helper. On a WSL development host the real
+        # /proc/version says "microsoft" and Doctor would add the Windows lifetime check.
+        self.stub("grep", '''[[ "$*" == '-qi microsoft /proc/version' ]] && exit 1
+exec ''' + shlex.quote(shutil.which("grep")) + ''' "$@"
+''')
         self.stub("systemctl", '''printf 'systemctl %s\\n' "$*" >> "$CEVIZ_TEST_CALLS"
 case "$*" in
   '--user show watch-ceviz-backend.service -p LoadState --value') printf '%s\\n' "$CEVIZ_TEST_LOAD_STATE" ;;

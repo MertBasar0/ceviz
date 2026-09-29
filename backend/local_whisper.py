@@ -5,12 +5,17 @@ Env ayarlari:
   WATCH_CEVIZ_WHISPER_DEVICE   (default: auto)    auto | cuda | cpu
   WATCH_CEVIZ_WHISPER_COMPUTE  (default: otomatik) ornek: float16 | int8 | int8_float16
   WATCH_CEVIZ_WHISPER_LANGUAGE (default: tr)
+  WATCH_CEVIZ_WHISPER_HOTWORDS (default: DEFAULT_HOTWORDS) virgulle ayrilmis ozel adlar; bos = kapali
 """
 from __future__ import annotations
 
 import os
 import tempfile
 import threading
+
+# Proper nouns Whisper otherwise hears as ordinary words ("Claude Code" -> "cloud kod").
+# hotwords biases decoding without the silence hallucinations an initial_prompt can cause.
+DEFAULT_HOTWORDS = "Claude Code, Claude, Codex, OpenClaw, Ceviz, GitHub, PR, CI, WSL, Antigravity, Nemotron, Kev, Jev"
 
 _model = None
 _model_key: tuple | None = None
@@ -78,6 +83,11 @@ def warmup() -> str:
     return _active_device
 
 
+def hotwords() -> str | None:
+    value = os.environ.get("WATCH_CEVIZ_WHISPER_HOTWORDS", DEFAULT_HOTWORDS).strip()
+    return value or None
+
+
 def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: str | None = None) -> str:
     """Base64'ten cozulmus ses baytlarini metne cevir. Bos string = transkript yok."""
     model = _load_model()
@@ -90,6 +100,6 @@ def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: st
     with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
-        segments, _info = model.transcribe(tmp.name, language=lang, vad_filter=True)
+        segments, _info = model.transcribe(tmp.name, language=lang, vad_filter=True, hotwords=hotwords())
         text = " ".join(seg.text.strip() for seg in segments if seg.text).strip()
     return text

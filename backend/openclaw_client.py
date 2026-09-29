@@ -34,6 +34,32 @@ except Exception as e:
 
 from job_outcome import normalize_job_outcome
 
+REDACTED = "[redacted]"
+# Watch and phone text crosses the push relay and is stored in jobs.json (a gateway token
+# leaked this way on 2026-09-22). Only unmistakable secret shapes are masked; commit SHAs stay.
+_SECRET_TOKEN_PATTERNS = [
+    re.compile(r"\b(?:sk-(?:ant-)?|ghp_|gho_|ghs_|ghu_|github_pat_|xox[abprs]-)[A-Za-z0-9_\-]{16,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+]
+_BEARER_PATTERN = re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/=\-]{16,}")
+_LABELED_SECRET_PATTERN = re.compile(
+    r"(?i)\b((?:api[ _-]?key|auth[ _-]?token|access[ _-]?token|token|password|passwd|secret|parola|şifre|sifre|anahtar)"
+    r"[^\n:=]{0,24}[:=]\s*[`'\"]?)([A-Za-z0-9._~+/=\-]{16,})"
+)
+
+
+def redact_secrets(text: str) -> str:
+    if not text:
+        return text
+    for pattern in _SECRET_TOKEN_PATTERNS:
+        text = pattern.sub(REDACTED, text)
+    text = _BEARER_PATTERN.sub(lambda m: m.group(1) + REDACTED, text)
+    return _LABELED_SECRET_PATTERN.sub(
+        lambda m: m.group(1) + REDACTED if re.search(r"\d", m.group(2)) and re.search(r"[A-Za-z]", m.group(2)) else m.group(0),
+        text,
+    )
+
 
 @dataclass
 class TaskResult:
@@ -212,12 +238,15 @@ class OpenClawClient:
             )
 
         structured = self._extract_structured_payload(response_text)
-        clean_text = structured["phone_report"] or response_text
+        clean_text = redact_secrets(structured["phone_report"] or response_text)
+        watch_summary = redact_secrets(structured["watch_summary"] or "") or self._build_watch_summary(
+            clean_text, locale=locale
+        )
 
         return TaskResult(
             category=structured["category"] or self._categorize_text(clean_text, locale),
             canned_result=clean_text,
-            watch_summary=structured["watch_summary"] or self._build_watch_summary(clean_text, locale=locale),
+            watch_summary=watch_summary,
             requires_phone_handoff=(
                 structured["requires_phone_handoff"]
                 if structured["requires_phone_handoff"] is not None
@@ -469,7 +498,7 @@ class OpenClawClient:
             if is_tr:
                 summary = "Model servisi aşırı yüklendi (503). Lütfen az sonra tekrar deneyin."
                 detail = (
-                    "Yapay zekâ servisi (NVIDIA NIM) şu anda aşırı yoğunluk nedeniyle yanıt veremedi "
+                    "Yapay zekâ sağlayıcısı şu anda aşırı yoğunluk nedeniyle yanıt veremedi "
                     "(503 Service Temporarily Overloaded).\n\n"
                     "Bu durum sağlayıcı kaynaklı geçici bir yoğunluktur. Lütfen birkaç saniye bekleyip komutunuzu tekrar iletin."
                 )
@@ -616,13 +645,17 @@ class OpenClawClient:
             "Asla 'cevap aşağıdadır', 'kısa durum: yanıtlanabilir' gibi sözde durumlar yazıp asıl cevabı atlama; "
             "cevabın kendisini açıkça ve zengin bir şekilde yaz. Gerekiyorsa maddeler, biçimlendirmeler ve örnekler kullan.\n"
             "   - watch_summary içinde: Apple Watch ekranında gösterilecek ve seslendirilecek doğrudan, samimi ve net özeti yaz "
-            "(Örn: 'Ben NVIDIA Nemotron 3 Ultra modeliyim, Ceviz olarak sana yardımcı oluyorum.' veya 'Nemotron 3 Ultra genel yeteneklerde GPT-4o ile, muhakemede o1 serisiyle benzer düzeydedir.'). "
+            "(Örn: 'Ankara, 1923'ten beri Türkiye'nin başkenti.' veya 'Yarın 10:00'da toplantın var.'). "
             "Kesinlikle 'X soruldu ve yanıtlandı' gibi 3. şahıs işlem kaydı yazma! Kullanıcının sorusunu doğrudan yanıtla.\n"
+            "   - Hangi modelle çalıştığın sorulursa yalnızca çalışma ortamının sana bildirdiği model adını söyle; "
+            "bilmiyorsan bilmediğini söyle, model adı tahmin etme veya uydurma.\n"
             "2. Bilgisayar / Sistem Eylemi ve Komut İsteklerinde (dosya oluşturma, kod çalıştırma, sistem kontrolü vb.):\n"
             f"   - Gerekli araçları çalıştır ve işlemi yap. {self.REPORT_START} bloğunda ne yaptığını ve sonucunu birinci tekil şahısla açıkla.\n"
             "   - watch_summary içinde ne yaptığını kısaca birinci tekil şahısla bildir (Örn: 'İstediğin dosyayı oluşturdum.').\n"
             "3. Eğer gerçek transkript yoksa bunu açıkça söyle. Transkript bozuk veya anlamsızsa TAHMİNLE İŞLEM YAPMA; "
-            "ne anladığını söyle, requires_phone_handoff=true yap ve kullanıcıdan netleştirme iste.\n\n"
+            "ne anladığını söyle, requires_phone_handoff=true yap ve kullanıcıdan netleştirme iste.\n"
+            "4. Token, parola, API anahtarı veya bağlantı sırrı gibi gizli değerleri ASLA yazma; "
+            "gerekiyorsa değerin nerede bulunduğunu söyle. Saat ve telefon metinleri bildirim servislerinden geçer.\n\n"
             "ÇIKTI FORMATI:\n"
             "Yanıtını tam olarak iki blok halinde üret ve marker etiketlerini aynen koru:\n"
             f"1) İlk blok tam olarak {self.REPORT_START} ile başlayıp {self.REPORT_END} ile bitsin. "

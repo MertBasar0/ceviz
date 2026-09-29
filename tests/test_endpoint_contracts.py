@@ -460,7 +460,10 @@ class EndpointContractTests(unittest.TestCase):
                 self.assertEqual(summary["status"], "failed")
                 self.assertEqual(summary["outcome"], "unknown")
                 self.assertNotEqual(summary["summary"], "Processing.")
-                self.assertIn("CLI error details", summary["phone_report"])
+                # Raw CLI output can carry prompt text or secrets; the phone gets a classified explanation.
+                self.assertNotIn("CLI error details", summary["phone_report"])
+                self.assertNotEqual(summary["phone_report"], "Started.")
+                self.assertTrue(summary["phone_report"].strip())
                 self.assertEqual(job["watch_summary"], summary["summary"])
                 persisted = json.loads(main.JOBS_STATE_PATH.read_text(encoding="utf-8"))["jobs"]
                 restored = next(item for item in persisted if item["id"] == "job-101")

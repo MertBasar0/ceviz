@@ -23,7 +23,7 @@ try:
         global _pusula_router
         if _pusula_router is None:
             try:
-                _pusula_router = CevizPusula()
+                _pusula_router = CevizPusula(agent=os.environ.get("OPENCLAW_WATCH_AGENT", "main"))
             except Exception as exc:
                 logger.warning(f"[pusula] Failed to initialize CevizPusula: {exc}")
                 _pusula_router = None
@@ -173,6 +173,7 @@ class OpenClawClient:
                     context_payload["continuation"] = continuation
                 if recent_job:
                     context_payload["recent_job"] = recent_job
+                    context_payload["recent_jobs"] = self._get_recent_jobs()
 
                 decision = pusula.route(user_transcript, context=context_payload)
                 if decision.model:
@@ -182,7 +183,7 @@ class OpenClawClient:
 
                 flags = []
                 if decision.escalated:
-                    flags.append("ESCALATED")
+                    flags.append(f"ESCALATED L{decision.escalation_level} {'+'.join(decision.escalation_signals)}")
                 if decision.context_used:
                     flags.append("CONTEXT")
                 if decision.fallback:
@@ -264,6 +265,29 @@ class OpenClawClient:
     # calisiyorsun?" sorusuna kendi transkriptinden bakip "is yok" diyor,
     # zorlandiginda hafizadan eski isleri anlatiyordu. Cozum: session
     # indeksinden CANLI durumu okuyup prompt'a gercek veri olarak vermek.
+
+    @staticmethod
+    def _get_recent_jobs(max_age_seconds: float = 900.0, limit: int = 8) -> list[dict[str, Any]]:
+        """Finished jobs from the last 15 minutes, oldest first, for Pusula's escalation signals."""
+        try:
+            jobs_path = Path.home() / ".openclaw" / "ceviz-state" / "jobs.json"
+            jobs = json.loads(jobs_path.read_text(encoding="utf-8")).get("jobs", []) if jobs_path.is_file() else []
+        except Exception:
+            return []
+        now = time.time()
+        recent = [
+            {
+                "transcript": job.get("transcript") or job.get("name") or "",
+                "outcome": job.get("outcome"),
+                "status": job.get("status"),
+                "created_at": job.get("created_at"),
+            }
+            for job in jobs
+            if isinstance(job.get("created_at"), (int, float))
+            and now - job["created_at"] <= max_age_seconds
+            and job.get("status") in ("completed", "failed")
+        ]
+        return sorted(recent, key=lambda job: job["created_at"])[-limit:]
 
     @staticmethod
     def _get_recent_job_context(max_age_seconds: float = 900.0) -> dict[str, Any] | None:

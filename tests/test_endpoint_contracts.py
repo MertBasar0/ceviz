@@ -470,6 +470,50 @@ class EndpointContractTests(unittest.TestCase):
                 self.assertEqual(restored["outcome"], "unknown")
                 self.assertEqual(restored["watch_summary"], summary["summary"])
 
+    def test_pinned_run_that_fails_before_execution_retries_once_on_the_agent_default(self) -> None:
+        log = Path(self.state_tmp.name) / "pinned.log"
+        log.write_text('{"ok": false, "error": {"message": "Failed to refresh OAuth token: retry in a minute"}}',
+                       encoding="utf-8")
+        job = main.jobs_db["job-101"]
+        failed = mock.Mock()
+        failed.poll.return_value = 1
+        pinned = ["openclaw", "agent", "--agent", "cevizmain", "--json", "--message", "hi",
+                  "--model", "anthropic/claude-sonnet-5", "--thinking", "medium"]
+        job.update(status="running", invocation={"process": failed, "log_path": str(log), "command": pinned,
+                                                 "started_at": 0, "prompt": "hi"})
+        retry_process = mock.Mock()
+        retry_process.poll.return_value = None
+        retry = SimpleNamespace(process=retry_process, log_path=str(log) + ".retry", prompt="hi",
+                                command=pinned[:7], started_at=1)
+        with mock.patch.object(main.openclaw_client, "relaunch_unpinned", return_value=retry) as relaunch:
+            _, summary = self._post("/api/v1/jobs/job-101/summarize")
+        relaunch.assert_called_once_with(pinned)
+        self.assertEqual(summary["status"], "running")
+        self.assertTrue(job["invocation"]["unpinned_retry"])
+
+        # The retry itself failing again ends the job instead of looping.
+        retry_process.poll.return_value = 1
+        with mock.patch.object(main.openclaw_client, "relaunch_unpinned") as second:
+            _, summary = self._post("/api/v1/jobs/job-101/summarize")
+        second.assert_not_called()
+        self.assertEqual(summary["status"], "failed")
+
+    def test_unpinned_or_mid_execution_failures_are_not_retried(self) -> None:
+        log = Path(self.state_tmp.name) / "timeout.log"
+        log.write_text('{"status": "timeout"}', encoding="utf-8")
+        for command in (["openclaw", "agent", "--message", "hi"],
+                        ["openclaw", "agent", "--message", "hi", "--model", "anthropic/claude-sonnet-5"]):
+            with self.subTest(command=command):
+                job = main.jobs_db["job-101"]
+                process = mock.Mock()
+                process.poll.return_value = 1
+                job.update(status="running", invocation={"process": process, "log_path": str(log),
+                                                         "command": command, "started_at": 0, "prompt": "hi"})
+                with mock.patch.object(main.openclaw_client, "relaunch_unpinned") as relaunch:
+                    _, summary = self._post("/api/v1/jobs/job-101/summarize")
+                relaunch.assert_not_called()
+                self.assertEqual(summary["status"], "failed")
+
     def test_stop_persists_unconfirmed_result_instead_of_processing_copy(self) -> None:
         process = mock.Mock()
         process.poll.return_value = None

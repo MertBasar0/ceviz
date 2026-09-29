@@ -222,6 +222,51 @@ class OpenClawClient:
             prompt=prompt,
         )
 
+    # Failures that happen before the model runs any tool, so an unpinned retry cannot repeat work.
+    _PRE_EXECUTION_FAILURE = re.compile(
+        r"failed to authenticate|oauth access token|refresh oauth token|no route-compatible authentication"
+        r"|overloaded|\b503\b|\b429\b|rate limit",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def is_pinned(command: list[str]) -> bool:
+        return "--model" in (command or [])
+
+    def is_pre_execution_failure(self, log_path: str) -> bool:
+        try:
+            tail = Path(log_path).read_text(encoding="utf-8", errors="replace")[-4000:]
+        except OSError:
+            return False
+        return bool(self._PRE_EXECUTION_FAILURE.search(tail))
+
+    def relaunch_unpinned(self, command: list[str]) -> InvocationHandle:
+        """Re-run a pinned turn on the agent default, so its fallback chain is back in play.
+
+        OpenClaw disables the configured fallbacks for an explicit --model, which turns a
+        transient Claude CLI auth refresh or a provider 503 on the pinned model into a failed job.
+        """
+        unpinned: list[str] = []
+        skip = False
+        for arg in command:
+            if skip:
+                skip = False
+                continue
+            if arg in ("--model", "--thinking"):
+                skip = True
+                continue
+            unpinned.append(arg)
+        log_path = self.runtime_dir / f"watch-job-{uuid.uuid4().hex}.log"
+        with log_path.open("w", encoding="utf-8") as log_file:
+            process = subprocess.Popen(  # noqa: S603
+                unpinned, stdout=log_file, stderr=subprocess.STDOUT, text=True,
+            )
+        prompt = unpinned[unpinned.index("--message") + 1] if "--message" in unpinned else ""
+        logger.info("[pusula] pinned run failed before execution; retrying on the agent default")
+        return InvocationHandle(
+            command=unpinned, log_path=str(log_path), started_at=time.time(), process=process, prompt=prompt,
+        )
+
     def extract_result(self, log_path: str, locale: str = "") -> TaskResult:
         raw_output = Path(log_path).read_text(encoding="utf-8")
         parsed = json.loads(raw_output)

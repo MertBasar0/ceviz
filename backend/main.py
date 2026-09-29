@@ -886,6 +886,25 @@ def _sync_job_status_impl(job: dict, now: float) -> None:
             mark_result_unconfirmed(job, detail, summary=summary)
         return
 
+    command = invocation.get("command") or []
+    if (
+        not invocation.get("unpinned_retry")
+        and openclaw_client.is_pinned(command)
+        and openclaw_client.is_pre_execution_failure(invocation["log_path"])
+    ):
+        # One retry on the agent default: a pinned model has no fallback chain in OpenClaw.
+        try:
+            retry = openclaw_client.relaunch_unpinned(command)
+        except Exception:
+            logging.exception("Unpinned retry could not start for job %s", job["id"])
+        else:
+            job["invocation"] = {
+                "process": retry.process, "log_path": retry.log_path, "prompt": retry.prompt,
+                "command": retry.command, "started_at": retry.started_at, "unpinned_retry": True,
+            }
+            job["status"] = "running"
+            return
+
     summary, detail = openclaw_client.parse_failure(
         invocation["log_path"],
         return_code=return_code,

@@ -185,10 +185,12 @@ sets it.
 
 ## WSL2 + Windows connection note
 
-The Windows lifecycle repair below is a **repair candidate**, not yet included
-in the `ceviz-helper-v2026.10.1-beta.2` download above. Use a reviewed repair
-source folder supplied for your installation; do not assume the old tag has
-these scripts or rerun its installer to repair an existing setup.
+The Windows lifecycle scripts described below (`deploy/windows/`) ship with
+this helper since 2026.10.1 Beta 1, but they remain a **repair candidate**:
+automatic backend access after a Windows restart, without opening a terminal,
+is not proven yet. To repair an existing setup, use the scripts from this
+release's `deploy/windows/` folder; do not rerun the installer over a working
+installation.
 
 When Tailscale runs on Windows, the repaired fresh installer verifies the
 authenticated Ceviz backend at Windows `127.0.0.1:<port>` before publishing

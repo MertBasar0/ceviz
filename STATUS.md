@@ -1,6 +1,38 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **20 Eylül 2026**
+Son güncelleme: **2 Ekim 2026**
+
+## 2 Ekim — ana dal güncel yardımcı sürüme taşındı
+
+- **Cihaz doğrulaması (Mert'in beyanı):** Mert, kişisel iç TestFlight build'i
+  **2026.6.5 (1789855234)** iPhone ve Watch'una kurup test ettiğini ve sorun
+  görmediğini bildirdi. Tek tek kapı sonuçları (ikinci kayıt/15 sn otomatik bitiş,
+  kadrandan açılış, ağ kesintisi sonrası kurtarma, Windows yeniden başlatma)
+  ayrıca kayda geçmedi. Watch simülatöründeki URL **115** sınırı otomatik testte
+  hâlâ açık.
+- Bu build `d8d5372` kaynağından derlendi. O commit'ten bugüne iPhone/Watch
+  uygulama kodu değişmedi; sonraki commit'ler yalnız yardımcı servise dokunuyor.
+- Mert'in onayıyla `main`, `codex/phone-conversations` ucuna
+  (`ceviz-helper-v2026.10.1-beta.2`, `ecc943e`) ileri sarıldı. Böylece 13–20
+  Eylül güvenilirlik çalışması ve 1 Ekim yardımcı sürümleri ana dalda. README
+  yeni kurulumları beta.2'ye yönlendiriyor.
+- Yayımlanan yardımcı sürümler (ön sürüm):
+  - [`ceviz-helper-v2026.10.1-beta.1`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.10.1-beta.1)
+    (`7383c73`): model seçimi tamamen OpenClaw'da; Pusula yardımcıdan çıkarıldı.
+  - [`ceviz-helper-v2026.10.1-beta.2`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.10.1-beta.2)
+    (`ecc943e`): isteğe bağlı yönlendirici eklenti sözleşmesi v1. Varsayılan kapalı.
+  - Pusula artık ayrı, MIT lisanslı bir eklenti:
+    [MertBasar0/ceviz-pusula v0.1.0](https://github.com/MertBasar0/ceviz-pusula/releases/tag/v0.1.0).
+    Mert'in kurulumunda `WATCH_CEVIZ_ROUTER=pusula` ile açık.
+- **Not düzeltmesi:** İki yardımcı sürümün notları, 9.12'den beri gelen HTTP
+  kabul onarımlarını ve Windows/WSL ömür betiklerini ilk yayında listelemiyordu.
+  Notlara "Also included since 2026.9.12 Beta 1" bölümü eklendi. Beta.2 tag'indeki
+  `deploy/README.md`, Windows betiklerinin o indirmeye "henüz dahil olmadığını"
+  yanlış söylüyordu; betikler beta.1'den beri dahil. Metin bu dalda düzeltildi;
+  düzeltilmiş hali bir sonraki sürümle gelecek.
+- **Değişmeyen:** Dış Beta hâlâ **2026.6.5 (1789005793)**. 1789855234 iç
+  dağıtıma bağlı (`INTERNAL_ONLY`), dış Beta'ya çevrilemez; dış dağıtım için
+  aynı kaynaktan ayrı bir build ve Apple beta incelemesi gerekir. Bu yapılmadı.
 
 ## 20 Eylül — kişisel iç TestFlight adayı hazır
 

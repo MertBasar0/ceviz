@@ -21,6 +21,32 @@ contract (`contracts/`) and the capability list are unchanged.
 - **Updater.** A helper that had served more than 50 jobs no longer stops mid-update or during
   `--recover`. Jobs trimmed from history are accepted; new or changed jobs are still refused.
 
+## Also included since 2026.9.12 Beta 1
+
+These helper changes come from the 13–20 September reliability work on the development branch.
+They were in this release from the start but were not listed when it was first published:
+
+- **HTTP intake.**
+  - The helper owns connection, header and body limits and bounded concurrency, so a
+    half-finished upload no longer blocks health or job queries.
+  - Concurrent admission of the same audio or target and push-registration merging were fixed
+    at the same boundary (`backend/watch_admission.py`).
+- **Windows/WSL lifetime.**
+  - On WSL, a fresh install now also installs the independent **Ceviz WSL Lifetime** Windows
+    scheduled task, which keeps the selected distribution running. The task tracks that
+    distribution's WSL client directly, not a PowerShell wrapper.
+  - The Windows Tailscale route is published only after the authenticated backend answers on
+    Windows `127.0.0.1`.
+  - The LAN relay installer requires `-Distro`, and distribution names are passed without
+    literal quotes.
+  - An explicit, limited non-interactive (S4U) task mode was added.
+  - Doctor reports whether the lifetime task and the selected distribution are running.
+  - These scripts remain a repair candidate until autostart after a Windows restart is proven.
+
+The matching iPhone and Watch changes from the same work (delivery recovery, connection refresh
+and native task ownership) ship in app builds, not in this helper. The external TestFlight build
+is unchanged.
+
 ## Installation and safety
 
 New installations follow the [new-installation guide](../README.md#install-the-backend). Existing

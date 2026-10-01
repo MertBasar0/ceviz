@@ -274,8 +274,8 @@ exit 89
         secret = "private-fixture-pairing-token"
         for label, service_env, expected in (
             ("off", f'HOME=/home/x "WATCH_CEVIZ_AUTH_TOKEN={secret}"', "INFO  Model routing is off"),
-            ("missing plugin", f"WATCH_CEVIZ_AUTH_TOKEN={secret} WATCH_CEVIZ_ROUTER=pusula",
-             "WARN  WATCH_CEVIZ_ROUTER=pusula is set, but no such router plugin is installed"),
+            ("missing plugin", f"WATCH_CEVIZ_AUTH_TOKEN={secret} WATCH_CEVIZ_ROUTER=not-an-installed-router",
+             "WARN  WATCH_CEVIZ_ROUTER=not-an-installed-router is set, but no such router plugin is installed"),
             ("hostile name", f"WATCH_CEVIZ_AUTH_TOKEN={secret} WATCH_CEVIZ_ROUTER=$(touch${{IFS}}pwned)",
              "WATCH_CEVIZ_ROUTER=(invalid name) is set"),
         ):

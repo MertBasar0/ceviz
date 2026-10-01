@@ -29,7 +29,7 @@ from urllib.request import Request, urlopen
 
 SERVICE = "watch-ceviz-backend.service"
 REPOSITORY = "https://github.com/MertBasar0/ceviz.git"
-DEFAULT_RELEASE = "ceviz-helper-v2026.10.1-beta.1"
+DEFAULT_RELEASE = "ceviz-helper-v2026.10.1-beta.2"
 LAUNCHER_HEADER = b"# Ceviz managed release launcher; use deploy/update.py, not git reset.\n"
 TRANSIENT_ENV = {"INVOCATION_ID", "JOURNAL_STREAM", "SYSTEMD_EXEC_PID", "NOTIFY_SOCKET", "LISTEN_PID", "WATCHDOG_PID"}
 

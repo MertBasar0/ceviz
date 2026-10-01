@@ -1,5 +1,5 @@
 {
-  "release": "ceviz-helper-v2026.10.1-beta.1",
+  "release": "ceviz-helper-v2026.10.1-beta.2",
   "compatible_app_version": "2026.6.5",
   "compatible_app_build": "1789005793",
   "capabilities": ["continuation_v1", "suggestion_approval_v1", "conversations_v1"]

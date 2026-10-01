@@ -4,9 +4,9 @@ A fresh installation and an update to a working installation are different
 operations. Run these commands on the OpenClaw machine as the user who runs
 Ceviz. Do not run the updater with `sudo`.
 
-This guide targets **ceviz-helper-v2026.10.1-beta.1**, matching the existing
+This guide targets **ceviz-helper-v2026.10.1-beta.2**, matching the existing
 TestFlight app **2026.6.5 (1789005793)**. See the
-[helper release notes](../docs/release-notes-helper-2026.10.1-beta.1.md) for
+[helper release notes](../docs/release-notes-helper-2026.10.1-beta.2.md) for
 validation coverage and limitations.
 
 ## Fresh installation
@@ -21,7 +21,7 @@ separate from spaces in the shell's `PATH`, which the installer quotes when
 passing it to the service.
 
 ```bash
-git clone --branch ceviz-helper-v2026.10.1-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
+git clone --branch ceviz-helper-v2026.10.1-beta.2 --single-branch https://github.com/MertBasar0/ceviz.git
 cd ceviz
 bash deploy/install.sh
 ```
@@ -56,7 +56,7 @@ and run its read-only check:
 CEVIZ_INSTALL_DIR="/absolute/path/to/ceviz"
 CEVIZ_UPDATE_DIR="$(mktemp -d)"
 curl --fail --location --proto '=https' --tlsv1.2 \
-  'https://raw.githubusercontent.com/MertBasar0/ceviz/ceviz-helper-v2026.10.1-beta.1/deploy/update.py' \
+  'https://raw.githubusercontent.com/MertBasar0/ceviz/ceviz-helper-v2026.10.1-beta.2/deploy/update.py' \
   --output "$CEVIZ_UPDATE_DIR/update.py" &&
 python3 "$CEVIZ_UPDATE_DIR/update.py" --install-dir "$CEVIZ_INSTALL_DIR" --check
 ```
@@ -78,7 +78,7 @@ read -r -p 'All Ceviz clients are closed and no commands will be sent until main
 if [ "$CEVIZ_CONFIRM" = "UPDATE" ]; then
   python3 "$CEVIZ_UPDATE_DIR/update.py" \
     --install-dir "$CEVIZ_INSTALL_DIR" \
-    --revision ceviz-helper-v2026.10.1-beta.1 \
+    --revision ceviz-helper-v2026.10.1-beta.2 \
     --yes-maintenance
 fi
 ```
@@ -186,7 +186,7 @@ sets it.
 ## WSL2 + Windows connection note
 
 The Windows lifecycle repair below is a **repair candidate**, not yet included
-in the `ceviz-helper-v2026.10.1-beta.1` download above. Use a reviewed repair
+in the `ceviz-helper-v2026.10.1-beta.2` download above. Use a reviewed repair
 source folder supplied for your installation; do not assume the old tag has
 these scripts or rerun its installer to repair an existing setup.
 

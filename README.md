@@ -47,11 +47,11 @@ OpenClaw is installed. If Ceviz is already installed, use the update section
 below; do not reinstall over a working service.
 
 These commands use the versioned helper release
-`ceviz-helper-v2026.10.1-beta.1`, matching the existing TestFlight app
+`ceviz-helper-v2026.10.1-beta.2`, matching the existing TestFlight app
 **2026.6.5 (1789005793)**.
 
 ```bash
-git clone --branch ceviz-helper-v2026.10.1-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
+git clone --branch ceviz-helper-v2026.10.1-beta.2 --single-branch https://github.com/MertBasar0/ceviz.git
 cd ceviz
 bash deploy/install.sh
 ```
@@ -102,7 +102,7 @@ or removes delivery guards.
 
 This helper release accompanies the existing external TestFlight app
 **2026.6.5 (1789005793)**; updating the helper does not create a new phone/Watch
-build. See [helper release notes](docs/release-notes-helper-2026.10.1-beta.1.md).
+build. See [helper release notes](docs/release-notes-helper-2026.10.1-beta.2.md).
 
 ## Choose a connection
 

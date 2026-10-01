@@ -16,6 +16,7 @@ import logging
 logger = logging.getLogger("watch_ceviz.openclaw_client")
 
 from job_outcome import normalize_job_outcome
+from router_plugin import RouterHost
 
 REDACTED = "[redacted]"
 # Watch and phone text crosses the push relay and is stored in jobs.json (a gateway token
@@ -93,6 +94,8 @@ class OpenClawClient:
             or (Path(tempfile.gettempdir()) / "watch-ceviz-openclaw")
         )
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        # Off unless the operator sets WATCH_CEVIZ_ROUTER to an installed router plugin.
+        self.router = RouterHost(agent=self.agent)
 
     @staticmethod
     def _assert_source_runtime_ready() -> None:
@@ -142,7 +145,19 @@ class OpenClawClient:
             "--message",
             prompt,
         ]
-        # No --model or --thinking: the agent's own model and its OpenClaw fallback chain decide.
+        # Without an enabled router plugin there is no --model or --thinking: the agent's own
+        # model and its OpenClaw fallback chain decide.
+        choice = self.router.choose(
+            (payload.get("transcript") or "").strip(),
+            continuation=(payload.get("_continuation_context") or "").strip(),
+            locale=str(payload.get("locale") or ""),
+        )
+        if choice is not None:
+            command.extend(choice.argv())
+            logger.info(
+                f"[router] {choice.router}: model={choice.model} thinking={choice.thinking} "
+                f"({choice.reason or 'no reason'}) {choice.latency_ms}ms"
+            )
 
         try:
             process = subprocess.Popen(  # noqa: S603

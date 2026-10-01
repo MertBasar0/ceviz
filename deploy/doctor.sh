@@ -163,6 +163,31 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
   fi
 fi
 
+# Optional model-routing plugin. Read only WATCH_CEVIZ_ROUTER from the service environment;
+# the rest of that environment (including the pairing token) is never printed.
+ROUTER=""
+if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+  read -r -a SERVICE_ENTRIES <<< "$(systemctl --user show -p Environment --value watch-ceviz-backend 2>/dev/null)"
+  for ENTRY in ${SERVICE_ENTRIES[@]+"${SERVICE_ENTRIES[@]}"}; do
+    ENTRY="${ENTRY#\"}"; ENTRY="${ENTRY%\"}"
+    case "$ENTRY" in WATCH_CEVIZ_ROUTER=*) ROUTER="${ENTRY#WATCH_CEVIZ_ROUTER=}" ;; esac
+  done
+  unset SERVICE_ENTRIES ENTRY
+fi
+ROUTER="${ROUTER:-${WATCH_CEVIZ_ROUTER:-}}"
+case "$ROUTER" in *[!A-Za-z0-9._-]*) ROUTER="(invalid name)" ;; esac
+if [ -z "$ROUTER" ]; then
+  printf 'INFO  Model routing is off: the OpenClaw agent model and its fallback chain decide\n'
+elif [ -x "$VENV_PY" ] && CEVIZ_ROUTER="$ROUTER" "$VENV_PY" -c '
+import os, sys
+from importlib.metadata import entry_points
+sys.exit(0 if list(entry_points(group="ceviz.routers", name=os.environ["CEVIZ_ROUTER"])) else 1)
+' >/dev/null 2>&1; then
+  pass "Router plugin \"$ROUTER\" is installed and enabled (WATCH_CEVIZ_ROUTER)"
+else
+  warn "WATCH_CEVIZ_ROUTER=$ROUTER is set, but no such router plugin is installed; commands run unpinned"
+fi
+
 printf '\nSummary: %d failure(s), %d warning(s).\n' "$FAILURES" "$WARNINGS"
 printf 'No credentials or command contents were printed.\n'
 

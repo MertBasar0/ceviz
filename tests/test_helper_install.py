@@ -179,6 +179,7 @@ exec ''' + shlex.quote(shutil.which("grep")) + ''' "$@"
 case "$*" in
   '--user show watch-ceviz-backend.service -p LoadState --value') printf '%s\\n' "$CEVIZ_TEST_LOAD_STATE" ;;
   '--user show-environment'|'--user is-active --quiet watch-ceviz-backend') exit 0 ;;
+  '--user show -p Environment --value watch-ceviz-backend') printf '%s\\n' "${CEVIZ_TEST_SERVICE_ENV:-}" ;;
   *) exit 97 ;;
 esac
 ''')
@@ -265,6 +266,26 @@ exit 89
         self.assertIn("Python 3.11 or newer", result.stderr)
         self.assert_no_install_artifacts()
 
+    def test_doctor_reports_router_plugin_from_service_environment_without_printing_it(self):
+        python = self.app / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.write_text("#!" + self.bash + "\nexec " + shlex.quote(sys.executable) + " \"$@\"\n")
+        python.chmod(0o700)
+        secret = "private-fixture-pairing-token"
+        for label, service_env, expected in (
+            ("off", f'HOME=/home/x "WATCH_CEVIZ_AUTH_TOKEN={secret}"', "INFO  Model routing is off"),
+            ("missing plugin", f"WATCH_CEVIZ_AUTH_TOKEN={secret} WATCH_CEVIZ_ROUTER=pusula",
+             "WARN  WATCH_CEVIZ_ROUTER=pusula is set, but no such router plugin is installed"),
+            ("hostile name", f"WATCH_CEVIZ_AUTH_TOKEN={secret} WATCH_CEVIZ_ROUTER=$(touch${{IFS}}pwned)",
+             "WATCH_CEVIZ_ROUTER=(invalid name) is set"),
+        ):
+            with self.subTest(case=label):
+                result = self.run_script(DOCTOR, "doctor.sh", {"CEVIZ_TEST_SERVICE_ENV": service_env})
+                output = result.stdout + result.stderr
+                self.assertIn(expected, output)
+                self.assertNotIn(secret, output)
+                self.assertFalse((self.app / "pwned").exists())
+
     def test_doctor_distinguishes_new_features_upgrade_requirement_and_auth_failure(self):
         token = self.app / ".auth-token"
         token.write_text("private-fixture-pairing-token")
@@ -329,6 +350,7 @@ exit 89
                             self.assertNotIn("needs an update for the new app features", output)
                 self.assertTrue(all(call in {
                     "systemctl --user show-environment", "systemctl --user is-active --quiet watch-ceviz-backend",
+                    "systemctl --user show -p Environment --value watch-ceviz-backend",
                     "tailscale status",
                 } for call in self.recorded_calls()))
                 self.assertFalse((self.home / ".config").exists())

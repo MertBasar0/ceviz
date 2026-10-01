@@ -179,6 +179,10 @@ do not reinstall over a working installation.
 The updater does not reselect these values or write them into your existing
 service.
 
+Model choice stays with OpenClaw. An optional [router plugin](../docs/router-plugins.md) can be
+installed separately and enabled with `WATCH_CEVIZ_ROUTER`; neither the installer nor the updater
+sets it.
+
 ## WSL2 + Windows connection note
 
 The Windows lifecycle repair below is a **repair candidate**, not yet included

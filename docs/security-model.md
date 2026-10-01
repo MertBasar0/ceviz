@@ -22,7 +22,10 @@ own instance.
 4. The backend transcribes audio with local Whisper by default. It sends audio
    to an external speech service only when the user explicitly configures one.
 5. The backend invokes the local OpenClaw CLI and keeps the recent job state on
-   that machine.
+   that machine. It does not choose a model: the OpenClaw agent's model and its
+   fallback chain decide, unless the operator installs and enables an optional
+   [router plugin](router-plugins.md). Such a plugin runs inside the backend and
+   sees the command text and recent job outcomes.
 6. The result returns to iPhone and Apple Watch. The Watch receives the concise
    outcome; the complete report remains available on iPhone.
 

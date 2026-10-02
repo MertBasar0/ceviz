@@ -2,6 +2,28 @@
 
 Son güncelleme: **2 Ekim 2026**
 
+## 2 Ekim — Beta 5 adayı 2026.6.5 (1790966589)
+
+- **İmzalı build:** kaynak `e167545`,
+  [run 37040464700](https://github.com/MertBasar0/ceviz/actions/runs/37040464700).
+  Sıkı (iç aday olmayan) doğrulamanın tamamı geçti; ilk denemedeki tek hata iPhone
+  arayüzünde **Earlier** dokunuşundan sonra eski mesajların 10 sn içinde
+  görünmemesiydi. Kod değişmeden yalnız o iş yeniden koşturuldu, geçti ve yükleme
+  aynı denemede yapıldı. Yükleme `distribute_external: false` ile.
+- **Apple durumu (salt-okunur sorgu):** **VALID**, **APP_STORE_ELIGIBLE**, iç
+  **Mert** grubu **IN_BETA_TESTING**, dış durum **READY_FOR_BETA_SUBMISSION**.
+  Dış **Beta** grubuna atama ve beta inceleme başvurusu bu kayıt anında yapılmadı.
+- **Mert'in iç testi (beyan, 2 Ekim):** sorun görmedi ve devam onayı verdi. Tek
+  gözlem: iki mesajda sonuç bildirimi geldiği halde saatteki İşler listesi işleri
+  hâlâ çalışıyor gösterdi; kayıt ekranında cevap özeti görünüyordu, liste bir
+  süre sonra yenilendi.
+- **Sonraki iş:** sonuç geldiği anda saatteki İşler listesinde ilgili işin durumu
+  güncellenmeli. Beta 5 notlarında bilinen sorun olarak yazıldı.
+- Sürüm notu: `docs/release-notes-2026.6.5-beta.5.md`. Uygulama değişiklikleri
+  önceki dış Beta 1789005793'ün kaynağı `c3404f1`'e göre 13 Eylül teslim
+  kurtarma çalışmasından ibaret; uyumluluk için yardımcı servis
+  `ceviz-helper-v2026.10.1-beta.2`.
+
 ## 2 Ekim — Watch simülatör kapıları kapandı (yalnız test değişikliği)
 
 - **Cihaz doğrulaması tek tek teyit edildi (Mert'in beyanı):** 1789855234'te dört

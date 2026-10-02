@@ -65,6 +65,28 @@ class WatchContainerIsolationTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
 
 
+class FinishBridgeTests(unittest.TestCase):
+    def test_installed_bridge_is_removed_from_the_phone_only(self):
+        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
+            run.return_value.stdout = json.dumps({capture.BRIDGE_ID: {}, "unrelated.app": {}})
+            capture.remove_bridge("sim-phone")
+        self.assertEqual([call.args for call in simctl.call_args_list], [
+            ("listapps", "sim-phone"), ("uninstall", "sim-phone", capture.BRIDGE_ID)])
+
+    def test_absent_bridge_leaves_other_apps_alone(self):
+        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
+            run.return_value.stdout = json.dumps({"unrelated.app": {}})
+            capture.remove_bridge("sim-phone")
+        self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
+
+    def test_inventory_failure_stops_before_the_finish_test(self):
+        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
+            run.side_effect = subprocess.CalledProcessError(1, ["plutil"])
+            with self.assertRaises(subprocess.CalledProcessError):
+                capture.remove_bridge("sim-phone")
+        self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
+
+
 class InternalCandidateTests(unittest.TestCase):
     def run_candidate(self, failure=None, runs=None):
         with tempfile.TemporaryDirectory() as temporary:
@@ -96,6 +118,7 @@ class InternalCandidateTests(unittest.TestCase):
                     patch.object(capture, "select_watch", side_effect=choose), \
                     patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
                     patch.object(capture, "WatchSimulatorPair") as owner, patch.object(capture, "reinstall_watch") as reinstall, \
+                    patch.object(capture, "remove_bridge") as remove_bridge, \
                     patch.object(capture, "capture_log_stream", return_value=nullcontext()) as collector, \
                     patch.object(capture.subprocess, "run", side_effect=run), \
                     patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}), \
@@ -108,6 +131,7 @@ class InternalCandidateTests(unittest.TestCase):
                              "short": RuntimeError, "cleanup": RuntimeError, "metadata": RuntimeError}.get(failure)
                 with self.assertRaises(exception) if exception else nullcontext():
                     capture.main(root, candidate_for_device_check=True)
+                self.bridge_removals = remove_bridge.call_count
                 owner.return_value.close.assert_called_once()
                 return json.loads((output / "context.json").read_text()), commands, selected, reinstall.call_count, collector.call_count
 
@@ -147,6 +171,7 @@ class InternalCandidateTests(unittest.TestCase):
         for scenario in ((49, "device-default", "finish"), (40, "larger-settings", "finish")):
             with self.subTest(scenario=scenario):
                 evidence, commands, _, _, collectors = self.run_candidate("metadata", [scenario])
+                self.assertEqual(self.bridge_removals, 1, "The finish case must run without the iPhone bridge")
                 self.assertEqual(collectors, 1)
                 self.assertEqual(evidence[0]["status"], "failed")
                 self.assertIn("Actual file metadata missing", evidence[0]["failure"])
@@ -362,6 +387,7 @@ class CaptureFailureDiagnosticsTests(unittest.TestCase):
                         patch.object(capture, "select_watch", return_value=choice), \
                         patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
                         patch.object(capture, "WatchSimulatorPair"), patch.object(capture, "reinstall_watch"), \
+                        patch.object(capture, "remove_bridge"), \
                         patch.object(capture, "capture_log_stream", return_value=nullcontext()), \
                         patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess([], code)), \
                         patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}) as diagnostics, \

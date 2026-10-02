@@ -14,6 +14,7 @@ from pathlib import Path
 from watch_launch_smoke import WatchSimulatorPair, choose_simulators, simctl
 
 WATCH_ID = "com.mertbasar.cevizwatch.watchkitapp"
+BRIDGE_ID = "com.mertbasar.cevizwatch"
 FINISH_TEST = "CevizWatchUITests/WatchCaptureUITests/testManualAndAutomaticFinishRetainRecording"
 LARGER_TEST = "CevizWatchUITests/WatchCaptureUITests/testLargerTextReadyAndDiscardBothLanguages"
 DIAGNOSTIC_PROCESSES = ("CevizWatchApp", "CevizWatchUITests-Runner", "testmanagerd", "Carousel", "backboardd", "runningboardd")
@@ -130,6 +131,18 @@ def reinstall_watch(watch_udid, watch_app):
         simctl("uninstall", watch_udid, WATCH_ID)
     simctl("install", watch_udid, str(watch_app))
     simctl("privacy", watch_udid, "grant", "microphone", WATCH_ID)
+
+
+def remove_bridge(phone_udid):
+    # The finish test proves the offline queue. A bridge woken without a backend makes
+    # WatchConnectivity reachable but never answers, so the Watch correctly reports an
+    # unconfirmed delivery and disables capture for the 30s attempt (run 36955287079).
+    # Delivery through a real iPhone belongs to the device check.
+    apps = simctl("listapps", phone_udid, capture=True)
+    converted = subprocess.run(["plutil", "-convert", "json", "-o", "-", "-"],
+                               input=apps, text=True, capture_output=True, check=True)
+    if BRIDGE_ID in json.loads(converted.stdout):
+        simctl("uninstall", phone_udid, BRIDGE_ID)
 
 
 @contextmanager
@@ -252,7 +265,11 @@ def main(project, baseline=False, *, candidate_for_device_check=False):
                 simctl("pair", watch["udid"], phone["udid"])
             try:
                 active_pair.use(phone, watch)
-                simctl("install", phone["udid"], str(bridge))
+                if mode == "finish":
+                    remove_bridge(phone["udid"])
+                    record["iphone_counterpart"] = "absent: offline queue path; real delivery is a device check"
+                else:
+                    simctl("install", phone["udid"], str(bridge))
                 common = ["-project", "CevizWatch.xcodeproj", "-scheme", "CevizWatchUI", "-configuration", "Release",
                           "-destination", f"platform=watchOS Simulator,id={watch['udid']}", "-derivedDataPath", str(derived),
                           "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-"]

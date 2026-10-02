@@ -293,6 +293,7 @@ def main(project, baseline=False, *, candidate_for_device_check=False):
                     logs = log_path.read_text(errors="replace")
                     print(logs[-7000:], flush=True)
                     record["exit_code"] = process.returncode
+                    record["start_tap_retries"] = logs.count("Added attachment named 'start-tap-not-delivered'")
                     if mode == "finish":
                         # Shows whether anything booted the phone again during the test.
                         record["iphone_state_after_test"] = active_pair.device_states().get(phone["udid"])

@@ -346,6 +346,18 @@ final class WatchCaptureUITests: XCTestCase {
         }
     }
 
+    /// A simulator tap is occasionally never delivered: the app logs no primary_action and stays
+    /// idle (run 37029777332, and the 13 September second start). Tap once more only while no
+    /// capture has begun (the discard control appears as soon as one does), so a tap the app
+    /// received is never repeated. Each retry is kept as evidence and counted by the runner.
+    private func tapToStart(_ start: XCUIElement, in app: XCUIApplication, until started: XCUIElement) {
+        start.tap()
+        guard !started.waitForExistence(timeout: 4) else { return }
+        guard !app.buttons["capture.cancel"].exists, start.isEnabled else { return }
+        capture("start-tap-not-delivered", in: app)
+        start.tap()
+    }
+
     private func checkRecordAndDiscardBothLanguages() {
         for language in ["en", "tr"] {
             let app = launch(language)
@@ -353,8 +365,8 @@ final class WatchCaptureUITests: XCTestCase {
             let start = app.buttons["capture.primary"]
             XCTAssertTrue(start.waitForExistence(timeout: 15))
             let viewport = app.frame
-            start.tap()
             let countdown = app.staticTexts["capture.countdown"]
+            tapToStart(start, in: app, until: countdown)
             let cancel = app.buttons["capture.cancel"]
             guard countdown.waitForExistence(timeout: 8) else {
                 capture("missing-visible-element", in: app)
@@ -427,8 +439,8 @@ final class WatchCaptureUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "Manual capture must start in the foreground app")
         assertVisible(start, in: app, "Manual capture microphone must be fully reachable")
         XCTAssertTrue(start.isEnabled, "Manual capture microphone must be enabled before tapping")
-        start.tap()
         let countdown = app.staticTexts["capture.countdown"]
+        tapToStart(start, in: app, until: countdown)
         assertVisible(countdown, in: app, "Manual capture countdown must be readable")
         capture("manual-recording")
         // Read the live countdown in the block without making it XCTest's
@@ -451,8 +463,8 @@ final class WatchCaptureUITests: XCTestCase {
         assertVisible(start, in: app, "Automatic capture microphone must be fully reachable")
         XCTAssertTrue(start.isEnabled, "Automatic capture microphone must be enabled before tapping")
         let began = ProcessInfo.processInfo.systemUptime
-        start.tap()
         let recording = app.staticTexts["capture.recording"]
+        tapToStart(start, in: app, until: recording)
         XCTAssertTrue(recording.waitForExistence(timeout: 8))
         capture("automatic-recording")
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: recording)

@@ -174,6 +174,7 @@ class InternalCandidateTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 evidence, commands, _, _, collectors = self.run_candidate("metadata", [scenario])
                 self.assertEqual(self.phone_stops, 1, "The finish case must run with the paired iPhone shut down")
+                self.assertEqual(evidence[0]["start_tap_retries"], 0)
                 self.assertEqual(collectors, 1)
                 self.assertEqual(evidence[0]["status"], "failed")
                 self.assertIn("Actual file metadata missing", evidence[0]["failure"])

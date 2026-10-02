@@ -2,14 +2,57 @@
 
 Son güncelleme: **2 Ekim 2026**
 
+## 2 Ekim — Watch simülatör kapıları kapandı (yalnız test değişikliği)
+
+- **Cihaz doğrulaması tek tek teyit edildi (Mert'in beyanı):** 1789855234'te dört
+  madde sorunsuz: uygulamayı yeniden açmadan ikinci kayıt, 15 sn otomatik bitiş,
+  kadrandan (komplikasyon) kayıt ekranının açılması, internet kesintisi sonrası
+  kurtarma. Windows yeniden başlatması sonrası otomatik başlama bu dörde dahil
+  değil; o yol hâlâ onarım adayı.
+- **URL 115 bir simülatör sınırı:** watchOS simülatörü özel URL şemasını üçüncü
+  taraf uygulamaya hiçbir yoldan yönlendiremiyor. `simctl openurl` 115 veriyor;
+  `XCUIApplication.open(URL)` de uygulamayı bağlantıyla açamıyor
+  ([run 36950151713](https://github.com/MertBasar0/ceviz/actions/runs/36950151713)).
+  Açılış testi artık bağlantının uçlarını doğruluyor: komplikasyonun `widgetURL`'i
+  tam olarak `ceviz-watch://capture`, `tests/swift/WatchResultTests.swift` bu
+  bağlantıyı `WatchCaptureRoute` üzerinden yönlendiriyor ve kurulu `Info.plist`
+  `ceviz-watch` Editor kaydını taşıyor. 115 yalnız bu sözleşme doğrulanmışsa kabul
+  ediliyor; başka hatalar, zaman aşımı ve bozuk sözleşme yine testi düşürüyor.
+  Kadran dokunuşunun kendisi cihaz kontrolü (yukarıda teyit edildi). `98d789a`.
+- **İkinci kayıt / bitirme testi:** kök neden, eşlenmiş iPhone simülatörünün
+  erişilebilirliğinin koşudan koşuya değişmesi. Köprü arka uçsuz uyandığında
+  WatchConnectivity erişilebilir görünüyor ama hiç cevap vermiyor; saat 30 sn
+  "Sending request…" gösterip bu sürede kaydı kapatıyor, sonra doğru şekilde
+  "Delivery is unconfirmed" diyor
+  ([run 36955287079](https://github.com/MertBasar0/ceviz/actions/runs/36955287079)).
+  13 Eylül'de kaybolan ikinci dokunuş da büyük olasılıkla bu pencereye denk geldi.
+  Bitirme senaryosu artık iPhone simülatöründen köprüyü kaldırıp çevrimdışı kuyruk
+  yolunu deterministik olarak sınıyor; diğer senaryolar köprüyü kurmaya devam
+  ediyor. Gerçek iPhone üzerinden iletim cihaz kontrolü. Test katılığı değişmedi;
+  düzeltmeden önceki deneylerde bu test normal sırada 5/5 geçmişti
+  ([36950151713](https://github.com/MertBasar0/ceviz/actions/runs/36950151713),
+  [36952395036](https://github.com/MertBasar0/ceviz/actions/runs/36952395036)). `650004f`.
+- **Kanıt:** sıkı (iç aday olmayan) `validation_only` koşusu
+  [36958383034](https://github.com/MertBasar0/ceviz/actions/runs/36958383034)
+  başarılı: Watch açılışı ve URL sözleşmesi, tüm kayıt senaryoları (iki kayıtlı
+  bitirme dahil) ve iPhone konuşma arayüzü. İlk denemedeki tek hata, iPhone arayüz
+  testinde simülatörün uygulamayı zamanında açamamasıydı ("Timed out attempting to
+  launch app"); yalnız o iş yeniden koşturuldu ve geçti.
+- **Uygulama kodu değişmedi:** değişiklik yalnız `tests/` altındaki dört dosyada.
+  iPhone/Watch uygulama kodu `d8d5372`'den beri aynı olduğu için 1789855234'teki
+  cihaz doğrulaması bu kaynağa da geçerli.
+- **Sırada:** Mert'in onayıyla dış dağıtıma uygun yeni build ve TestFlight
+  yüklemesi, Mert'in kısa iç testi, ardından ayrı onaylarla "Beta" grubuna dağıtım,
+  Apple beta incelemesi ve tag/release.
+
 ## 2 Ekim — ana dal güncel yardımcı sürüme taşındı
 
 - **Cihaz doğrulaması (Mert'in beyanı):** Mert, kişisel iç TestFlight build'i
   **2026.6.5 (1789855234)** iPhone ve Watch'una kurup test ettiğini ve sorun
   görmediğini bildirdi. Tek tek kapı sonuçları (ikinci kayıt/15 sn otomatik bitiş,
   kadrandan açılış, ağ kesintisi sonrası kurtarma, Windows yeniden başlatma)
-  ayrıca kayda geçmedi. Watch simülatöründeki URL **115** sınırı otomatik testte
-  hâlâ açık.
+  ayrıca kayda geçmedi; ilk dördü sonradan teyit edildi (üstteki bölüm). Watch
+  simülatöründeki URL **115** sınırı o an otomatik testte açıktı.
 - Bu build `d8d5372` kaynağından derlendi. O commit'ten bugüne iPhone/Watch
   uygulama kodu değişmedi; sonraki commit'ler yalnız yardımcı servise dokunuyor.
 - Mert'in onayıyla `main`, `codex/phone-conversations` ucuna

@@ -12,7 +12,14 @@ Son güncelleme: **2 Ekim 2026**
   **2 Ekim 22:32 Türkiye saati** civarı; Apple'ın `submittedDate` alanı boş.
   Açık bağlantı değişmedi: https://testflight.apple.com/join/nEdn2Np2. Test
   kullanıcıları, grup ayarları ve App Store metadata'sı değiştirilmedi; manuel
-  bildirim gönderilmedi. Tag/GitHub release bu kayıt anında yapılmadı.
+  bildirim gönderilmedi.
+- **Yayın:** Mert'in onayıyla
+  [`ceviz-watch-v2026.6.5-beta.5`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.5)
+  ön sürümü `018e555` üzerine yayımlandı; gövde Beta 5 sürüm notu. Build
+  `e167545`'ten; aradaki iki commit yalnız belge. Geçici dallar
+  (`exp/watch-simulator-gates`, `fix/watch-capture-link-gate`,
+  `fix/watch-finish-offline-phone`) main'e alındıktan sonra silindi; deney dalı
+  zaten birleştirilmeyecekti.
 - Önceki dış Beta **1789005793** grupta kalıyor; test edenlere yeni build
   TestFlight'ın otomatik bildirimiyle gidiyor.
 

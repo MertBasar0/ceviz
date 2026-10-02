@@ -18,27 +18,48 @@ Son güncelleme: **2 Ekim 2026**
   bağlantıyı `WatchCaptureRoute` üzerinden yönlendiriyor ve kurulu `Info.plist`
   `ceviz-watch` Editor kaydını taşıyor. 115 yalnız bu sözleşme doğrulanmışsa kabul
   ediliyor; başka hatalar, zaman aşımı ve bozuk sözleşme yine testi düşürüyor.
-  Kadran dokunuşunun kendisi cihaz kontrolü (yukarıda teyit edildi). `98d789a`.
-- **İkinci kayıt / bitirme testi:** kök neden, eşlenmiş iPhone simülatörünün
-  erişilebilirliğinin koşudan koşuya değişmesi. Köprü arka uçsuz uyandığında
+  Kadran dokunuşunun kendisi cihaz kontrolü (yukarıda teyit edildi). `98d789a`;
+  bu kontrol 36958383034, 37025231126, 37029777332 ve 37035076807 koşularında geçti.
+- **Bitirme testinde iletim belirsizliği:** eşlenmiş iPhone simülatörünün
+  erişilebilirliği koşudan koşuya değişiyordu. Köprü arka uçsuz uyandığında
   WatchConnectivity erişilebilir görünüyor ama hiç cevap vermiyor; saat 30 sn
   "Sending request…" gösterip bu sürede kaydı kapatıyor, sonra doğru şekilde
   "Delivery is unconfirmed" diyor
   ([run 36955287079](https://github.com/MertBasar0/ceviz/actions/runs/36955287079)).
-  13 Eylül'de kaybolan ikinci dokunuş da büyük olasılıkla bu pencereye denk geldi.
-  Bitirme senaryosu artık iPhone simülatöründen köprüyü kaldırıp çevrimdışı kuyruk
-  yolunu deterministik olarak sınıyor; diğer senaryolar köprüyü kurmaya devam
-  ediyor. Gerçek iPhone üzerinden iletim cihaz kontrolü. Test katılığı değişmedi;
-  düzeltmeden önceki deneylerde bu test normal sırada 5/5 geçmişti
-  ([36950151713](https://github.com/MertBasar0/ceviz/actions/runs/36950151713),
-  [36952395036](https://github.com/MertBasar0/ceviz/actions/runs/36952395036)). `650004f`.
+  - İlk düzeltme (`650004f`) köprüyü iPhone simülatöründen kaldırıyordu. Watch
+    uygulaması bağımlı olduğu için (`WKRunsIndependently = false`) bu, saat
+    uygulamasının mikrofon iznini zaman zaman sıfırladı; ilk dokunuş sistem izin
+    penceresinde kaldı ve yükleme koşusu düştü, hiçbir şey yüklenmedi
+    ([run 37025231126](https://github.com/MertBasar0/ceviz/actions/runs/37025231126)).
+    Bu commit `7dc4f73` ile main'e girmişti.
+  - Geçerli düzeltme (`7d60afe`): köprü kurulu kalıyor; bitirme senaryosu saat
+    uygulaması kurulup izin verildikten sonra eşlenmiş iPhone'u kapatıyor (yalnız
+    bu koşunun açtığı telefonu). Telefon kapalıyken çevrimdışı kuyruk yolu
+    deterministik; uygulamalara ve izinlere dokunulmuyor. Telefonun test boyunca
+    kapalı kaldığı kayda geçiyor. Gerçek iPhone üzerinden iletim cihaz kontrolü.
+- **Ulaşmayan simülatör dokunuşu:** telefon kapalıyken bitirme testi geçti, ama
+  49 mm kayıt-sil senaryosunda başlatma dokunuşu uygulamaya hiç ulaşmadı; ekran
+  boştaki hazır durumda kaldı ve iletim yoktu
+  ([run 37029777332](https://github.com/MertBasar0/ceviz/actions/runs/37029777332)).
+  13 Eylül'deki kaybolan ikinci dokunuş da aynı türdendi: ekranda kuyruğa alınmış
+  istek vardı ve uygulama `primary_action` kaydetmemişti. Önceki "gönderim
+  penceresine denk geldi" açıklaması yanlıştı. `6117c0c`: üç başlatma dokunuşu
+  ortak bir yardımcıdan geçiyor. 4 sn sonra kayıt başlamamışsa ve hiçbir kayıt
+  girişimi yoksa (girişim başlar başlamaz görünen silme düğmesi yoksa) bir kez
+  daha dokunuyor; uygulamanın aldığı bir dokunuş asla tekrarlanmıyor. Her tekrar
+  `start-tap-not-delivered` ekiyle saklanıyor ve senaryo başına sayısı
+  `start_tap_retries` olarak kayda geçiyor. Kontrol artık "tek dokunuş kaydı
+  başlatır" değil, "ulaşmayan bir dokunuş bir kez tekrarlanır" diyor; ikinci
+  kaydın cihazda çalıştığı yukarıda teyit edildi.
 - **Kanıt:** sıkı (iç aday olmayan) `validation_only` koşusu
+  [37035076807](https://github.com/MertBasar0/ceviz/actions/runs/37035076807)
+  başarılı: Watch açılışı ve URL sözleşmesi, beş kayıt senaryosunun hepsi (iki
+  kayıtlı bitirme dahil) ve iPhone konuşma arayüzü. Bitirme boyunca telefon
+  `Shutdown`; 40 mm kısa senaryoda bir dokunuş tekrarı gerekti (ekran boştaki hazır
+  durumdaydı, silme düğmesi yoktu), diğer senaryolarda sıfır. Daha önceki
   [36958383034](https://github.com/MertBasar0/ceviz/actions/runs/36958383034)
-  başarılı: Watch açılışı ve URL sözleşmesi, tüm kayıt senaryoları (iki kayıtlı
-  bitirme dahil) ve iPhone konuşma arayüzü. İlk denemedeki tek hata, iPhone arayüz
-  testinde simülatörün uygulamayı zamanında açamamasıydı ("Timed out attempting to
-  launch app"); yalnız o iş yeniden koşturuldu ve geçti.
-- **Uygulama kodu değişmedi:** değişiklik yalnız `tests/` altındaki dört dosyada.
+  köprü kaldırma yaklaşımıyla geçmişti; o yaklaşım yukarıdaki nedenle bırakıldı.
+- **Uygulama kodu değişmedi:** değişiklik yalnız `tests/` altındaki dosyalarda.
   iPhone/Watch uygulama kodu `d8d5372`'den beri aynı olduğu için 1789855234'teki
   cihaz doğrulaması bu kaynağa da geçerli.
 - **Sırada:** Mert'in onayıyla dış dağıtıma uygun yeni build ve TestFlight

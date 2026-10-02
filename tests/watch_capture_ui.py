@@ -14,7 +14,6 @@ from pathlib import Path
 from watch_launch_smoke import WatchSimulatorPair, choose_simulators, simctl
 
 WATCH_ID = "com.mertbasar.cevizwatch.watchkitapp"
-BRIDGE_ID = "com.mertbasar.cevizwatch"
 FINISH_TEST = "CevizWatchUITests/WatchCaptureUITests/testManualAndAutomaticFinishRetainRecording"
 LARGER_TEST = "CevizWatchUITests/WatchCaptureUITests/testLargerTextReadyAndDiscardBothLanguages"
 DIAGNOSTIC_PROCESSES = ("CevizWatchApp", "CevizWatchUITests-Runner", "testmanagerd", "Carousel", "backboardd", "runningboardd")
@@ -133,16 +132,17 @@ def reinstall_watch(watch_udid, watch_app):
     simctl("privacy", watch_udid, "grant", "microphone", WATCH_ID)
 
 
-def remove_bridge(phone_udid):
-    # The finish test proves the offline queue. A bridge woken without a backend makes
-    # WatchConnectivity reachable but never answers, so the Watch correctly reports an
-    # unconfirmed delivery and disables capture for the 30s attempt (run 36955287079).
-    # Delivery through a real iPhone belongs to the device check.
-    apps = simctl("listapps", phone_udid, capture=True)
-    converted = subprocess.run(["plutil", "-convert", "json", "-o", "-", "-"],
-                               input=apps, text=True, capture_output=True, check=True)
-    if BRIDGE_ID in json.loads(converted.stdout):
-        simctl("uninstall", phone_udid, BRIDGE_ID)
+def stop_owned_phone(active_pair, phone_udid):
+    # The finish test proves the offline queue. A booted phone can wake the bridge without a
+    # backend: WatchConnectivity then looks reachable but never answers, so the Watch reports
+    # an unconfirmed delivery after its 30s attempt (run 36955287079). Removing the bridge
+    # instead orphaned the dependent Watch app and reset its microphone grant (run
+    # 37025231126). Delivery through a real iPhone belongs to the device check.
+    if phone_udid not in active_pair.started:
+        raise RuntimeError("The finish test needs the paired iPhone shut down, but this runner did not boot it")
+    subprocess.run(["xcrun", "simctl", "shutdown", phone_udid], check=True, timeout=60)
+    if active_pair.device_states().get(phone_udid) != "Shutdown":
+        raise RuntimeError(f"Simulator shutdown was not confirmed: {phone_udid}")
 
 
 @contextmanager
@@ -265,11 +265,7 @@ def main(project, baseline=False, *, candidate_for_device_check=False):
                 simctl("pair", watch["udid"], phone["udid"])
             try:
                 active_pair.use(phone, watch)
-                if mode == "finish":
-                    remove_bridge(phone["udid"])
-                    record["iphone_counterpart"] = "absent: offline queue path; real delivery is a device check"
-                else:
-                    simctl("install", phone["udid"], str(bridge))
+                simctl("install", phone["udid"], str(bridge))
                 common = ["-project", "CevizWatch.xcodeproj", "-scheme", "CevizWatchUI", "-configuration", "Release",
                           "-destination", f"platform=watchOS Simulator,id={watch['udid']}", "-derivedDataPath", str(derived),
                           "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-"]
@@ -281,6 +277,9 @@ def main(project, baseline=False, *, candidate_for_device_check=False):
                         raise RuntimeError(f"The selected project did not produce its Watch test app: {watch_app}")
                     built = True
                 reinstall_watch(watch["udid"], watch_app)
+                if mode == "finish":
+                    stop_owned_phone(active_pair, phone["udid"])
+                    record["iphone_counterpart"] = "paired iPhone shut down: offline queue path; real delivery is a device check"
                 # XCTest operates real Settings and verifies the application's text.
                 # The test runner's own category is diagnostic, not live system proof.
                 record["content_size_evidence"] = ("Actual Settings value and Ceviz text geometry before/after/restore" if size == "larger-settings"
@@ -294,6 +293,9 @@ def main(project, baseline=False, *, candidate_for_device_check=False):
                     logs = log_path.read_text(errors="replace")
                     print(logs[-7000:], flush=True)
                     record["exit_code"] = process.returncode
+                    if mode == "finish":
+                        # Shows whether anything booted the phone again during the test.
+                        record["iphone_state_after_test"] = active_pair.device_states().get(phone["udid"])
                     if result.exists():
                         subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(result),
                                         "--output-path", str(output / (name + "-attachments"))], check=True)

@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from contextlib import nullcontext
 
 import watch_capture_ui as capture
@@ -65,26 +65,28 @@ class WatchContainerIsolationTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
 
 
-class FinishBridgeTests(unittest.TestCase):
-    def test_installed_bridge_is_removed_from_the_phone_only(self):
-        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
-            run.return_value.stdout = json.dumps({capture.BRIDGE_ID: {}, "unrelated.app": {}})
-            capture.remove_bridge("sim-phone")
-        self.assertEqual([call.args for call in simctl.call_args_list], [
-            ("listapps", "sim-phone"), ("uninstall", "sim-phone", capture.BRIDGE_ID)])
+class FinishPhoneTests(unittest.TestCase):
+    @staticmethod
+    def pair(started, state_after="Shutdown"):
+        owner = MagicMock()
+        owner.started = started
+        owner.device_states.return_value = {"sim-phone": state_after}
+        return owner
 
-    def test_absent_bridge_leaves_other_apps_alone(self):
-        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
-            run.return_value.stdout = json.dumps({"unrelated.app": {}})
-            capture.remove_bridge("sim-phone")
-        self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
+    def test_owned_phone_is_shut_down_and_confirmed(self):
+        owner = self.pair(["sim-phone", "sim-watch"])
+        with patch.object(capture.subprocess, "run") as run:
+            capture.stop_owned_phone(owner, "sim-phone")
+        run.assert_called_once_with(["xcrun", "simctl", "shutdown", "sim-phone"], check=True, timeout=60)
 
-    def test_inventory_failure_stops_before_the_finish_test(self):
-        with patch.object(capture, "simctl") as simctl, patch.object(capture.subprocess, "run") as run:
-            run.side_effect = subprocess.CalledProcessError(1, ["plutil"])
-            with self.assertRaises(subprocess.CalledProcessError):
-                capture.remove_bridge("sim-phone")
-        self.assertEqual([call.args[0] for call in simctl.call_args_list], ["listapps"])
+    def test_phone_this_runner_did_not_boot_is_never_stopped(self):
+        with patch.object(capture.subprocess, "run") as run, self.assertRaises(RuntimeError):
+            capture.stop_owned_phone(self.pair(["sim-watch"]), "sim-phone")
+        run.assert_not_called()
+
+    def test_unconfirmed_shutdown_stops_before_the_finish_test(self):
+        with patch.object(capture.subprocess, "run"), self.assertRaises(RuntimeError):
+            capture.stop_owned_phone(self.pair(["sim-phone"], state_after="Booted"), "sim-phone")
 
 
 class InternalCandidateTests(unittest.TestCase):
@@ -117,8 +119,8 @@ class InternalCandidateTests(unittest.TestCase):
                     patch.object(capture, "capture_runs", wraps=capture.capture_runs) as plan, \
                     patch.object(capture, "select_watch", side_effect=choose), \
                     patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
-                    patch.object(capture, "WatchSimulatorPair") as owner, patch.object(capture, "reinstall_watch") as reinstall, \
-                    patch.object(capture, "remove_bridge") as remove_bridge, \
+                    patch.object(capture, "WatchSimulatorPair", **{"return_value.device_states.return_value": {}}) as owner, patch.object(capture, "reinstall_watch") as reinstall, \
+                    patch.object(capture, "stop_owned_phone") as stop_phone, \
                     patch.object(capture, "capture_log_stream", return_value=nullcontext()) as collector, \
                     patch.object(capture.subprocess, "run", side_effect=run), \
                     patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}), \
@@ -131,7 +133,7 @@ class InternalCandidateTests(unittest.TestCase):
                              "short": RuntimeError, "cleanup": RuntimeError, "metadata": RuntimeError}.get(failure)
                 with self.assertRaises(exception) if exception else nullcontext():
                     capture.main(root, candidate_for_device_check=True)
-                self.bridge_removals = remove_bridge.call_count
+                self.phone_stops = stop_phone.call_count
                 owner.return_value.close.assert_called_once()
                 return json.loads((output / "context.json").read_text()), commands, selected, reinstall.call_count, collector.call_count
 
@@ -171,7 +173,7 @@ class InternalCandidateTests(unittest.TestCase):
         for scenario in ((49, "device-default", "finish"), (40, "larger-settings", "finish")):
             with self.subTest(scenario=scenario):
                 evidence, commands, _, _, collectors = self.run_candidate("metadata", [scenario])
-                self.assertEqual(self.bridge_removals, 1, "The finish case must run without the iPhone bridge")
+                self.assertEqual(self.phone_stops, 1, "The finish case must run with the paired iPhone shut down")
                 self.assertEqual(collectors, 1)
                 self.assertEqual(evidence[0]["status"], "failed")
                 self.assertIn("Actual file metadata missing", evidence[0]["failure"])
@@ -386,8 +388,8 @@ class CaptureFailureDiagnosticsTests(unittest.TestCase):
                         patch.object(capture, "capture_runs", return_value=[(40, "device-default", mode)]), \
                         patch.object(capture, "select_watch", return_value=choice), \
                         patch.object(capture, "simctl", return_value=json.dumps({"devices": {}, "pairs": {}})), \
-                        patch.object(capture, "WatchSimulatorPair"), patch.object(capture, "reinstall_watch"), \
-                        patch.object(capture, "remove_bridge"), \
+                        patch.object(capture, "WatchSimulatorPair", **{"return_value.device_states.return_value": {}}), patch.object(capture, "reinstall_watch"), \
+                        patch.object(capture, "stop_owned_phone"), \
                         patch.object(capture, "capture_log_stream", return_value=nullcontext()), \
                         patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess([], code)), \
                         patch.object(capture, "capture_failure_diagnostics", return_value={"status": "unavailable"}) as diagnostics, \

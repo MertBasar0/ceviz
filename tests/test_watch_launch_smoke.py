@@ -314,75 +314,100 @@ class LocalSignatureTests(unittest.TestCase):
             SMOKE.validate_local_signature_text("code object is not signed at all\n", "com.example.watch")
 
 
-class CandidateURLProbeTests(unittest.TestCase):
+class CaptureURLProbeTests(unittest.TestCase):
     @staticmethod
     def url_failure(code=115, domain="LSApplicationWorkspaceErrorDomain"):
-        import subprocess
         return subprocess.CalledProcessError(
             code, ["xcrun", "simctl", "openurl", "fixture-watch", "ceviz-watch://capture"],
             stderr=f"An error was encountered processing the command (domain={domain}, code={code}):\n")
 
-    def probe(self, error, *, candidate=False):
-        context = SMOKE.initial_context(candidate)
+    def probe(self, error, *, contract=True):
+        context = SMOKE.initial_context()
+        if contract:
+            context["capture_link_contract"] = {"status": "verified"}
         self.context = context
         with patch.object(SMOKE, "record_command", side_effect=error), \
-                patch.object(SMOKE, "collect_url_failure_diagnostics") as diagnostics:
+                patch.object(SMOKE, "collect_url_failure_diagnostics") as diagnostics, \
+                patch("builtins.print"):
             try:
-                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
-                                            candidate_for_device_check=candidate)
+                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch")
             finally:
                 diagnostics.assert_called_once()
         return context
 
-    def test_default_strict_known_115_is_fatal(self):
-        import subprocess
-        with self.assertRaises(subprocess.CalledProcessError):
-            self.probe(self.url_failure())
-        self.assertEqual(self.context["capture_url"]["status"], "failed")
-        self.assertNotIn("candidate_exception_applied", self.context["capture_url"])
+    def test_known_115_with_verified_contract_is_a_platform_limit(self):
+        context = self.probe(self.url_failure())
+        self.assertEqual(context["capture_url"]["status"], "platform_unsupported_in_simulator")
+        self.assertIn("status 115", context["capture_url"]["failure"])
+        self.assertEqual(context["widget_tap"]["status"], "device_validation_required")
 
-    def test_explicit_candidate_retains_known_115_as_unresolved(self):
-        with patch("builtins.print") as warning:
-            context = self.probe(self.url_failure(), candidate=True)
-        self.assertEqual(context["capture_url"]["status"], "failed")
-        self.assertTrue(context["capture_url"]["candidate_exception_applied"])
-        self.assertEqual(context["candidate_status"], "unresolved_widget_navigation_requires_device_check")
-        self.assertEqual(context["widget_tap"]["status"], "not_tested")
-        self.assertEqual(context["external_distribution"]["status"], "blocked_pending_device_validation")
-        self.assertIn("::warning::", warning.call_args.args[0])
+    def test_known_115_without_verified_contract_is_fatal(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.probe(self.url_failure(), contract=False)
+        self.assertEqual(self.context["capture_url"]["status"], "failed")
 
     def test_unknown_error_or_other_domain_115_remains_fatal(self):
-        import subprocess
         for error in (self.url_failure(code=1), self.url_failure(domain="UnknownErrorDomain"), RuntimeError("unknown")):
             with self.subTest(error=error), self.assertRaises((subprocess.CalledProcessError, RuntimeError)):
-                self.probe(error, candidate=True)
+                self.probe(error)
+            self.assertEqual(self.context["capture_url"]["status"], "failed")
 
-    def test_timeout_remains_fatal_in_candidate_mode(self):
-        import subprocess
+    def test_timeout_remains_fatal(self):
         with self.assertRaises(subprocess.TimeoutExpired):
-            self.probe(subprocess.TimeoutExpired(["xcrun", "simctl", "openurl"], 60), candidate=True)
+            self.probe(subprocess.TimeoutExpired(["xcrun", "simctl", "openurl"], 60))
 
     def test_successful_generic_injection_never_claims_widget_tap(self):
-        context = SMOKE.initial_context(True)
+        context = SMOKE.initial_context()
         with patch.object(SMOKE, "record_command"), patch.object(SMOKE, "simctl"), patch.object(SMOKE.time, "sleep"):
-            SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
-                                        candidate_for_device_check=True)
+            SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch")
         self.assertEqual(context["capture_url"]["status"], "succeeded")
-        self.assertEqual(context["widget_tap"]["status"], "not_tested")
-        self.assertEqual(context["external_distribution"]["status"], "blocked_pending_device_validation")
+        self.assertEqual(context["widget_tap"]["status"], "device_validation_required")
 
-    def test_error_115_from_screenshot_is_not_the_allowed_url_exception(self):
-        import subprocess
-        context = SMOKE.initial_context(True)
+    def test_error_115_from_screenshot_is_not_the_platform_limit(self):
+        context = SMOKE.initial_context()
+        context["capture_link_contract"] = {"status": "verified"}
         error = self.url_failure()
         error.cmd = ["xcrun", "simctl", "io", "fixture-watch", "screenshot", "unused.png"]
         with patch.object(SMOKE, "record_command"), patch.object(SMOKE, "simctl", side_effect=error), \
                 patch.object(SMOKE.time, "sleep"), patch.object(SMOKE, "collect_url_failure_diagnostics"):
             with self.assertRaises(subprocess.CalledProcessError):
-                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch",
-                                            candidate_for_device_check=True)
-        self.assertNotIn("candidate_exception_applied", context["capture_url"])
+                SMOKE.run_capture_url_probe(Path("unused"), Path("unused"), context, "fixture-watch")
+        self.assertEqual(context["capture_url"]["status"], "failed")
 
+
+class CaptureLinkContractTests(unittest.TestCase):
+    WIDGET = 'Text("Ceviz")\n            .widgetURL(URL(string: "{url}"))\n'
+    ROUTES = 'for link in ["{url}"] {{ WatchCaptureRoute(url: URL(string: link)!, isRecording: false, preparingCapture: false) }}\n'
+
+    def contract(self, widget, routes):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in ((SMOKE.WIDGET_SOURCE, widget), (SMOKE.ROUTE_TEST_SOURCE, routes)):
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            return SMOKE.verify_capture_link_contract(root)
+
+    def test_repository_sources_agree_on_the_capture_link(self):
+        result = SMOKE.verify_capture_link_contract(Path(__file__).resolve().parents[1])
+        self.assertEqual(result["status"], "verified")
+        self.assertEqual(result["url"], "ceviz-watch://capture")
+
+    def test_complication_opening_another_link_is_rejected(self):
+        for url in ("ceviz-watch://jobs", "ceviz://capture", ""):
+            with self.subTest(url=url), self.assertRaises(RuntimeError):
+                self.contract(self.WIDGET.format(url=url), self.ROUTES.format(url="ceviz-watch://capture"))
+
+    def test_missing_or_second_complication_link_is_rejected(self):
+        routes = self.ROUTES.format(url="ceviz-watch://capture")
+        for widget in ("Text(\"Ceviz\")\n", self.WIDGET.format(url="ceviz-watch://capture") * 2):
+            with self.subTest(widget=widget), self.assertRaises(RuntimeError):
+                self.contract(widget, routes)
+
+    def test_route_test_must_cover_the_complication_link(self):
+        widget = self.WIDGET.format(url="ceviz-watch://capture")
+        for routes in (self.ROUTES.format(url="ceviz-watch://jobs"), '"ceviz-watch://capture"\n'):
+            with self.subTest(routes=routes), self.assertRaises(RuntimeError):
+                self.contract(widget, routes)
 
 if __name__ == "__main__":
     unittest.main()

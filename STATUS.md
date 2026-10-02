@@ -2,7 +2,21 @@
 
 Son güncelleme: **2 Ekim 2026**
 
-## 2 Ekim — Beta 5 adayı 2026.6.5 (1790966589)
+## 2 Ekim — Beta 5 dış TestFlight'ta: 2026.6.5 (1790966589)
+
+- **Dış dağıtım (Mert'in onayıyla, App Store Connect API):** yalnız bu build'in
+  EN/TR "What to Test" metinleri yazıldı (**200 + 200**) ve birebir geri okundu.
+  Mevcut dış **Beta** grubuna ekleme **204**, beta inceleme başvurusu **201**.
+  Ayrı salt-okunur GET: inceleme **APPROVED**, iç ve dış **IN_BETA_TESTING**,
+  gruplar **Mert** (iç) ve **Beta** (dış), otomatik bildirim açık. Gözlem
+  **2 Ekim 22:32 Türkiye saati** civarı; Apple'ın `submittedDate` alanı boş.
+  Açık bağlantı değişmedi: https://testflight.apple.com/join/nEdn2Np2. Test
+  kullanıcıları, grup ayarları ve App Store metadata'sı değiştirilmedi; manuel
+  bildirim gönderilmedi. Tag/GitHub release bu kayıt anında yapılmadı.
+- Önceki dış Beta **1789005793** grupta kalıyor; test edenlere yeni build
+  TestFlight'ın otomatik bildirimiyle gidiyor.
+
+### Aday hazırlığı
 
 - **İmzalı build:** kaynak `e167545`,
   [run 37040464700](https://github.com/MertBasar0/ceviz/actions/runs/37040464700).

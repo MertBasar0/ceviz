@@ -1,15 +1,16 @@
 # Ceviz 2026.6.5 Beta 5 — Delivery recovery
 
-External TestFlight beta candidate. Exact release and validation evidence is
-recorded in `STATUS.md`.
+External TestFlight beta. Exact release and validation evidence is recorded in
+`STATUS.md`.
 
 Signed build **2026.6.5 (1790966589)** was built from `e167545` in
 [run 37040464700](https://github.com/MertBasar0/ceviz/actions/runs/37040464700)
-and uploaded on 2 October. Apple reports **VALID** and **APP_STORE_ELIGIBLE**;
-the **Mert** internal group is **IN_BETA_TESTING**. External distribution to the
-**Beta** group needs Apple beta review; this note is updated when it is approved.
-The existing [TestFlight invitation](https://testflight.apple.com/join/nEdn2Np2)
-does not change.
+and uploaded on 2 October. It is available to the **Mert** internal and **Beta**
+external TestFlight groups. Apple reports **VALID**, **APP_STORE_ELIGIBLE**, beta
+review **APPROVED**, and both internal and external **IN_BETA_TESTING**.
+Automatic tester notification is enabled; the existing
+[TestFlight invitation](https://testflight.apple.com/join/nEdn2Np2) is unchanged.
+EN/TR test notes were written for this build and read back exactly.
 
 ## Compatibility
 

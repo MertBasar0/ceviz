@@ -337,8 +337,9 @@ class HTTPConcurrencyTests(HTTPFixture):
         self.assertEqual({job["id"] for job in stored}, set(self.main.jobs_db))
 
     def test_push_network_does_not_hold_jobs_lock_or_overwrite_new_state(self):
+        # A fresh job: jobs older than PUSH_RETRY_WINDOW_SECONDS are never attempted.
         self.main.remember_job({"id": "job-push", "name": "fixture", "elapsed_seconds": 0,
-                               "created_at": 0, "status": "completed", "watch_summary": "old"})
+                               "created_at": time.time(), "status": "completed", "watch_summary": "old"})
         entered, release = threading.Event(), threading.Event()
 
         def notify(snapshot):
@@ -362,6 +363,57 @@ class HTTPConcurrencyTests(HTTPFixture):
             pending.result()
         self.assertEqual(self.main.jobs_db["job-push"]["watch_summary"], "new")
         self.assertEqual(self.main.jobs_db["job-push"]["push_notification_apns_id"], "fixture")
+
+    def test_failed_push_backs_off_and_old_jobs_are_never_attempted(self):
+        created = 1_000_000.0
+        self.main.remember_job({"id": "job-retry", "name": "fixture", "elapsed_seconds": 0,
+                               "created_at": created, "status": "completed"})
+        self.main.remember_job({"id": "job-stale", "name": "fixture", "elapsed_seconds": 0,
+                               "created_at": created - self.main.PUSH_RETRY_WINDOW_SECONDS, "status": "completed"})
+        attempts = []
+
+        def refuse(snapshot):
+            attempts.append(snapshot["id"])
+            raise RuntimeError("relay unreachable")
+
+        with patch.object(self.main, "_push_retry", {}), \
+             patch.object(self.main.push_notifier, "notify_terminal_job", side_effect=refuse), \
+             self.assertLogs(level="WARNING"):
+            schedule = [0, 5, 29, 30, 31, 89, 90, 209, 210]
+            for offset in schedule:
+                self.main.notify_jobs_once(now=created + offset)
+            self.assertEqual(attempts, ["job-retry"] * 4)  # at 0, 30, 90 and 210 s
+            self.main.notify_jobs_once(now=created + 210 + self.main.PUSH_RETRY_MAX_SECONDS * 3)
+            self.main.notify_jobs_once(now=created + self.main.PUSH_RETRY_WINDOW_SECONDS)
+        self.assertEqual(attempts, ["job-retry"] * 5)
+        self.assertNotIn("job-retry", self.main._push_retry)
+
+    def test_push_backoff_is_capped_and_cleared_by_success(self):
+        created = 2_000_000.0
+        self.main.remember_job({"id": "job-cap", "name": "fixture", "elapsed_seconds": 0,
+                               "created_at": created, "status": "completed"})
+        outcome = {"fail": True}
+
+        def send(snapshot):
+            if outcome["fail"]:
+                raise RuntimeError("relay unreachable")
+            snapshot.update(push_notification_sent_at=created, push_notification_apns_id="fixture")
+            return True
+
+        with patch.object(self.main, "_push_retry", {}), \
+             patch.object(self.main.push_notifier, "notify_terminal_job", side_effect=send), \
+             self.assertLogs(level="WARNING"):
+            now = created
+            for _ in range(8):
+                self.main.notify_jobs_once(now=now)
+                now = self.main._push_retry["job-cap"][1]
+            self.assertEqual(self.main._push_retry["job-cap"][0], 8)
+            self.main.notify_jobs_once(now=now)
+            self.assertEqual(self.main._push_retry["job-cap"][1] - now, self.main.PUSH_RETRY_MAX_SECONDS)
+            outcome["fail"] = False
+            self.main.notify_jobs_once(now=self.main._push_retry["job-cap"][1])
+        self.assertNotIn("job-cap", self.main._push_retry)
+        self.assertEqual(self.main.jobs_db["job-cap"]["push_notification_apns_id"], "fixture")
 
     def test_server_close_joins_owned_stt_worker_after_work_is_released(self):
         entered, release, closing = threading.Event(), threading.Event(), threading.Event()

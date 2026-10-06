@@ -1806,10 +1806,28 @@ def _warmup_stt() -> None:
     except Exception as exc:
         logging.warning("STT warmup atlandı: %s", exc)
 
-def notify_jobs_once() -> None:
+# An unreachable relay must not be retried every monitor tick forever: each job backs off
+# 30 s, 1 min, 2 min ... up to 15 min, and a job older than the window is never attempted.
+# The window counts from job creation, so a restart cannot start the attempts again; it
+# covers the longest command run (OPENCLAW_WATCH_COMMAND_TIMEOUT_SECONDS, 1 h by default).
+PUSH_RETRY_BASE_SECONDS = 30
+PUSH_RETRY_MAX_SECONDS = 15 * 60
+PUSH_RETRY_WINDOW_SECONDS = 3 * 3600
+_push_retry: dict[str, tuple[int, float]] = {}  # job id -> (failures, next attempt time)
+
+
+def notify_jobs_once(now: float | None = None) -> None:
     # APNs may be slow: notify immutable HTTP/job snapshots, then merge only
     # notification receipt fields under the jobs owner, never an old job body.
+    now = time.time() if now is None else now
     for snapshot in all_job_snapshots():
+        job_id = snapshot.get("id")
+        if now - float(snapshot.get("created_at") or 0) >= PUSH_RETRY_WINDOW_SECONDS:
+            _push_retry.pop(job_id, None)
+            continue
+        failures, next_attempt = _push_retry.get(job_id, (0, 0.0))
+        if now < next_attempt:
+            continue
         try:
             if push_notifier.notify_terminal_job(snapshot):
                 with jobs_lock:
@@ -1818,8 +1836,13 @@ def notify_jobs_once() -> None:
                         for key in ("push_notification_sent_at", "push_notification_apns_id"):
                             job[key] = snapshot[key]
                         save_jobs()
+            _push_retry.pop(job_id, None)
         except Exception as exc:
-            logging.warning("Push delivery deferred for %s: %s", snapshot.get("id"), exc)
+            failures += 1
+            delay = min(PUSH_RETRY_MAX_SECONDS, PUSH_RETRY_BASE_SECONDS * 2 ** (failures - 1))
+            _push_retry[job_id] = (failures, now + delay)
+            logging.warning("Push delivery deferred for %s (attempt %d, next in %d s): %s",
+                            job_id, failures, delay, exc)
 
 
 def _monitor_jobs_for_push() -> None:

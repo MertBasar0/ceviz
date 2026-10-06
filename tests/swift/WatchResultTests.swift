@@ -9,6 +9,7 @@ struct WatchResultTests {
         testQueuePasses()
         testQueuedFocusBeforeTransport()
         testJobsRecovery()
+        testJobsTerminalOverlay()
         testLateTerminalReceiptPresentation()
         var tracking = WatchResultTracking()
         precondition(tracking.jobID == nil)
@@ -335,6 +336,44 @@ struct WatchResultTests {
         jobs.receive(["jobs": []], generation: empty)
         precondition(jobs.jobs.isEmpty && jobs.hasLoaded && jobs.errorKey == nil && !jobs.hasMore,
                      "Only a successful empty response presents no jobs yet")
+    }
+
+    private static func testJobsTerminalOverlay() {
+        let start = Date(timeIntervalSince1970: 30_000)
+        func job(_ id: String, _ status: String, _ outcome: String? = nil) -> [String: Any] {
+            var row: [String: Any] = ["id": id, "name": "Job \(id)", "status": status, "elapsed_seconds": 2,
+                                      "summary_text": "A result", "requires_phone_handoff": false,
+                                      "transcript": "", "phone_report": ""]
+            if let outcome { row["outcome"] = outcome }
+            return row
+        }
+        func listed(_ jobs: WatchJobsTracking, _ id: String) -> ActiveJob? { jobs.jobs.first { $0.id == id } }
+        var jobs = WatchJobsTracking()
+        let first = jobs.begin(now: start)
+        jobs.receive(["jobs": [job("a", "running"), job("b", "running")]], generation: first)
+        let stale = jobs.begin(now: start)
+        jobs.confirmTerminal(jobID: "b", status: "completed", outcome: "done")
+        precondition(listed(jobs, "b")?.status == "completed" && listed(jobs, "b")?.outcome == "done",
+                     "A received result updates the listed job at once")
+        jobs.receive(["jobs": [job("a", "running"), job("b", "running")]], generation: stale)
+        precondition(listed(jobs, "b")?.status == "completed",
+                     "A list fetched before the result cannot turn it back into running")
+        precondition(listed(jobs, "a")?.status == "running", "Other jobs keep the fetched state")
+        let fresh = jobs.begin(now: start)
+        jobs.receive(["jobs": [job("b", "completed", "needs_input")]], generation: fresh)
+        precondition(listed(jobs, "b")?.outcome == "needs_input",
+                     "The backend's own terminal state wins once it reports one")
+        jobs.confirmTerminal(jobID: "c", status: "running", outcome: nil)
+        jobs.confirmTerminal(jobID: "unlisted", status: "failed", outcome: nil)
+        precondition(jobs.jobs.map(\.id) == ["b"], "Only terminal results are kept and nothing is added")
+        let later = jobs.begin(now: start)
+        jobs.receive(["jobs": [job("unlisted", "running")]], generation: later)
+        precondition(listed(jobs, "unlisted")?.status == "failed",
+                     "A result received before the job was listed still applies")
+        jobs.reset()
+        let afterReset = jobs.begin(now: start)
+        jobs.receive(["jobs": [job("unlisted", "running")]], generation: afterReset)
+        precondition(listed(jobs, "unlisted")?.status == "running", "Reset forgets results from the prior pairing")
     }
 
     private static func testContinuationSelection() {

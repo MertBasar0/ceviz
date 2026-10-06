@@ -221,6 +221,8 @@ struct WatchJobsTracking {
     private(set) var hasMore = false
     private(set) var deadline: Date?
     private var generation = 0
+    /// Terminal results this Watch already received, by job id.
+    private var confirmed: [String: (status: String, outcome: String?)] = [:]
     var isLoading: Bool { deadline != nil }
 
     mutating func begin(now: Date = Date()) -> Int {
@@ -239,11 +241,33 @@ struct WatchJobsTracking {
             fail("Jobs could not be read. Refresh to try again.", generation: generation)
             return
         }
-        jobs = Array(decoded.reversed())
+        // Once the backend itself reports a terminal state, it no longer needs the local one.
+        for job in decoded where Self.isTerminal(job.status) { confirmed[job.id] = nil }
+        jobs = Array(decoded.reversed()).map(applyingConfirmed)
         hasMore = reply["has_more"] as? Bool ?? false
         hasLoaded = true
         deadline = nil
         errorKey = nil
+    }
+
+    /// A result the Watch already received outranks a list fetched before the job finished,
+    /// so the list updates at once and a stale response cannot turn it back into running.
+    mutating func confirmTerminal(jobID: String, status: String, outcome: String?) {
+        guard Self.isTerminal(status) else { return }
+        confirmed[jobID] = (status, outcome)
+        jobs = jobs.map(applyingConfirmed)
+    }
+
+    private func applyingConfirmed(_ job: ActiveJob) -> ActiveJob {
+        guard let known = confirmed[job.id], !Self.isTerminal(job.status) else { return job }
+        var updated = job
+        updated.status = known.status
+        updated.outcome = known.outcome
+        return updated
+    }
+
+    private static func isTerminal(_ status: String) -> Bool {
+        status == "completed" || status == "failed"
     }
 
     mutating func fail(_ key: String, generation: Int) {

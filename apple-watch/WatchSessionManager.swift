@@ -12,6 +12,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     @Published var handoffUrl: String? = nil
     @Published var handoffJobId: String? = nil
     @Published private var jobsTracking = WatchJobsTracking()
+    /// A refresh asked for while another is in flight; that one may predate a new result.
+    private var jobsRefreshPending = false
     var activeJobs: [ActiveJob] { jobsTracking.jobs }
     var jobsLoading: Bool { jobsTracking.isLoading }
     var jobsErrorKey: String? { jobsTracking.errorKey }
@@ -282,6 +284,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         let summary = (message["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let deepLink = (message["deep_link"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let state = CVZJobState.resolve(status: status, outcome: message["outcome"] as? String)
+        jobsTracking.confirmTerminal(jobID: jobId, status: status, outcome: message["outcome"] as? String)
 
         stopResultPolling()
         resultState = state
@@ -384,7 +387,11 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
 
     func fetchJobs() {
         jobsTracking.expire()
-        guard !jobsTracking.isLoading else { return }
+        guard !jobsTracking.isLoading else {
+            jobsRefreshPending = true
+            return
+        }
+        jobsRefreshPending = false
         let generation = jobsTracking.begin()
         guard WCSession.default.activationState == .activated, WCSession.default.isReachable else {
             jobsTracking.fail("Jobs did not refresh. Check the iPhone connection and try again.", generation: generation)
@@ -392,16 +399,24 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + WatchDeliveryTracking.attemptDuration) { [weak self] in
             self?.jobsTracking.expire()
+            self?.runPendingJobsRefresh()
         }
         WCSession.default.sendMessage(["action": "fetch_jobs"], replyHandler: { reply in
             DispatchQueue.main.async {
                 self.jobsTracking.receive(reply, generation: generation)
+                self.runPendingJobsRefresh()
             }
         }, errorHandler: { _ in
             DispatchQueue.main.async {
                 self.jobsTracking.fail("Jobs did not refresh. Check the iPhone connection and try again.", generation: generation)
+                self.runPendingJobsRefresh()
             }
         })
+    }
+
+    private func runPendingJobsRefresh() {
+        guard jobsRefreshPending, !jobsTracking.isLoading else { return }
+        fetchJobs()
     }
 
 
@@ -572,6 +587,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 self.playResultHaptic(state)
                 UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
                 self.applySummarizeReply(reply, jobId: jobId)
+                self.jobsTracking.confirmTerminal(
+                    jobID: jobId, status: jobStatus, outcome: reply["outcome"] as? String ?? reportMeta?.outcome)
                 self.processQueue()
                 self.fetchJobs()
             }
@@ -907,6 +924,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 previewSections: response.previewSections
             ) : nil
         if terminal {
+            jobsTracking.confirmTerminal(
+                jobID: jobId, status: response.status, outcome: response.outcome ?? response.reportMeta?.outcome)
             stopResultPolling()
             playResultHaptic(resultState ?? .resultReady)
             UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)

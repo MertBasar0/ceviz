@@ -10,7 +10,7 @@ from unittest import mock
 BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
-from push_notifier import PushNotifier  # noqa: E402
+from push_notifier import DEFAULT_RELAY_URL, PushNotifier  # noqa: E402
 
 
 class FakeResponse:
@@ -35,6 +35,14 @@ class PushNotifierTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
+
+    def test_default_relay_avoids_workers_dev_and_env_overrides_it(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("WATCH_CEVIZ_PUSH_RELAY_URL", None)
+            self.assertEqual(PushNotifier().relay_url, DEFAULT_RELAY_URL)
+        self.assertNotIn("workers.dev", DEFAULT_RELAY_URL)
+        with mock.patch.dict("os.environ", {"WATCH_CEVIZ_PUSH_RELAY_URL": "https://relay.example.test/"}):
+            self.assertEqual(PushNotifier().relay_url, "https://relay.example.test")
 
     def test_post_uses_stable_user_agent_and_authorization(self) -> None:
         with mock.patch(

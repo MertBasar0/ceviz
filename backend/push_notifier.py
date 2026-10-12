@@ -13,15 +13,17 @@ from typing import Any
 from job_outcome import normalize_job_outcome
 
 
+# The push-worker relay on its own domain. Its *.workers.dev address is reset at the TLS handshake
+# by Turkish ISPs (SNI filtering, seen on Turk Telekom and Vodafone); the same Worker on this
+# domain is not.
+DEFAULT_RELAY_URL = "https://push.cevizrelay.dev"
+
 class PushNotifier:
     def __init__(self) -> None:
         self._registration_lock = threading.Lock()
         state_dir = Path(os.environ.get("WATCH_CEVIZ_STATE_DIR", str(Path.home() / ".openclaw" / "ceviz-state")))
         self.state_path = state_dir / "push-registration.json"
-        self.relay_url = os.environ.get(
-            "WATCH_CEVIZ_PUSH_RELAY_URL",
-            "https://ceviz-push-relay.mertbasar30.workers.dev",
-        ).rstrip("/")
+        self.relay_url = os.environ.get("WATCH_CEVIZ_PUSH_RELAY_URL", DEFAULT_RELAY_URL).rstrip("/")
         self.user_agent = os.environ.get(
             "WATCH_CEVIZ_PUSH_USER_AGENT",
             "CevizBackend/1.0",

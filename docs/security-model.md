@@ -48,9 +48,10 @@ audio, the full transcript, the full phone report, or the backend pairing
 token. The notification summary can still contain sensitive information, so it
 should not be treated as end-to-end encrypted content.
 
-The relay source is in [`push-worker/`](../push-worker/). Advanced users can
-point the backend to a compatible self-hosted relay with
-`WATCH_CEVIZ_PUSH_RELAY_URL`.
+The relay source is in [`push-worker/`](../push-worker/). The helper reaches it at
+`https://push.cevizrelay.dev`, a Cloudflare Worker on the project's own domain; its
+`*.workers.dev` address is blocked by some ISPs. Advanced users can point the
+backend to a compatible self-hosted relay with `WATCH_CEVIZ_PUSH_RELAY_URL`.
 
 ## Access boundaries
 

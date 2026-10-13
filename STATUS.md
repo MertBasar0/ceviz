@@ -1,6 +1,38 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **2 Ekim 2026**
+Son güncelleme: **13 Ekim 2026**
+
+## 13 Ekim — Bildirim relay'i kendi alan adında; yardımcı servis 2026.10.13 Beta 1
+
+- **Kök neden:** Türk Telekom ve Vodafone, SNI'si `*.workers.dev` olan TLS
+  bağlantılarını el sıkışmada kesiyor; aynı Cloudflare IP'sine başka bir adla
+  bağlanmak çalışıyor. Bu yüzden bu hatlarda bildirim kaydı ve gönderimi hiç
+  çalışmıyordu (sağlayıcı değiştirmek çözmedi).
+- **Çözüm:** Mert `cevizrelay.dev` alan adını Cloudflare Registrar'dan aldı ve aynı
+  Worker'a `push.cevizrelay.dev` özel alan adını bağladı. Vodafone hattından
+  `/healthz` 200 ve geçerli TLS; eski adres hâlâ sıfırlanıyor. Canlı kurulum önce
+  geçici bir servis ayarıyla yeni adrese yönlendirildi; kayıt 200 döndü, iki sonuç
+  bildirimi iPhone ve saate ulaştı (Mert'in cihaz testi ve backend logu).
+- **Yardımcı servis `ceviz-helper-v2026.10.13-beta.1`:** varsayılan relay
+  `https://push.cevizrelay.dev` (`93b60c1`), başarısız bildirimlerde geri çekilme
+  ve 3 saatten eski işleri hiç denememe (`3861400`), yönlendirici eklentisinin
+  servis açılışında arka planda yüklenmesi (`c0e330d`). 290 test geçti (12
+  platforma özgü atlama). Sürüm notu:
+  `docs/release-notes-helper-2026.10.13-beta.1.md`.
+- **Pusula (ayrı depo, Mert'in kararıyla):** yükseltme kararı regex yerine yerel
+  karar modeli APUS-OpenJev-v1 4B ile (v0.2.0); hafif katman da aynı modeli
+  kullanıyor; model artık Ollama kapanana kadar bellekte (v0.2.1). Karar modeli
+  cevap veremezse tur varsayılan modelde kalıyor. Kev 0.8B servisi durduruldu ve
+  devre dışı; OpenJev Whisper'la birlikte tamamen GPU'da (12,2 / 16,3 GB).
+- **11 Ekim ses tanıma olayı:** her komutta "Ses anlaşılamadı". Sebep WSL'in GPU
+  erişimini kaybetmesiydi (`GPU access blocked by the operating system`); `auto`
+  modu yerel Whisper hatasını loglamadan yutuyor. `wsl --shutdown` ile düzeldi.
+  Canlıda geçici olarak `WATCH_CEVIZ_STT_ENGINE=local` açık, böylece hata iş
+  kaydına yazılıyor. Kalıcı kod düzeltmesi (hatayı loglamak, GPU bağlamı ölünce
+  CPU'ya düşmek) henüz yapılmadı.
+- **İşler listesi düzeltmesi (`ae1bfd0`)** build **1791334823**'te Mert'in cihaz
+  testinde doğrulandı: sonuç gelince iş hemen sonucuyla görünüyor.
+
 
 ## 2 Ekim — Beta 5 dış TestFlight'ta: 2026.6.5 (1790966589)
 

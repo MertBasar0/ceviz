@@ -1865,6 +1865,7 @@ def run(port=8080):
     import threading
     threading.Thread(target=_warmup_stt, daemon=True).start()
     threading.Thread(target=_monitor_jobs_for_push, daemon=True).start()
+    openclaw_client.router.preload()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

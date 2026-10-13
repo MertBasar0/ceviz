@@ -139,6 +139,45 @@ class RouterHostTests(unittest.TestCase):
         host.choose("iki")
         self.assertEqual(loads, ["fake"])
 
+    def test_preload_creates_the_router_before_the_first_command(self) -> None:
+        loads = []
+        router = FakeRouter({"model": "anthropic/claude-sonnet-5"})
+
+        def loader(name):
+            loads.append(name)
+            return lambda host: router
+
+        host = RouterHost(agent="cevizmain", name="fake", loader=loader)
+        host.preload()
+        for _ in range(200):
+            if loads:
+                break
+            time.sleep(0.01)
+        self.assertEqual(loads, ["fake"])
+        self.assertEqual(host.choose("bir").model, "anthropic/claude-sonnet-5")
+        self.assertEqual(loads, ["fake"])
+
+    def test_command_during_a_slow_preload_waits_and_loads_once(self) -> None:
+        loads = []
+        router = FakeRouter({"model": "anthropic/claude-sonnet-5"})
+
+        def loader(name):
+            loads.append(name)
+            time.sleep(0.3)  # a plugin preparing itself
+            return lambda host: router
+
+        host = RouterHost(agent="cevizmain", name="fake", loader=loader)
+        host.preload()
+        time.sleep(0.05)
+        self.assertEqual(host.choose("bir").model, "anthropic/claude-sonnet-5")
+        self.assertEqual(loads, ["fake"])
+
+    def test_preload_without_a_router_does_nothing(self) -> None:
+        loader = mock.Mock(side_effect=AssertionError("must not look up plugins"))
+        RouterHost(agent="cevizmain", loader=loader).preload()
+        time.sleep(0.05)
+        loader.assert_not_called()
+
     def test_entry_point_lookup_uses_the_ceviz_routers_group(self) -> None:
         entry = mock.Mock()
         entry.load.return_value = lambda host: FakeRouter({"thinking": "high"})

@@ -61,7 +61,10 @@ Declare an entry point in the `ceviz.routers` group:
 example = "example_router:create"
 ```
 
-The helper calls the target once, as `create(host)`:
+The helper calls the target once, as `create(host)`, in the background when the service starts,
+so a plugin can prepare (for example load a local model) before the first command. A command that
+arrives while `create` is still running waits for it, so keep `create` quick and do slow preparation
+in the background:
 
 | `host` key | Meaning |
 |---|---|

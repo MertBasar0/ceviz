@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
@@ -120,6 +121,7 @@ class RouterHost:
         self._loader = loader or _load_entry_point
         self._router: Any = None
         self._loaded = False
+        self._load_lock = threading.Lock()
         self._executor: ThreadPoolExecutor | None = None
 
     @property
@@ -132,10 +134,28 @@ class RouterHost:
             return "disabled (no WATCH_CEVIZ_ROUTER)"
         return f"{self.name}: active" if self._get_router() is not None else f"{self.name}: unavailable"
 
+    def preload(self) -> None:
+        """Loads the router in the background at start, so it can prepare before the first command.
+
+        A plugin may need seconds to get ready (Pusula loads a local decision model). Loaded on the
+        first command instead, that command would spend its routing budget waiting and run unpinned.
+        """
+        if self.enabled:
+            threading.Thread(target=self._get_router, name="ceviz-router-preload", daemon=True).start()
+
     def _get_router(self) -> Any:
         if self._loaded:
             return self._router
-        self._loaded = True
+        # A command arriving while the preload is still loading waits for it instead of seeing
+        # a half-loaded host, and the plugin is created exactly once.
+        with self._load_lock:
+            if self._loaded:
+                return self._router
+            self._router = self._create_router()
+            self._loaded = True
+        return self._router
+
+    def _create_router(self) -> Any:
         if not self.enabled:
             return None
         try:
@@ -144,13 +164,12 @@ class RouterHost:
             if getattr(router, "api_version", None) != ROUTER_API_VERSION or not callable(getattr(router, "route", None)):
                 logger.warning(f"[router] '{self.name}' does not implement router contract v{ROUTER_API_VERSION}; routing stays off")
                 return None
-            self._router = router
             self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ceviz-router")
             logger.info(f"[router] '{self.name}' enabled (contract v{ROUTER_API_VERSION})")
+            return router
         except Exception as exc:
             logger.warning(f"[router] '{self.name}' could not be loaded; routing stays off: {exc}")
-            self._router = None
-        return self._router
+            return None
 
     def choose(self, transcript: str, continuation: str = "", locale: str = "") -> RouteChoice | None:
         """Ask the router for this turn. None means: run on the agent default."""

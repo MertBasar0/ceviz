@@ -2,6 +2,28 @@
 
 Son güncelleme: **13 Ekim 2026**
 
+## 13 Ekim — Beta 6 dış TestFlight'ta: 2026.6.5 (1791334823)
+
+- **Dış dağıtım (Mert'in onayıyla, App Store Connect API):** yalnız bu build'in
+  EN/TR "What to Test" metinleri yazıldı (**200 + 200**) ve birebir geri okundu.
+  Dış **Beta** grubuna ekleme **204**, beta inceleme başvurusu **201**. Ayrı
+  salt-okunur GET: **VALID**, inceleme **APPROVED**, iç ve dış
+  **IN_BETA_TESTING**, gruplar **Mert** (iç) ve **Beta** (dış), otomatik bildirim
+  açık. Gözlem **13 Ekim 03:37 Türkiye saati**; Apple'ın `submittedDate` alanı boş.
+  Açık bağlantı değişmedi: https://testflight.apple.com/join/nEdn2Np2. Test
+  kullanıcıları, grup ayarları ve App Store metadata'sı değiştirilmedi; manuel
+  bildirim gönderilmedi.
+- **Build:** kaynak `ae1bfd0`,
+  [run 37550617824](https://github.com/MertBasar0/ceviz/actions/runs/37550617824),
+  sıkı (iç aday olmayan) doğrulama ilk denemede geçti; yükleme 7 Ekim,
+  `distribute_external: false` ile. Beta 5'in kaynağı `e167545`'e göre uygulamadaki
+  tek değişiklik İşler listesi (`ae1bfd0`).
+- **Test metni** yardımcı servisi `ceviz-helper-v2026.10.13-beta.1`'e yükseltmeyi
+  istiyor; aynı sözleşmeyle eski yardımcı da çalışıyor ama engelli ağlarda bildirim
+  gelmiyor. Sürüm notu: `docs/release-notes-2026.6.5-beta.6.md`.
+- Önceki dış Beta **1790966589** grupta kalıyor; test edenlere yeni build
+  TestFlight'ın otomatik bildirimiyle gidiyor.
+
 ## 13 Ekim — Bildirim relay'i kendi alan adında; yardımcı servis 2026.10.13 Beta 1
 
 - **Kök neden:** Türk Telekom ve Vodafone, SNI'si `*.workers.dev` olan TLS

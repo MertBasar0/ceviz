@@ -23,6 +23,21 @@ Son güncelleme: **13 Ekim 2026**
   gelmiyor. Sürüm notu: `docs/release-notes-2026.6.5-beta.6.md`.
 - Önceki dış Beta **1790966589** grupta kalıyor; test edenlere yeni build
   TestFlight'ın otomatik bildirimiyle gidiyor.
+- **Yayınlar (Mert'in onayıyla):**
+  [`ceviz-watch-v2026.6.5-beta.6`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-watch-v2026.6.5-beta.6)
+  ön sürümü `9a54e02` üzerine (gövde Beta 6 sürüm notu) ve
+  [`ceviz-helper-v2026.10.13-beta.1`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.10.13-beta.1)
+  `bc42e92` üzerine; tam kaynak CI'ı
+  [run 38327728451](https://github.com/MertBasar0/ceviz/actions/runs/38327728451)
+  yeşil. Güncelleyicinin SHA-256'sı değişmedi (`c5f0db53…1d630`).
+- **Canlı kurulum** resmi güncelleyiciyle `ceviz-helper-v2026.10.13-beta.1`'e
+  geçti; eşleştirme, ayarlar ve iş geçmişi korundu. Geçici relay ayarı kaldırıldı,
+  varsayılan adres kullanılıyor. Yeniden başlatmada Pusula 0.2.1 komut gelmeden
+  yüklendi ve karar modelini GPU'ya aldı. Geçici `WATCH_CEVIZ_STT_ENGINE=local`
+  ayarı, STT kod düzeltmesine kadar duruyor.
+- **Geçici dallar silindi:** `fix/push-retry-backoff`, `fix/push-relay-domain`
+  (main'de) ve `fix/watch-jobs-list-on-result` (aynı yama main'e `ae1bfd0` olarak
+  yeniden yazılarak alınmıştı; `git cherry` eşdeğer buldu).
 
 ## 13 Ekim — Bildirim relay'i kendi alan adında; yardımcı servis 2026.10.13 Beta 1
 

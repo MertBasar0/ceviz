@@ -9,9 +9,12 @@ Env ayarlari:
 """
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import threading
+
+logger = logging.getLogger("watch_ceviz.local_whisper")
 
 # Proper nouns Whisper otherwise hears as ordinary words ("Claude Code" -> "cloud kod").
 # hotwords biases decoding without the silence hallucinations an initial_prompt can cause.
@@ -20,6 +23,10 @@ DEFAULT_HOTWORDS = "Claude Code, Claude, Codex, OpenClaw, Ceviz, GitHub, PR, CI,
 _model = None
 _model_key: tuple | None = None
 _active_device = "none"
+# Set when a loaded CUDA model fails mid-transcription. A dead CUDA context (seen on 11 October:
+# WSL lost GPU access, "GPU access blocked by the operating system") fails every later call too,
+# so the process stays on the CPU until the service restarts.
+_cuda_failed = False
 _lock = threading.Lock()
 
 
@@ -49,7 +56,7 @@ def _load_model():
             return _model
 
         candidates: list[tuple[str, str]] = []
-        if device in ("auto", "cuda"):
+        if device in ("auto", "cuda") and not _cuda_failed:
             candidates.append(("cuda", compute or "float16"))
         if device in ("auto", "cpu"):
             candidates.append(("cpu", compute or "int8"))
@@ -69,8 +76,21 @@ def _load_model():
                 _active_device = dev
                 return model
             except Exception as exc:  # CUDA yok/lib eksik -> sonraki aday (CPU)
+                logger.warning("Whisper could not start on %s (%s): %s", dev, comp, exc)
                 last_err = exc
         raise RuntimeError(f"Whisper modeli yuklenemedi (model={size}): {last_err}")
+
+
+def _abandon_cuda(failed_model, exc: Exception) -> None:
+    """Drops a CUDA model that failed mid-transcription, so the next load uses the CPU."""
+    global _model, _model_key, _active_device, _cuda_failed
+    with _lock:
+        if _model is failed_model and _active_device == "cuda":
+            _cuda_failed = True
+            _model = None
+            _model_key = None
+            _active_device = "none"
+            logger.error("Whisper failed on CUDA; switching to the CPU until the service restarts: %s", exc)
 
 
 def warmup() -> str:
@@ -78,8 +98,8 @@ def warmup() -> str:
     Basarisizsa sessizce gec: ilk gercek istek yine lazy yukler."""
     try:
         _load_model()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Whisper warm-up failed; the first command will try again: %s", exc)
     return _active_device
 
 
@@ -90,7 +110,6 @@ def hotwords() -> str | None:
 
 def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: str | None = None) -> str:
     """Base64'ten cozulmus ses baytlarini metne cevir. Bos string = transkript yok."""
-    model = _load_model()
     # "auto" ya da bos: Whisper dili kendi algilasin (yabanci kullanicilar
     # icin sart — sabit "tr" Ingilizce konusmayi anlamsiz metne cevirirdi).
     lang = (language or os.environ.get("WATCH_CEVIZ_WHISPER_LANGUAGE", "auto") or "").strip().lower()
@@ -100,6 +119,18 @@ def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: st
     with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
-        segments, _info = model.transcribe(tmp.name, language=lang, vad_filter=True, hotwords=hotwords())
-        text = " ".join(seg.text.strip() for seg in segments if seg.text).strip()
-    return text
+        model = _load_model()
+        try:
+            return _transcribe_file(model, tmp.name, lang)
+        except Exception as exc:
+            if _active_device != "cuda":
+                raise
+            # The same audio once more on the CPU; a second failure is a real error for the caller.
+            _abandon_cuda(model, exc)
+            return _transcribe_file(_load_model(), tmp.name, lang)
+
+
+def _transcribe_file(model, path: str, lang: str | None) -> str:
+    # Segments are generated lazily: decoding errors surface while iterating, inside the caller's try.
+    segments, _info = model.transcribe(path, language=lang, vad_filter=True, hotwords=hotwords())
+    return " ".join(seg.text.strip() for seg in segments if seg.text).strip()

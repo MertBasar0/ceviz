@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 import os
 import urllib.error
@@ -9,6 +10,8 @@ import urllib.request
 import uuid
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger("watch_ceviz.stt")
 
 
 @dataclass
@@ -68,6 +71,7 @@ class WatchSTT:
             )
 
         # 1) Lokal Whisper (key'siz, gizli) — engine auto/local
+        local_error: Exception | None = None
         if self.engine in {"auto", "local"}:
             try:
                 import local_whisper
@@ -88,10 +92,13 @@ class WatchSTT:
                             error=self._error(payload, "local Whisper returned an empty transcript", "local whisper boş metin döndürdü"),
                         )
                 except Exception as exc:
+                    # Logged in every mode: on 11 October this was swallowed, and every command only
+                    # said "no transcript" while the real cause was a dead CUDA context.
+                    logger.warning("Local Whisper failed: %s", exc)
                     if self.engine == "local":
                         prefix = self._error(payload, "local Whisper error", "local whisper hatası")
                         return TranscriptionResult(transcript="", source="none", error=f"{prefix}: {exc}")
-                    # auto: OpenAI'ye dus
+                    local_error = exc  # auto: OpenAI'ye dus
             elif self.engine == "local":
                 return TranscriptionResult(
                     transcript="", source="none",
@@ -99,6 +106,15 @@ class WatchSTT:
                 )
 
         # 2) OpenAI fallback (engine auto/openai) — anahtar gerekir
+        if not self.api_key and local_error is not None:
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(
+                    payload,
+                    f"Speech recognition is unavailable: local Whisper error: {local_error}; OPENAI_API_KEY is not set",
+                    f"STT yok: lokal whisper hatası: {local_error}; OPENAI_API_KEY tanımlı değil",
+                ),
+            )
         if not self.api_key:
             return TranscriptionResult(
                 transcript="", source="none",

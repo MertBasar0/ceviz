@@ -1,6 +1,21 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **13 Ekim 2026**
+Son güncelleme: **14 Ekim 2026**
+
+## 14 Ekim — Yardımcı servis 2026.10.13 Beta 2: ses tanımada GPU kaybına dayanıklılık
+
+- **Sorun (11 Ekim):** WSL GPU erişimini kaybedince CUDA'daki Whisper her komutta
+  hata verdi; `auto` modu hatayı loglamadan yuttu ve OpenAI anahtarı olmadığı için
+  her komut "Ses anlaşılamadı" oldu.
+- **Düzeltme (`42c37a7`):** çözme sırasında hata veren CUDA modeli bırakılıyor ve aynı
+  kayıt CPU'da yeniden çözülüyor; süreç yeniden başlayana kadar CPU'da kalıyor.
+  Yerel Whisper hataları her modda loglanıyor; `auto` modunda anahtar yoksa iş
+  kaydındaki hata gerçek sebebi yazıyor. Açılışta CUDA başlayamazsa sebebi loglanıyor.
+- **Doğrulama:** 296 test (12 platforma özgü atlama); 6 yeni testin 5'i eski kodda
+  başarısız. Canlı GPU'da 11 sn örnek 1,1 sn'de doğru. CPU'ya geçiş canlıda
+  tetiklenmedi (GPU bağlamını bilerek bozmanın güvenli yolu yok); testlerle doğrulandı.
+- Sürüm notu: `docs/release-notes-helper-2026.10.13-beta.2.md`.
+
 
 ## 13 Ekim — Beta 6 dış TestFlight'ta: 2026.6.5 (1791334823)
 

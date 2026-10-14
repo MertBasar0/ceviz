@@ -15,6 +15,25 @@ Son güncelleme: **14 Ekim 2026**
   başarısız. Canlı GPU'da 11 sn örnek 1,1 sn'de doğru. CPU'ya geçiş canlıda
   tetiklenmedi (GPU bağlamını bilerek bozmanın güvenli yolu yok); testlerle doğrulandı.
 - Sürüm notu: `docs/release-notes-helper-2026.10.13-beta.2.md`.
+- **Yayın (Mert'in onayıyla):**
+  [`ceviz-helper-v2026.10.13-beta.2`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.10.13-beta.2)
+  `172624c` üzerine; tam kaynak CI'ı
+  [run 38566404292](https://github.com/MertBasar0/ceviz/actions/runs/38566404292) yeşil.
+- **Canlı güncelleme yarım kaldı, elle tamamlandı:** güncelleyici yeni kodu etkinleştirdi,
+  sonra "Ceviz state changed during maintenance" ile durdu; `--recover` da aynı sebeple
+  reddedecekti. Değişen tek dosya `pusula-models.json`'dı (15:49:08): yeni yardımcı
+  eklentiyi açılışta yüklüyor ve Pusula 6 saati geçmiş model listesi önbelleğini tam
+  doğrulama sırasında yeniledi. İş, konuşma ve eşleştirme durumu değişmedi. Güncelleyicinin
+  kendi kontrolleri (yeni kod çalışıyor, işler korunmuş, kimlik doğrulaması 401,
+  yetenekler, konuşmalar) yeniden çalıştırılıp geçtikten sonra başarı yolunun son iki
+  adımı (`installed.json` yazımı, `pending.json` → `completed-1791982142501028471.json`)
+  güncelleyicinin fonksiyonlarıyla yapıldı; eski kayıtların yedeği
+  `~/.openclaw/ceviz-recovery/receipt-backups/`. Ardından `--check` **READY**.
+  Geçici `stt-engine.conf` kaldırıldı; servis `auto` modda, Whisper GPU'da.
+- **Kök neden düzeltmesi (yayınlanmadı):** dal `fix/updater-post-start-state`; durum
+  baytları yalnız servis dururken karşılaştırılıyor, başladıktan sonra API kontrolleri
+  geçerli. Yeni test eski güncelleyicide canlıdaki hatayla düşüyor; 297 test geçti.
+  Güncelleyicinin SHA-256'sı değişecek. Sürüm, Mert'in onayını bekliyor.
 
 
 ## 13 Ekim — Beta 6 dış TestFlight'ta: 2026.6.5 (1791334823)

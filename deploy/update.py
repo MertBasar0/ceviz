@@ -277,8 +277,11 @@ class Installation:
         before["jobs"] = expected
         return before
 
-    def preserved(self, receipt):
+    def settings_preserved(self, receipt):
         require(digest(command(["systemctl", "--user", "cat", SERVICE])) == receipt["config_hash"], "Service settings changed; automatic recovery stopped.")
+
+    def preserved(self, receipt):
+        self.settings_preserved(receipt)
         require(state_hashes(Path(receipt["state_dir"])) == receipt["state_hashes"], "Ceviz state changed during maintenance; do not resend commands. Contact support.")
 
     def stop(self):
@@ -315,7 +318,10 @@ class Installation:
             if sample:
                 history = self.api(current, "/api/v1/sessions/history?" + urlencode({"session_key": sample["session_key"]}))
                 require(history.get("session", {}).get("session_key") == sample["session_key"] and isinstance(history.get("messages"), list), "Conversation history verification failed.")
-        self.preserved(receipt)
+        # State bytes are compared only while no helper runs (before and after the stop). Once started,
+        # the helper owns its state and may write it at once: push receipts, or a router plugin
+        # refreshing its cache (seen on 14 October). Job identities are checked through the API above.
+        self.settings_preserved(receipt)
 
 
 def release_snapshot(source, revision, area):

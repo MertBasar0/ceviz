@@ -496,6 +496,25 @@ class HelperUpdateTests(unittest.TestCase):
             self.assertFalse(instance.installed.exists())
 
     @unittest.skipUnless(os.name == "posix", "Native POSIX launcher/recovery is tested on Linux")
+    def test_state_written_by_the_started_helper_does_not_fail_the_update(self):
+        with self.service_fixture() as (instance, state, service):
+            destination, sha, manifest = self.snapshot_release()
+            fixture_command = update.command
+
+            def command(arguments, **kwargs):
+                result = fixture_command(arguments, **kwargs)
+                if arguments[2:3] == ["start"]:
+                    # A router plugin refreshing its cache as the new helper starts (14 October).
+                    (state / "pusula-models.json").write_text('{"rows": []}')
+                return result
+
+            with patch.object(update, "command", side_effect=command):
+                update.apply_update(instance, destination, sha, manifest)
+            self.assertEqual(service["entry"], str(destination / "backend/main.py"))
+            self.assertTrue(instance.installed.exists())
+            self.assertFalse(instance.pending.exists())
+
+    @unittest.skipUnless(os.name == "posix", "Native POSIX launcher/recovery is tested on Linux")
     def test_recovery_refuses_changed_runtime_state_instead_of_restoring_a_stale_backup(self):
         with self.service_fixture() as (instance, state, service):
             destination, sha, manifest = self.snapshot_release()

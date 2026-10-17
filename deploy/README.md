@@ -39,11 +39,16 @@ It recommends a speech-recognition model that fits the GPU (or the CPU), says
 whether the optional [Pusula](https://github.com/MertBasar0/ceviz-pusula) router
 can run, how the phone will reach the helper, and what to fix first. On a machine
 with Ceviz installed it reads the helper's own OpenClaw agent and reports where
-the installed setup differs from the recommendation. The installer does not
-follow the plan automatically yet.
+the installed setup differs from the recommendation.
+
+The installer shows the same plan first and follows it for speech recognition:
+it times the suggested Whisper model on an 11-second sample and steps down to a
+smaller model when one takes longer than 3 seconds. The chosen model is
+downloaded once and the service uses it from the cache. The other parts of the
+plan (OpenClaw, Pusula, the connection) are still shown as advice only.
 
 The installer creates a Python environment and installs dependencies, including
-CUDA libraries when it detects a GPU. It generates a pairing token, creates a
+CUDA libraries when the plan finds a usable GPU. It generates a pairing token, creates a
 service, configures the selected connection method and displays a pairing QR.
 Linux/WSL uses a systemd user service when available. The installer's `nohup`
 fallback, macOS and other non-systemd installations are outside the automatic
@@ -188,7 +193,8 @@ do not reinstall over a working installation.
 |---|---|---|
 | `WATCH_CEVIZ_PORT` | `8080` | Backend port |
 | `WATCH_CEVIZ_NETWORK_MODE` | `auto` | `tailscale`, `relay`, `manual`, or automatic selection |
-| `WATCH_CEVIZ_WHISPER_MODEL` | `large-v3` with GPU, otherwise `small` | Speech-to-text model |
+| `WATCH_CEVIZ_WHISPER_MODEL` | chosen by the plan and a timing on this machine | Speech-to-text model; setting it skips the timing |
+| `WATCH_CEVIZ_STT_MEASURE` | `1` | `0` uses the plan's model without timing it |
 | `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | Default speech-to-text language |
 | `OPENCLAW_WATCH_AGENT` | `main` | OpenClaw agent used for Watch commands |
 

@@ -62,7 +62,7 @@ class RecipeTests(unittest.TestCase):
             self.assertEqual(by["pusula"]["status"], "not_recommended", card)
 
     def test_card_too_small_for_any_model_falls_back_to_the_cpu(self):
-        by = steps(plan.recommend(facts(gpu_gb=2.0)))
+        by = steps(plan.recommend(facts(gpu_gb=2.0, threads=8)))
         self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("small", "cpu"))
         self.assertIn("too little", by["speech"]["reasons"][0])
 
@@ -71,6 +71,20 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(by["speech"]["device"], "cpu")
         self.assertIn("wsl --shutdown", by["speech"]["reasons"][0])
         self.assertEqual(by["pusula"]["status"], "not_recommended")
+
+    def test_many_cpu_threads_start_at_medium_for_the_installer_to_time(self):
+        by = steps(plan.recommend(facts(gpu_status="absent", threads=16, ram=32)))
+        self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("medium", "cpu"))
+        self.assertIn("times this model", by["speech"]["reasons"][-1])
+        fewer = steps(plan.recommend(facts(gpu_status="absent", threads=8, ram=32)))
+        self.assertEqual(fewer["speech"]["whisper_model"], "small")
+
+    def test_installer_output_is_model_and_device_only(self):
+        with mock.patch.object(plan, "probe", return_value=facts(gpu_gb=5.0)), \
+             mock.patch("builtins.print") as printed:
+            self.assertEqual(plan.main(["--speech", "--offline"]), 0)
+        stdout = [call.args[0] for call in printed.call_args_list if call.kwargs.get("file") is None]
+        self.assertEqual(stdout, ["medium cuda"])
 
     def test_weak_machine_is_marked_slow(self):
         by = steps(plan.recommend(facts(gpu_status="absent", threads=2, ram=4)))

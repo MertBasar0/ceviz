@@ -4,7 +4,9 @@
 #   bash deploy/install.sh
 #
 # Yaptiklari:
-#   - Python venv olusturur, bagimliliklari kurar (GPU varsa CUDA lib'leri de)
+#   - Makineyi inceler (deploy/plan.py) ve planini gosterir; hicbir sey degistirmez
+#   - Python venv olusturur, bagimliliklari kurar (kullanilabilir GPU varsa CUDA lib'leri de)
+#   - Plandaki Whisper modelini bu makinede olcer, yavassa kucuk modele iner (deploy/measure_stt.py)
 #   - Erisim token'i uretir
 #   - systemd --user servisini yazar ve baslatir (yoksa nohup fallback)
 #   - Tailscale varsa backend'i tailnet'e /ceviz olarak yayinlar
@@ -68,6 +70,15 @@ fi
 SYSTEMD_PATH="${PATH//\\/\\\\}"
 SYSTEMD_PATH="${SYSTEMD_PATH//\"/\\\"}"
 SYSTEMD_PATH="${SYSTEMD_PATH//%/%%}"
+
+# --- 1a) Plan: what this machine can run well (read-only, deploy/plan.py) ---
+PLAN_MODEL=small
+PLAN_DEVICE=cpu
+echo "==> Bu makine inceleniyor (hicbir sey degistirilmez)"
+read -r PLAN_MODEL PLAN_DEVICE < <("$INSTALL_PY" "$SCRIPT_DIR/plan.py" --speech --offline || true) || true
+case "$PLAN_MODEL" in large-v3|medium|small) ;; *) PLAN_MODEL=small ;; esac
+case "$PLAN_DEVICE" in cuda|cpu) ;; *) PLAN_DEVICE=cpu ;; esac
+
 if [ ! -x "$PY" ]; then
   echo "==> Python venv olusturuluyor"
   python3 -m venv "$VENV"
@@ -75,22 +86,37 @@ fi
 "$PIP" install -q --upgrade pip
 "$PIP" install -q -r "$SCRIPT_DIR/requirements.txt"
 
-# --- 2) GPU tespiti + CUDA lib'leri ---
-WHISPER_MODEL="${WATCH_CEVIZ_WHISPER_MODEL:-small}"
+# --- 2) Speech model: the plan's suggestion, timed on this machine ---
+# The plan sizes Whisper to the GPU memory (or picks the CPU); deploy/measure_stt.py then times
+# it on an 11 s sample and steps down to a smaller model if it is too slow. An explicit
+# WATCH_CEVIZ_WHISPER_MODEL always wins; WATCH_CEVIZ_STT_MEASURE=0 skips the timing.
 LD_LIBS=""
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-  echo "==> GPU bulundu — CUDA kutuphaneleri kuruluyor (large-v3 icin)"
+if [ "$PLAN_DEVICE" = cuda ]; then
+  echo "==> GPU kullanilabilir — CUDA kutuphaneleri kuruluyor"
   "$PIP" install -q nvidia-cublas-cu12 nvidia-cudnn-cu12
   SITE="$("$PY" -c 'import site; print(site.getsitepackages()[0])')"
   LD_LIBS="$SITE/nvidia/cublas/lib:$SITE/nvidia/cudnn/lib"
-  WHISPER_MODEL="${WATCH_CEVIZ_WHISPER_MODEL:-large-v3}"
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ollama 2>/dev/null; then
-    echo "!!  UYARI: Ollama ve Ceviz Whisper ayni WSL GPU'sunu kullanabilir."
-    echo "    Bellek baskisi gorursen Ollama otomatik baslatmasini kapat veya"
-    echo "    WATCH_CEVIZ_WHISPER_MODEL=small ile Ceviz'i yeniden kur."
-  fi
+fi
+if [ -n "${WATCH_CEVIZ_WHISPER_MODEL:-}" ]; then
+  WHISPER_MODEL="$WATCH_CEVIZ_WHISPER_MODEL"
+  echo "==> Konusma modeli WATCH_CEVIZ_WHISPER_MODEL ile secildi: $WHISPER_MODEL (olcum atlandi)"
+elif [ "${WATCH_CEVIZ_STT_MEASURE:-1}" = 0 ]; then
+  WHISPER_MODEL="$PLAN_MODEL"
+  echo "==> Konusma modeli plandan: $WHISPER_MODEL (olcum kapali)"
 else
-  echo "==> GPU yok — CPU modu (model=$WHISPER_MODEL)"
+  MEASURE_DEVICE=cpu
+  [ "$PLAN_DEVICE" = cuda ] && MEASURE_DEVICE=auto
+  echo "==> Konusma tanima bu makinede olculuyor; model bir kez indirilir ve servis onu kullanir"
+  MEASURED="$(LD_LIBRARY_PATH="$LD_LIBS" "$PY" "$SCRIPT_DIR/measure_stt.py" --start "$PLAN_MODEL" \
+    --device "$MEASURE_DEVICE" || true)"
+  case "$MEASURED" in
+    large-v3|medium|small)
+      WHISPER_MODEL="$MEASURED"
+      echo "==> Secilen konusma modeli: $WHISPER_MODEL" ;;
+    *)
+      WHISPER_MODEL="$PLAN_MODEL"
+      echo "!!  UYARI: Olcum tamamlanamadi; plandaki model kullaniliyor: $WHISPER_MODEL" ;;
+  esac
 fi
 
 # --- 3) Token ---

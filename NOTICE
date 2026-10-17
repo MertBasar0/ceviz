@@ -8,3 +8,8 @@ except for reasonable and customary use in describing the origin of the work.
 
 The brand assets identified in TRADEMARKS.md are not licensed under the Apache
 License, Version 2.0. Their copyright and trademark rights are reserved.
+
+deploy/assets/stt-sample.wav is an 11-second excerpt of President John F.
+Kennedy's inaugural address (20 January 1961), a work of the United States
+federal government in the public domain. The installer uses it only to time
+speech recognition on the user's machine.

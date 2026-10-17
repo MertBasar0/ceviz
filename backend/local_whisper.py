@@ -42,10 +42,38 @@ def active_device() -> str:
     return _active_device
 
 
-def _load_model():
-    global _model, _model_key, _active_device
+def open_model(size: str, device: str = "auto", compute: str = "", allow_cuda: bool = True):
+    """Loads `size` on the first device that works, the way the service does. Returns (model, device).
+
+    The installer's measurement uses this too, so it times exactly what the service will run.
+    """
     from faster_whisper import WhisperModel
 
+    candidates: list[tuple[str, str]] = []
+    if device in ("auto", "cuda") and allow_cuda:
+        candidates.append(("cuda", compute or "float16"))
+    if device in ("auto", "cpu"):
+        candidates.append(("cpu", compute or "int8"))
+
+    import numpy as np
+
+    last_err: Exception | None = None
+    for dev, comp in candidates:
+        try:
+            model = WhisperModel(size, device=dev, compute_type=comp)
+            # CUDA in/lib yuklemesi LAZY: encode'u zorlamak icin minik warmup.
+            # Boylece libcublas eksikse burada patlar ve CPU'ya duseriz.
+            segs, _ = model.transcribe(np.zeros(16000, dtype=np.float32), vad_filter=False, language="en")
+            list(segs)
+            return model, dev
+        except Exception as exc:  # CUDA yok/lib eksik -> sonraki aday (CPU)
+            logger.warning("Whisper could not start on %s (%s): %s", dev, comp, exc)
+            last_err = exc
+    raise RuntimeError(f"Whisper modeli yuklenemedi (model={size}): {last_err}")
+
+
+def _load_model():
+    global _model, _model_key, _active_device
     size = os.environ.get("WATCH_CEVIZ_WHISPER_MODEL", "small").strip() or "small"
     device = os.environ.get("WATCH_CEVIZ_WHISPER_DEVICE", "auto").strip().lower() or "auto"
     compute = os.environ.get("WATCH_CEVIZ_WHISPER_COMPUTE", "").strip()
@@ -54,31 +82,11 @@ def _load_model():
     with _lock:
         if _model is not None and _model_key == key:
             return _model
-
-        candidates: list[tuple[str, str]] = []
-        if device in ("auto", "cuda") and not _cuda_failed:
-            candidates.append(("cuda", compute or "float16"))
-        if device in ("auto", "cpu"):
-            candidates.append(("cpu", compute or "int8"))
-
-        import numpy as np
-
-        last_err: Exception | None = None
-        for dev, comp in candidates:
-            try:
-                model = WhisperModel(size, device=dev, compute_type=comp)
-                # CUDA in/lib yuklemesi LAZY: encode'u zorlamak icin minik warmup.
-                # Boylece libcublas eksikse burada patlar ve CPU'ya duseriz.
-                segs, _ = model.transcribe(np.zeros(16000, dtype=np.float32), vad_filter=False, language="en")
-                list(segs)
-                _model = model
-                _model_key = key
-                _active_device = dev
-                return model
-            except Exception as exc:  # CUDA yok/lib eksik -> sonraki aday (CPU)
-                logger.warning("Whisper could not start on %s (%s): %s", dev, comp, exc)
-                last_err = exc
-        raise RuntimeError(f"Whisper modeli yuklenemedi (model={size}): {last_err}")
+        model, dev = open_model(size, device, compute, allow_cuda=not _cuda_failed)
+        _model = model
+        _model_key = key
+        _active_device = dev
+        return model
 
 
 def _abandon_cuda(failed_model, exc: Exception) -> None:
@@ -121,16 +129,16 @@ def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: st
         tmp.flush()
         model = _load_model()
         try:
-            return _transcribe_file(model, tmp.name, lang)
+            return transcribe_file(model, tmp.name, lang)
         except Exception as exc:
             if _active_device != "cuda":
                 raise
             # The same audio once more on the CPU; a second failure is a real error for the caller.
             _abandon_cuda(model, exc)
-            return _transcribe_file(_load_model(), tmp.name, lang)
+            return transcribe_file(_load_model(), tmp.name, lang)
 
 
-def _transcribe_file(model, path: str, lang: str | None) -> str:
+def transcribe_file(model, path: str, lang: str | None) -> str:
     # Segments are generated lazily: decoding errors surface while iterating, inside the caller's try.
     segments, _info = model.transcribe(path, language=lang, vad_filter=True, hotwords=hotwords())
     return " ".join(seg.text.strip() for seg in segments if seg.text).strip()

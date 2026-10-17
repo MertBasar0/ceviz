@@ -37,6 +37,12 @@ DECISION_MODEL_DISK_GB = 4.5
 # Memory the desktop and driver keep for themselves on a shared card, and a margin per plan.
 DESKTOP_RESERVE_GB = 1.5
 HEADROOM_GB = 0.6
+# Without a GPU: warm large-v3 took 3.5 s for 11 s of speech on 16 threads (Ryzen 9 9950X3D under
+# WSL), over the installer's 3 s budget. Medium is the starting guess from 16 threads; the
+# installer's measurement decides and steps down when needed.
+STRONG_CPU_THREADS = 16
+MEASURED_AT_INSTALL = ("The installer times this model on this machine and steps down to a smaller one "
+                       "if it is too slow.")
 FRONTIER_PROVIDERS = ("anthropic", "openai", "google", "xai")
 # Only these service settings are read; the pairing token and everything else stay unread.
 SERVICE_SETTINGS = ("WATCH_CEVIZ_WHISPER_MODEL", "WATCH_CEVIZ_STT_ENGINE", "WATCH_CEVIZ_ROUTER",
@@ -286,8 +292,8 @@ def plan_speech(facts: dict) -> tuple[dict, float]:
     for model, need in WHISPER_GPU_GB:
         if budget >= need + HEADROOM_GB:
             return step("speech", "recommended", f"Whisper {model} on the GPU",
-                        [f"{budget:.1f} GB of GPU memory is available to Ceviz; {model} needs about {need} GB."],
-                        whisper_model=model, device="cuda"), need
+                        [f"{budget:.1f} GB of GPU memory is available to Ceviz; {model} needs about {need} GB.",
+                         MEASURED_AT_INSTALL], whisper_model=model, device="cuda"), need
     threads = facts["cpu"]["threads"]
     ram = facts["memory_gb"]["total"] or 0
     reasons = []
@@ -305,7 +311,11 @@ def plan_speech(facts: dict) -> tuple[dict, float]:
                        "transcribing on the iPhone instead is planned for such machines.")
         return step("speech", "recommended", "Whisper small on the CPU", reasons,
                     whisper_model="small", device="cpu", slow=True), 0.0
-    reasons.append(f"Whisper small on {threads} CPU threads; larger models are much slower without a GPU.")
+    if threads >= STRONG_CPU_THREADS and ram >= 16:
+        reasons += [f"{threads} CPU threads may run Whisper medium fast enough.", MEASURED_AT_INSTALL]
+        return step("speech", "recommended", "Whisper medium on the CPU", reasons, whisper_model="medium", device="cpu"), 0.0
+    reasons += [f"Whisper small on {threads} CPU threads; larger models are much slower without a GPU.",
+                MEASURED_AT_INSTALL]
     return step("speech", "recommended", "Whisper small on the CPU", reasons, whisper_model="small", device="cpu"), 0.0
 
 
@@ -456,9 +466,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--offline", action="store_true", help="skip the reachability checks")
     parser.add_argument("--agent", default=os.environ.get("OPENCLAW_WATCH_AGENT", ""),
                         help="OpenClaw agent whose models are read (default: the installed helper's agent)")
+    parser.add_argument("--speech", action="store_true",
+                        help="for the installer: the report on stderr, '<whisper model> <device>' on stdout")
     args = parser.parse_args(argv)
     facts = probe(offline=args.offline, agent=args.agent)
     recipe = recommend(facts)
+    if args.speech:
+        print(render(facts, recipe), file=sys.stderr)
+        speech = next(item for item in recipe["steps"] if item["module"] == "speech")
+        print(f"{speech['whisper_model']} {speech['device']}")
+        return 0  # the installer decides what is fatal; it has its own Python and service checks
     if args.json:
         print(json.dumps({"facts": facts, "recipe": recipe}, indent=2, ensure_ascii=False))
     else:

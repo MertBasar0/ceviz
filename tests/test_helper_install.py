@@ -31,7 +31,15 @@ class WindowsTailscaleInstallerTests(unittest.TestCase):
                 path.mkdir(parents=True)
             (app / "deploy/install.sh").write_bytes(content.replace(b"\r\n", b"\n"))
             python = app / ".venv/bin/python"
-            python.write_text('#!/bin/bash\nif [[ "$1" == "-c" ]]; then exit 0; fi\nprintf "pair-url %s\\n" "$2" >> "$CEVIZ_TEST_CALLS"\n')
+            # The plan and the speech measurement answer like the real tools; any other script
+            # call is the pairing printer.
+            python.write_text(
+                '#!/bin/bash\nif [[ "$1" == "-c" ]]; then exit 0; fi\n'
+                'case "$1" in\n'
+                '  */plan.py) printf "plan %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"; printf "small cpu\\n"; exit 0;;\n'
+                '  */measure_stt.py) printf "measure %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"; printf "small\\n"; exit 0;;\n'
+                'esac\n'
+                'printf "pair-url %s\\n" "$2" >> "$CEVIZ_TEST_CALLS"\n')
             python.chmod(0o700)
             pip = app / ".venv/bin/pip"
             pip.write_text('#!/bin/bash\nprintf "pip\\n" >> "$CEVIZ_TEST_CALLS"\n')
@@ -110,6 +118,10 @@ source "$FIXTURE_ROOT/app/deploy/install.sh"
         self.assertNotIn("192.0.2.10", serve[0])
         self.assertEqual(calls[-1], "pair-url https://fixture.tail.ts.net/ceviz")
         self.assertNotIn("private-fixture-token", result.stdout + result.stderr + "\n".join(calls))
+        # The speech model comes from the read-only plan, then a measurement from that size.
+        self.assertIn("plan --speech --offline", calls)
+        self.assertIn("measure --start small --device cpu", calls)
+        self.assertLess(calls.index("plan --speech --offline"), calls.index("measure --start small --device cpu"))
 
     def test_lifetime_localhost_or_publish_failure_cannot_report_pairing_success(self):
         for mode in ("lifetime-failure", "probe-failure", "serve-failure", "dns-empty", "dns-invalid", "dns-failure"):

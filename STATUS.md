@@ -1,6 +1,20 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **14 Ekim 2026**
+Son güncelleme: **17 Ekim 2026**
+
+## 17 Ekim — Yardımcı servis 2026.10.17 Beta 1: güncelleyici düzeltmesi
+
+- **Sorun (14 Ekim):** 2026.10.13 Beta 2 güncellemesi "Ceviz state changed during
+  maintenance" ile durdu. Yeni yardımcı eklentiyi açılışta yüklüyor ve Pusula'nın
+  eskimiş model listesi önbelleği tam doğrulama sırasında yenilendi; kullanıcı durumu
+  değişmemişti.
+- **Düzeltme (`0718d36`):** durum baytları yalnız servis dururken karşılaştırılıyor;
+  yeni servis başladıktan sonra işler, kimlik doğrulama, yetenekler ve konuşmalar API
+  üzerinden, servis ayarları da hash ile kontrol ediliyor. Kurtarma katı kalıyor.
+  Yeni test eski güncelleyicide canlıdaki hatayla düşüyor; 297 test geçti.
+- Güncelleyici değiştiği için SHA-256'sı yeni. Sürüm notu:
+  `docs/release-notes-helper-2026.10.17-beta.1.md`.
+
 
 ## 14 Ekim — Yardımcı servis 2026.10.13 Beta 2: ses tanımada GPU kaybına dayanıklılık
 

@@ -14,6 +14,17 @@ Son güncelleme: **17 Ekim 2026**
   Yeni test eski güncelleyicide canlıdaki hatayla düşüyor; 297 test geçti.
 - Güncelleyici değiştiği için SHA-256'sı yeni. Sürüm notu:
   `docs/release-notes-helper-2026.10.17-beta.1.md`.
+- **Yayın (Mert'in onayıyla):**
+  [`ceviz-helper-v2026.10.17-beta.1`](https://github.com/MertBasar0/ceviz/releases/tag/ceviz-helper-v2026.10.17-beta.1)
+  `3757690` üzerine; tam kaynak CI'ı
+  [run 38985920778](https://github.com/MertBasar0/ceviz/actions/runs/38985920778) yeşil;
+  güncelleyici SHA-256 `da4a1ea9…57ad0`. Beta 2 sürüm sayfasındaki bilinen sorun notu bu
+  sürüme bağlandı.
+- **Canlı güncelleme, hatayı doğuran koşulun aynısında tamamlandı:** Pusula önbelleği 59
+  saatlikti ve güncelleme doğrulanırken (03:23:13) yenilendi; güncelleyici **UPDATED**
+  (çıkış kodu 0), bekleyen kayıt yok, `--check` **READY**. Yeni servis Pusula'yı ve
+  karar modelini açılışta yükledi, Whisper GPU'da, relay `/healthz` 200.
+- Dal `fix/updater-post-start-state` main'e (`0718d36`) alındıktan sonra silindi.
 
 
 ## 14 Ekim — Yardımcı servis 2026.10.13 Beta 2: ses tanımada GPU kaybına dayanıklılık

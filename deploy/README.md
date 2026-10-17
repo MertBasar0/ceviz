@@ -26,6 +26,22 @@ cd ceviz
 bash deploy/install.sh
 ```
 
+Before installing, you can see what this machine can run well. The plan reads
+the hardware, OpenClaw, Ollama and network reachability, changes nothing, and
+needs only the system Python:
+
+```bash
+python3 deploy/plan.py            # readable report
+python3 deploy/plan.py --json     # the same as data, without credentials
+```
+
+It recommends a speech-recognition model that fits the GPU (or the CPU), says
+whether the optional [Pusula](https://github.com/MertBasar0/ceviz-pusula) router
+can run, how the phone will reach the helper, and what to fix first. On a machine
+with Ceviz installed it reads the helper's own OpenClaw agent and reports where
+the installed setup differs from the recommendation. The installer does not
+follow the plan automatically yet.
+
 The installer creates a Python environment and installs dependencies, including
 CUDA libraries when it detects a GPU. It generates a pairing token, creates a
 service, configures the selected connection method and displays a pairing QR.

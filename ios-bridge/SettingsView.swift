@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var showScanner = false
     @State private var demoOn: Bool = DemoMode.isExplicit
     @State private var connectionMethod = ConnectionMethod(rawValue: UserDefaults.standard.string(forKey: BackendConfig.connectionMethodKey) ?? "tailscale") ?? .tailscale
+    @State private var preparingSpeech = false
+    @State private var speechStatus: PhoneSpeechRecognizer.Preparation?
 
     private enum ConnectionMethod: String, CaseIterable {
         case tailscale, relay, manual
@@ -110,6 +112,30 @@ struct SettingsView: View {
                             .font(.system(size: 11.5))
                             .foregroundColor(CVZ.textDim)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("SPEECH ON IPHONE").font(CVZ.mono(10, .semibold)).tracking(1.4).foregroundColor(CVZ.accent)
+                        Text("If your computer cannot run the speech model, this iPhone turns each command into text with Apple's on-device speech recognition. Prepare it once here so commands also work while the phone is locked.")
+                            .font(.system(size: 11.5))
+                            .foregroundColor(CVZ.textDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(action: prepareSpeech) {
+                            Text(preparingSpeech ? "PREPARING_" : "PREPARE SPEECH RECOGNITION")
+                                .font(CVZ.mono(12, .semibold))
+                                .foregroundColor(CVZ.text)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(CVZ.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(preparingSpeech)
+                        if let speechStatus {
+                            Text((speechStatus.ready ? "✓ " : "✕ ") + speechStatus.message)
+                                .font(CVZ.mono(11))
+                                .foregroundColor(speechStatus.ready ? CVZ.ok : CVZ.err)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     fieldBlock(
@@ -273,11 +299,37 @@ struct SettingsView: View {
                 switch http.statusCode {
                 case 200:
                     testState = .success(NSLocalizedString("Connection OK", comment: ""))
+                    prepareSpeechIfHelperNeedsIt(token: token)
                 case 401:
                     testState = .failure(NSLocalizedString("Token rejected (401)", comment: ""))
                 default:
                     testState = .failure(String(format: NSLocalizedString("Server returned %d", comment: ""), http.statusCode))
                 }
+            }
+        }.resume()
+    }
+
+    private func prepareSpeech() {
+        preparingSpeech = true
+        Task { @MainActor in
+            speechStatus = await PhoneSpeechRecognizer.prepare()
+            preparingSpeech = false
+        }
+    }
+
+    /// A helper whose machine runs no Whisper says so; prepare the phone right after pairing,
+    /// while the app is open, instead of during the first command.
+    private func prepareSpeechIfHelperNeedsIt(token: String) {
+        guard let url = URL(string: candidateBaseURL + "/api/v1/capabilities") else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        BackendTransport.shared.dataTask(with: request) { data, response, _ in
+            guard (response as? HTTPURLResponse)?.statusCode == 200, let data,
+                  let capabilities = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  capabilities["speech_on_phone"] as? Bool == true else { return }
+            DispatchQueue.main.async {
+                if !preparingSpeech { prepareSpeech() }
             }
         }.resume()
     }

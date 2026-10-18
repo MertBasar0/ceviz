@@ -50,6 +50,8 @@
   <string>Ceviz uses the microphone only to record voice commands you start.</string>
   <key>NSCameraUsageDescription</key>
   <string>Ceviz uses the camera only to scan your backend pairing QR code.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>When your computer cannot run the speech model, Ceviz turns your voice commands into text on this iPhone. Recognition runs on the device.</string>
 
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>

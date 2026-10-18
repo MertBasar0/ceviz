@@ -1,18 +1,32 @@
 import Foundation
 
+/// What this phone heard in a Watch capture, for a helper whose machine runs no Whisper.
+/// `source` names the on-device recognizer (lowercase letters, digits and dashes).
+struct PhoneTranscript: Equatable {
+    var text = ""
+    var source = ""
+    var error = ""
+}
+
 /// The durable phone boundary between WC and HTTP. Neither a transport error
 /// nor a missing journal grants permission to repeat an external action.
 @MainActor
 final class WatchDeliveryCoordinator {
     typealias Loader = (URLRequest) async throws -> (Data, URLResponse)
+    typealias Transcriber = (WatchCommandRequest) async -> PhoneTranscript
     enum Failure: Error { case updateRequired, unknown, connectionChanged, invalidReceipt }
     private let store: WatchDeliveryStore
     private let makeRequest: (String) -> URLRequest
     private let isCurrent: () -> Bool
+    private let transcribe: Transcriber?
     private var active: Set<String> = []
+    /// The helper's last capabilities answer. Recovery deliberately fetches none,
+    /// so a replay after an app restart sends no text and the helper says so.
+    private var speechOnPhone = false
     var deliveryJournalID: String { store.journalID }
 
-    init(baseURL: String, token: String, databaseURL: URL? = nil, isCurrent: @escaping () -> Bool) throws {
+    init(baseURL: String, token: String, databaseURL: URL? = nil, transcribe: Transcriber? = nil,
+         isCurrent: @escaping () -> Bool) throws {
         store = try WatchDeliveryStore(baseURL: baseURL, token: token, databaseURL: databaseURL)
         makeRequest = { path in
             var request = URLRequest(url: URL(string: baseURL + "/api/v1/watch/command/" + path)!)
@@ -21,6 +35,7 @@ final class WatchDeliveryCoordinator {
             return request
         }
         self.isCurrent = isCurrent
+        self.transcribe = transcribe
     }
 
     func submit(_ incoming: WatchCommandTransport.Incoming, load: Loader) async throws -> [String: Any] {
@@ -44,11 +59,27 @@ final class WatchDeliveryCoordinator {
                   let ledger = capabilities["watch_command_ledger_id"] as? String,
                   UUID(uuidString: ledger) != nil else { throw Failure.updateRequired }
             guard isCurrent(), WatchCommandTransport.isCurrent(incoming.request) else { throw Failure.connectionChanged }
+            speechOnPhone = capabilities["speech_on_phone"] as? Bool == true
             delivery = try store.bindForDispatch(identity, ledgerID: ledger)
+        }
+        // A helper that runs no Whisper gets the text with the audio. Neither is stored here,
+        // and the text is no part of the identity: a retry may hear it slightly differently.
+        var heard: PhoneTranscript?
+        if speechOnPhone {
+            heard = await transcribe?(incoming.request)
+                ?? PhoneTranscript(error: "This app version cannot transcribe on the phone.")
         }
         guard isCurrent(), WatchCommandTransport.isCurrent(incoming.request) else { throw Failure.connectionChanged }
         var payload = try JSONSerialization.jsonObject(with: JSONEncoder().encode(incoming.request)) as! [String: Any]
         for (key, value) in delivery.query { payload[key] = value }
+        if let heard {
+            if heard.text.isEmpty {
+                payload["transcript_error"] = String(heard.error.prefix(300))
+            } else {
+                payload["transcript"] = String(heard.text.prefix(4000))
+                payload["transcript_source"] = heard.source
+            }
+        }
         let response = try await json(try post("submit", body: payload), load: load)
         return try apply(response, to: delivery)
     }

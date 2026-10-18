@@ -25,6 +25,7 @@ struct WatchDeliveryTests {
         var beforeRequest: ((URLRequest) throws -> Void)?
         var duringSubmit: (() async throws -> Void)?
         var transformReceipt: (([String: Any]) -> [String: Any])?
+        var speechOnPhone: Bool?
 
         func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
             precondition(request.url?.host == "ceviz-delivery-fixture.invalid", "Never contact a configured backend")
@@ -35,7 +36,9 @@ struct WatchDeliveryTests {
             let response: [String: Any]
             if action == "capabilities" {
                 precondition(request.httpMethod == "GET" && request.httpBody == nil)
-                response = ["watch_command_recovery_v1": true, "watch_command_ledger_id": ledger]
+                var capabilities: [String: Any] = ["watch_command_recovery_v1": true, "watch_command_ledger_id": ledger]
+                if let speechOnPhone { capabilities["speech_on_phone"] = speechOnPhone }
+                response = capabilities
             } else {
                 precondition(request.httpMethod == "POST")
                 let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
@@ -127,7 +130,46 @@ struct WatchDeliveryTests {
         try await storageFaults(directory)
         try await corruptJournalIdentity(directory.appendingPathComponent("corrupt-journal-id.sqlite"))
         try await connectionReset(directory.appendingPathComponent("connection-reset.sqlite"))
-        print("PASS: native Watch delivery commits, restart/ledger fencing, no-replay recovery, receipt identity, storage faults and metadata privacy")
+        try await phoneTranscription(directory)
+        print("PASS: native Watch delivery commits, restart/ledger fencing, no-replay recovery, receipt identity, storage faults, metadata privacy and phone transcription")
+    }
+
+    /// A helper whose machine runs no Whisper gets the phone's text with the unchanged audio;
+    /// any other helper never sees transcript fields and the recognizer never runs.
+    private static func phoneTranscription(_ directory: URL) async throws {
+        let heardText = "masaüstündeki notları aç"
+        let cases: [(Bool?, PhoneTranscript)] = [(true, PhoneTranscript(text: heardText, source: "speech-transcriber")),
+                                                 (true, PhoneTranscript(error: "no on-device model")),
+                                                 (false, PhoneTranscript(text: "must not be used", source: "x")),
+                                                 (nil, PhoneTranscript(text: "must not be used", source: "x"))]
+        for (index, (speechOnPhone, heard)) in cases.enumerated() {
+            let file = directory.appendingPathComponent("phone-speech-\(index).sqlite")
+            var recognized: [WatchCommandRequest] = []
+            let coordinator = try WatchDeliveryCoordinator(baseURL: baseURL, token: token, databaseURL: file,
+                transcribe: { request in recognized.append(request); return heard }, isCurrent: { true })
+            let message = try incoming(coordinator)
+            let peer = Peer()
+            peer.speechOnPhone = speechOnPhone
+            let result = try await coordinator.submit(message, load: { try await peer.load($0) })
+            precondition(result["status"] as? String == "accepted" && peer.submissions.count == 1)
+            let body = peer.submissions[0]
+            precondition(body["audio_data"] as? String == audio, "The audio and its identity travel unchanged")
+            if speechOnPhone == true {
+                precondition(recognized.count == 1 && recognized[0].audioData == audio)
+                if heard.text.isEmpty {
+                    precondition(body["transcript"] == nil && body["transcript_error"] as? String == "no on-device model")
+                } else {
+                    precondition(body["transcript"] as? String == heardText
+                                 && body["transcript_source"] as? String == "speech-transcriber"
+                                 && body["transcript_error"] == nil)
+                }
+            } else {
+                precondition(recognized.isEmpty, "Only a helper that asks for it gets phone transcription")
+                precondition(body["transcript"] == nil && body["transcript_source"] == nil && body["transcript_error"] == nil)
+            }
+            let bytes = try Data(contentsOf: file)
+            precondition(bytes.range(of: Data(heardText.utf8)) == nil, "The phone's text belongs in no journal")
+        }
     }
 
     private static func commitAndConcurrentDelivery(_ file: URL) async throws {

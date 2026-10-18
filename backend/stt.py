@@ -28,7 +28,12 @@ class WatchSTT:
         self.model = os.environ.get("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe")
         self.language = os.environ.get("OPENAI_STT_LANGUAGE", "").strip()
         # STT motoru: auto (once lokal whisper, yoksa openai) | local | openai
+        # | phone (bu makinede large-v3'e yer yok; iPhone cozer ve metni gonderir)
         self.engine = os.environ.get("WATCH_CEVIZ_STT_ENGINE", "auto").strip().lower() or "auto"
+
+    @property
+    def on_phone(self) -> bool:
+        return self.engine == "phone"
 
     @staticmethod
     def language_from_payload(payload: dict[str, Any]) -> str | None:
@@ -47,7 +52,22 @@ class WatchSTT:
     def transcribe_watch_payload(self, payload: dict[str, Any]) -> TranscriptionResult:
         provided_transcript = (payload.get("transcript") or "").strip()
         if provided_transcript:
-            return TranscriptionResult(transcript=provided_transcript, source="client")
+            engine = str(payload.get("transcript_source") or "").strip()
+            return TranscriptionResult(transcript=provided_transcript,
+                                       source=f"iphone:{engine}" if engine else "client")
+
+        if self.on_phone:
+            reason = str(payload.get("transcript_error") or "").strip()
+            return TranscriptionResult(
+                transcript="", source="none",
+                error=self._error(
+                    payload,
+                    "This computer leaves speech recognition to the iPhone, and no text arrived: "
+                    + (reason or "update the Ceviz iPhone app"),
+                    "Bu bilgisayarda konuşmayı iPhone çözüyor ama metin gelmedi: "
+                    + (reason or "iPhone'daki Ceviz uygulamasını güncelle"),
+                ),
+            )
 
         audio_b64 = (payload.get("audio_data") or "").strip()
         if not audio_b64:

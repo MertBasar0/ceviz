@@ -21,6 +21,12 @@ own instance.
    token generated during installation.
 4. The backend transcribes audio with local Whisper by default. It sends audio
    to an external speech service only when the user explicitly configures one.
+   A machine that cannot run Whisper large-v3 well is installed with
+   `WATCH_CEVIZ_STT_ENGINE=phone`: the iPhone transcribes with Apple's
+   on-device speech recognition (never a network recognizer) and sends the
+   text with the audio. Only such a backend accepts that text on the versioned
+   command route; it is not part of the command identity, so a retry that hears
+   the audio differently is still the same command.
 5. The backend invokes the local OpenClaw CLI and keeps the recent job state on
    that machine. It does not choose a model: the OpenClaw agent's model and its
    fallback chain decide, unless the operator installs and enables an optional

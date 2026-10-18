@@ -35,17 +35,34 @@ python3 deploy/plan.py            # readable report
 python3 deploy/plan.py --json     # the same as data, without credentials
 ```
 
-It recommends a speech-recognition model that fits the GPU (or the CPU), says
+It says whether Whisper large-v3 can run here or the iPhone should transcribe,
 whether the optional [Pusula](https://github.com/MertBasar0/ceviz-pusula) router
 can run, how the phone will reach the helper, and what to fix first. On a machine
 with Ceviz installed it reads the helper's own OpenClaw agent and reports where
 the installed setup differs from the recommendation.
 
-The installer shows the same plan first and follows it for speech recognition:
-it times the suggested Whisper model on an 11-second sample and steps down to a
-smaller model when one takes longer than 3 seconds. The chosen model is
-downloaded once and the service uses it from the cache. The other parts of the
-plan (OpenClaw, Pusula, the connection) are still shown as advice only.
+### Speech recognition
+
+The installer shows the same plan first and follows it for speech recognition.
+Only Whisper large-v3 is used: in daily use the smaller models misheard too many
+commands to be worth running.
+
+- **Whisper large-v3 on this machine** when it fits the GPU (about 5 GB free
+  after the desktop's share) or, without one, on a CPU with 16 threads and 16 GB
+  of memory. The installer times it on an 11-second sample; it is kept only if it
+  hears the sample within 3 seconds. The model is downloaded once (about 3 GB)
+  and the service uses it from the cache; a download that turned out too slow is
+  removed again.
+- **Transcription on the iPhone** otherwise. The Ceviz iPhone app turns each
+  command into text with Apple's on-device speech recognition and sends the text
+  with the audio; nothing is downloaded on this machine.
+
+To switch an installed helper, set `WATCH_CEVIZ_STT_ENGINE=phone` (or `auto`
+with `WATCH_CEVIZ_WHISPER_MODEL=large-v3`) in a drop-in under
+`~/.config/systemd/user/watch-ceviz-backend.service.d/` and restart the service.
+
+The other parts of the plan (OpenClaw, Pusula, the connection) are still shown
+as advice only.
 
 The installer creates a Python environment and installs dependencies, including
 CUDA libraries when the plan finds a usable GPU. It generates a pairing token, creates a
@@ -193,8 +210,8 @@ do not reinstall over a working installation.
 |---|---|---|
 | `WATCH_CEVIZ_PORT` | `8080` | Backend port |
 | `WATCH_CEVIZ_NETWORK_MODE` | `auto` | `tailscale`, `relay`, `manual`, or automatic selection |
-| `WATCH_CEVIZ_WHISPER_MODEL` | chosen by the plan and a timing on this machine | Speech-to-text model; setting it skips the timing |
-| `WATCH_CEVIZ_STT_MEASURE` | `1` | `0` uses the plan's model without timing it |
+| `WATCH_CEVIZ_WHISPER_MODEL` | `large-v3` if the plan and a timing allow it, otherwise none (the iPhone transcribes) | Speech-to-text model; setting it skips the plan and the timing |
+| `WATCH_CEVIZ_STT_MEASURE` | `1` | `0` trusts the plan's large-v3 choice without timing it |
 | `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | Default speech-to-text language |
 | `OPENCLAW_WATCH_AGENT` | `main` | OpenClaw agent used for Watch commands |
 

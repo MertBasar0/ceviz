@@ -1,2 +1,3 @@
 "NSMicrophoneUsageDescription" = "Ceviz uses the microphone only to record voice commands you start.";
 "NSCameraUsageDescription" = "Ceviz uses the camera only to scan your backend pairing QR code.";
+"NSSpeechRecognitionUsageDescription" = "When your computer cannot run the speech model, Ceviz turns your voice commands into text on this iPhone. Recognition runs on the device.";

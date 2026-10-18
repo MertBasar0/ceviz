@@ -1,7 +1,10 @@
+import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 DEPLOY_DIR = Path(__file__).resolve().parents[1] / "deploy"
 sys.path.insert(0, str(DEPLOY_DIR))
@@ -12,28 +15,28 @@ SAMPLE = DEPLOY_DIR / "assets" / "stt-sample.wav"
 
 
 class FakeWhisper:
-    """Per-size decode time, heard text and load failures, standing in for local_whisper."""
+    """Decode time, heard text and a load failure, standing in for local_whisper."""
 
-    def __init__(self, seconds=None, text=None, broken=(), device="cuda"):
-        self.seconds = seconds or {}
-        self.text = text or {}
-        self.broken = set(broken)
+    def __init__(self, seconds=0.0, text="And so, my fellow Americans", broken=False, device="cuda"):
+        self.seconds = seconds
+        self.text = text
+        self.broken = broken
         self.device = device
         self.opened = []
 
     def open(self, size, device):
         self.opened.append((size, device))
-        if size in self.broken:
+        if self.broken:
             raise RuntimeError(f"cannot load {size}")
         return size, self.device
 
     def transcribe(self, model, path, lang):
-        time.sleep(self.seconds.get(model, 0.0))
-        return self.text.get(model, "And so, my fellow Americans")
+        time.sleep(self.seconds)
+        return self.text
 
-    def run(self, sizes, budget):
-        return measure_stt.measure(sizes, "auto", SAMPLE, budget, opener=self.open, transcriber=self.transcribe,
-                                   log=lambda message: None)
+    def run(self, budget):
+        return measure_stt.measure("large-v3", "auto", SAMPLE, budget, opener=self.open,
+                                   transcriber=self.transcribe, log=lambda message: None)
 
 
 class MeasureTests(unittest.TestCase):
@@ -41,40 +44,50 @@ class MeasureTests(unittest.TestCase):
         self.assertTrue(SAMPLE.exists())
         self.assertEqual(SAMPLE.read_bytes()[:4], b"RIFF")
 
-    def test_candidates_step_down_from_the_plan(self):
-        self.assertEqual(measure_stt.candidates_from("large-v3"), ["large-v3", "medium", "small"])
-        self.assertEqual(measure_stt.candidates_from("medium"), ["medium", "small"])
-        self.assertEqual(measure_stt.candidates_from("/models/custom"), ["/models/custom"])
-
-    def test_first_model_within_budget_is_chosen_without_trying_smaller_ones(self):
+    def test_large_v3_within_budget_fits(self):
         whisper = FakeWhisper()
-        result = whisper.run(["large-v3", "medium", "small"], budget=1.0)
-        self.assertEqual((result["chosen"]["model"], result["chosen"]["device"]), ("large-v3", "cuda"))
-        self.assertEqual([size for size, _ in whisper.opened], ["large-v3"])
+        result = whisper.run(budget=1.0)
+        self.assertEqual((result["model"], result["device"], result["fits"]), ("large-v3", "cuda", True))
+        self.assertEqual(whisper.opened, [("large-v3", "auto")])
 
-    def test_too_slow_steps_down(self):
-        whisper = FakeWhisper(seconds={"large-v3": 0.12})
-        result = whisper.run(["large-v3", "medium", "small"], budget=0.05)
-        self.assertEqual(result["chosen"]["model"], "medium")
-        self.assertFalse(result["tried"][0]["fits"])
-
-    def test_a_model_that_cannot_load_is_skipped(self):
-        result = FakeWhisper(broken={"large-v3"}).run(["large-v3", "medium"], budget=1.0)
-        self.assertEqual(result["chosen"]["model"], "medium")
-        self.assertIn("cannot load large-v3", result["tried"][0]["error"])
+    def test_too_slow_does_not_fit_and_no_smaller_model_is_tried(self):
+        whisper = FakeWhisper(seconds=0.12)
+        result = whisper.run(budget=0.05)
+        self.assertFalse(result["fits"])
+        self.assertEqual(whisper.opened, [("large-v3", "auto")])
 
     def test_hearing_nothing_does_not_count_as_fast(self):
-        result = FakeWhisper(text={"large-v3": ""}).run(["large-v3", "small"], budget=1.0)
-        self.assertEqual(result["chosen"]["model"], "small")
+        self.assertFalse(FakeWhisper(text="").run(budget=1.0)["fits"])
 
-    def test_when_none_fits_the_fastest_working_one_is_marked_slow(self):
-        whisper = FakeWhisper(seconds={"medium": 0.12, "small": 0.06})
-        result = whisper.run(["medium", "small"], budget=0.01)
-        self.assertEqual((result["chosen"]["model"], result["chosen"]["slow"]), ("small", True))
+    def test_a_model_that_cannot_load_is_reported(self):
+        result = FakeWhisper(broken=True).run(budget=1.0)
+        self.assertFalse(result["fits"])
+        self.assertIn("cannot load large-v3", result["error"])
 
-    def test_nothing_runs_means_no_choice(self):
-        result = FakeWhisper(broken={"medium", "small"}).run(["medium", "small"], budget=1.0)
-        self.assertIsNone(result["chosen"])
+    def test_exit_codes_and_a_useless_download_is_removed(self):
+        with tempfile.TemporaryDirectory() as hub, mock.patch.dict(os.environ, {"HF_HUB_CACHE": hub}):
+            cache = measure_stt.cached_model_dir("large-v3")
+            self.assertEqual(cache.parent, Path(hub))
+
+            def slow(model, device, sample, budget):
+                cache.mkdir(parents=True)  # the load downloaded it
+                return {"model": model, "fits": False, "seconds": 9.0, "heard": "words"}
+
+            with mock.patch.object(measure_stt, "measure", side_effect=slow), mock.patch("builtins.print"):
+                self.assertEqual(measure_stt.main([]), 1)
+            self.assertFalse(cache.exists())
+
+            cache.mkdir(parents=True)  # already cached before: keep it
+            with mock.patch.object(measure_stt, "measure", return_value={"model": "large-v3", "fits": False,
+                                                                          "error": "RuntimeError: x"}), \
+                 mock.patch("builtins.print"):
+                self.assertEqual(measure_stt.main([]), 2)
+            self.assertTrue(cache.exists())
+
+            with mock.patch.object(measure_stt, "measure", return_value={"model": "large-v3", "fits": True}), \
+                 mock.patch("builtins.print") as printed:
+                self.assertEqual(measure_stt.main(["--device", "cpu"]), 0)
+            printed.assert_called_once_with("large-v3")
 
 
 if __name__ == "__main__":

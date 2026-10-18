@@ -165,3 +165,16 @@
 "Start a new message after reviewing?" = "Kontrol ettikten sonra yeni mesaja geçilsin mi?";
 "I reviewed it — start a new message" = "Kontrol ettim — yeni mesaja geç";
 "The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message." = "Önceki mesaj hâlâ işlenebilir. Bu adım onu tekrar göndermez veya iptal etmez. Yeni mesaja geçmeden önce konuşmayı kontrol edin.";
+
+/* Speech recognition on the iPhone when the helper's machine runs no Whisper */
+"SPEECH ON IPHONE" = "IPHONE'DA KONUŞMA TANIMA";
+"If your computer cannot run the speech model, this iPhone turns each command into text with Apple's on-device speech recognition. Prepare it once here so commands also work while the phone is locked." = "Bilgisayarın konuşma modelini çalıştıramıyorsa bu iPhone her komutu Apple'ın cihaz üstü konuşma tanımasıyla metne çevirir. Telefon kilitliyken de çalışması için burada bir kez hazırla.";
+"PREPARE SPEECH RECOGNITION" = "KONUŞMA TANIMAYI HAZIRLA";
+"PREPARING_" = "HAZIRLANIYOR_";
+"Ready: %@ on this iPhone (Apple speech model)." = "Hazır: %@, bu iPhone'da (Apple konuşma modeli).";
+"Ready: %@ on this iPhone (Apple dictation model)." = "Hazır: %@, bu iPhone'da (Apple dikte modeli).";
+"This iPhone has no on-device speech model for %@." = "Bu iPhone'da %@ için cihaz üstü konuşma modeli yok.";
+"Allow Speech Recognition for Ceviz in iOS Settings." = "iOS Ayarlar'da Ceviz için Konuşma Tanıma'ya izin ver.";
+"The recording could not be read." = "Kayıt okunamadı.";
+"The recording could not be saved for transcription." = "Kayıt metne çevrilmek üzere kaydedilemedi.";
+"iPhone speech recognition failed: %@" = "iPhone konuşma tanıması başarısız oldu: %@";

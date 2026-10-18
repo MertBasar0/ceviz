@@ -514,6 +514,7 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
         if let deliveryOwner, deliveryOwner.generation == commandConfigurationGeneration { return deliveryOwner.coordinator }
         let generation = commandConfigurationGeneration
         let coordinator = try WatchDeliveryCoordinator(baseURL: BackendConfig.baseURLString, token: BackendConfig.token,
+            transcribe: { await PhoneSpeechRecognizer.transcribe($0) },
             isCurrent: { [weak self] in self?.commandConfigurationGeneration == generation })
         deliveryOwner = (generation, coordinator)
         return coordinator

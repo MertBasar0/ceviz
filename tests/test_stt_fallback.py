@@ -111,6 +111,18 @@ class WatchSTTErrorTests(unittest.TestCase):
             result = self._stt("auto").transcribe_watch_payload(self.PAYLOAD)
         self.assertEqual(result.error, "STT yok: lokal whisper transkript üretemedi ve OPENAI_API_KEY tanımlı değil")
 
+    def test_phone_mode_uses_the_phone_text_and_never_loads_whisper(self) -> None:
+        stt = self._stt("phone")
+        with mock.patch.object(local_whisper, "transcribe_bytes", side_effect=AssertionError("no Whisper")):
+            heard = stt.transcribe_watch_payload({**self.PAYLOAD, "transcript": "notları aç",
+                                                  "transcript_source": "speech-transcriber"})
+            self.assertEqual((heard.transcript, heard.source), ("notları aç", "iphone:speech-transcriber"))
+            missing = stt.transcribe_watch_payload({**self.PAYLOAD, "transcript_error": "Türkçe modeli indirilmedi"})
+            self.assertEqual(missing.error, "Bu bilgisayarda konuşmayı iPhone çözüyor ama metin gelmedi: "
+                                            "Türkçe modeli indirilmedi")
+            old_app = stt.transcribe_watch_payload({**self.PAYLOAD, "locale": "en-US"})
+            self.assertIn("update the Ceviz iPhone app", old_app.error)
+
 
 if __name__ == "__main__":
     unittest.main()

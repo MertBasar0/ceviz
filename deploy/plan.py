@@ -2,10 +2,11 @@
 """Ceviz plan: a read-only survey of this machine and the setup it can run well.
 
 It changes nothing. It reads the hardware, the installed software and, unless --offline is
-given, whether the services Ceviz depends on are reachable. It then prints a recipe: which
-speech-recognition model fits, whether the optional Pusula router can run, how the phone will
-reach the helper, and what to fix first. --json prints the same as structured data for the
-installer or for an assistant that explains the plan; it never contains credentials.
+given, whether the services Ceviz depends on are reachable. It then prints a recipe: whether
+Whisper large-v3 runs here or the iPhone transcribes, whether the optional Pusula router can
+run, how the phone will reach the helper, and what to fix first. --json prints the same as
+structured data for the installer or for an assistant that explains the plan; it never contains
+credentials.
 
 Standard library only, so it runs with the system Python before anything is installed.
 """
@@ -29,8 +30,10 @@ SERVICE = "watch-ceviz-backend"
 
 # Resident GPU memory while serving, including working buffers, in GB. Measured on an RTX 5070 Ti
 # with faster-whisper fp16 (large-v3) and Ollama at a 2,048-token context (OpenJev 4B).
-WHISPER_GPU_GB = (("large-v3", 4.5), ("medium", 2.6), ("small", 1.2))
-WHISPER_DISK_GB = {"large-v3": 3.1, "medium": 1.5, "small": 0.5}
+# Only large-v3 is planned: in daily use the smaller models misheard too many commands to help.
+WHISPER_MODEL = "large-v3"
+WHISPER_GPU_GB = 4.5
+WHISPER_DISK_GB = 3.1
 DECISION_MODEL = "hf.co/apus-ailab/APUS-OpenJev-v1-4B-GGUF:Q8_0"
 DECISION_MODEL_GB = 6.7
 DECISION_MODEL_DISK_GB = 4.5
@@ -38,11 +41,14 @@ DECISION_MODEL_DISK_GB = 4.5
 DESKTOP_RESERVE_GB = 1.5
 HEADROOM_GB = 0.6
 # Without a GPU: warm large-v3 took 3.5 s for 11 s of speech on 16 threads (Ryzen 9 9950X3D under
-# WSL), over the installer's 3 s budget. Medium is the starting guess from 16 threads; the
-# installer's measurement decides and steps down when needed.
+# WSL), just over the installer's 3 s budget. From 16 threads and 16 GB the installer times it;
+# anything else leaves speech recognition to the iPhone.
 STRONG_CPU_THREADS = 16
-MEASURED_AT_INSTALL = ("The installer times this model on this machine and steps down to a smaller one "
-                       "if it is too slow.")
+STRONG_CPU_RAM_GB = 16
+MEASURED_AT_INSTALL = ("The installer times it on this machine; if it is too slow, the iPhone transcribes "
+                       "instead.")
+ON_PHONE = ("The iPhone transcribes each command with Apple's on-device speech recognition and sends the "
+            "text; no Whisper model is downloaded.")
 FRONTIER_PROVIDERS = ("anthropic", "openai", "google", "xai")
 # Only these service settings are read; the pairing token and everything else stay unread.
 SERVICE_SETTINGS = ("WATCH_CEVIZ_WHISPER_MODEL", "WATCH_CEVIZ_STT_ENGINE", "WATCH_CEVIZ_ROUTER",
@@ -287,36 +293,38 @@ def gpu_budget(facts: dict) -> float:
 
 
 def plan_speech(facts: dict) -> tuple[dict, float]:
-    """The Whisper choice and the GPU memory it takes."""
+    """Whisper large-v3 where it can run well, otherwise the iPhone; and the GPU memory it takes."""
     budget = gpu_budget(facts)
-    for model, need in WHISPER_GPU_GB:
-        if budget >= need + HEADROOM_GB:
-            return step("speech", "recommended", f"Whisper {model} on the GPU",
-                        [f"{budget:.1f} GB of GPU memory is available to Ceviz; {model} needs about {need} GB.",
-                         MEASURED_AT_INSTALL], whisper_model=model, device="cuda"), need
+    if budget >= WHISPER_GPU_GB + HEADROOM_GB:
+        return step("speech", "recommended", f"Whisper {WHISPER_MODEL} on the GPU",
+                    [f"{budget:.1f} GB of GPU memory is available to Ceviz; {WHISPER_MODEL} needs about "
+                     f"{WHISPER_GPU_GB} GB.", MEASURED_AT_INSTALL],
+                    engine="local", whisper_model=WHISPER_MODEL, device="cuda"), WHISPER_GPU_GB
     threads = facts["cpu"]["threads"]
     ram = facts["memory_gb"]["total"] or 0
     reasons = []
     if facts["gpu"]["status"] == "blocked":
         reasons.append("An NVIDIA card is installed but this system cannot reach it; fix that first "
-                       "(on WSL: `wsl --shutdown` from Windows) to use the GPU.")
+                       f"(on WSL: `wsl --shutdown` from Windows) to run {WHISPER_MODEL} on it.")
     elif facts["gpu"]["status"] == "apple_silicon":
         reasons.append("Apple Silicon: the current speech engine runs on the CPU only; a Metal engine is planned.")
     elif budget:
-        reasons.append(f"The GPU leaves only {budget:.1f} GB for Ceviz, too little for the smallest model on it.")
+        reasons.append(f"The GPU leaves only {budget:.1f} GB for Ceviz; {WHISPER_MODEL} needs about "
+                       f"{WHISPER_GPU_GB + HEADROOM_GB:.1f} GB.")
     else:
         reasons.append("No usable NVIDIA GPU was found.")
-    if threads < 4 or ram < 8:
-        reasons.append(f"{threads} CPU threads and {ram:.0f} GB of memory will make speech recognition slow; "
-                       "transcribing on the iPhone instead is planned for such machines.")
-        return step("speech", "recommended", "Whisper small on the CPU", reasons,
-                    whisper_model="small", device="cpu", slow=True), 0.0
-    if threads >= STRONG_CPU_THREADS and ram >= 16:
-        reasons += [f"{threads} CPU threads may run Whisper medium fast enough.", MEASURED_AT_INSTALL]
-        return step("speech", "recommended", "Whisper medium on the CPU", reasons, whisper_model="medium", device="cpu"), 0.0
-    reasons += [f"Whisper small on {threads} CPU threads; larger models are much slower without a GPU.",
-                MEASURED_AT_INSTALL]
-    return step("speech", "recommended", "Whisper small on the CPU", reasons, whisper_model="small", device="cpu"), 0.0
+    if threads >= STRONG_CPU_THREADS and ram >= STRONG_CPU_RAM_GB:
+        reasons += [f"{threads} CPU threads may run {WHISPER_MODEL} fast enough.", MEASURED_AT_INSTALL]
+        return step("speech", "recommended", f"Whisper {WHISPER_MODEL} on the CPU", reasons,
+                    engine="local", whisper_model=WHISPER_MODEL, device="cpu"), 0.0
+    reasons += [f"{threads} CPU threads and {ram:.0f} GB of memory are too little for {WHISPER_MODEL} without "
+                "a GPU, and smaller models mishear too many commands.", ON_PHONE]
+    return step("speech", "recommended", "Transcribe on the iPhone", reasons,
+                engine="phone", whisper_model=None, device=None), 0.0
+
+
+def speech_label(value: str) -> str:
+    return "transcription on the iPhone" if value == "phone" else f"Whisper {value}"
 
 
 def plan_executor(facts: dict) -> dict:
@@ -397,7 +405,8 @@ def recommend(facts: dict) -> dict:
     pusula = plan_pusula(facts, speech_gb)
     network = plan_network(facts)
 
-    disk_need = WHISPER_DISK_GB[speech["whisper_model"]] + (DECISION_MODEL_DISK_GB if pusula["status"] == "optional" else 0)
+    disk_need = ((WHISPER_DISK_GB if speech["engine"] == "local" else 0)
+                 + (DECISION_MODEL_DISK_GB if pusula["status"] == "optional" else 0))
     if facts["disk_free_gb"] < disk_need + 5:
         warnings.append(f"Only {facts['disk_free_gb']} GB free in your home folder; the models need about "
                         f"{disk_need:.1f} GB plus room to update.")
@@ -414,8 +423,12 @@ def recommend(facts: dict) -> dict:
 
     current = facts["ceviz"].get("settings") or {}
     changes = []
-    if current.get("WATCH_CEVIZ_WHISPER_MODEL") and current["WATCH_CEVIZ_WHISPER_MODEL"] != speech["whisper_model"]:
-        changes.append(f"Speech model is {current['WATCH_CEVIZ_WHISPER_MODEL']}; this machine fits {speech['whisper_model']}.")
+    installed = ("phone" if current.get("WATCH_CEVIZ_STT_ENGINE") == "phone"
+                 else current.get("WATCH_CEVIZ_WHISPER_MODEL"))
+    planned = speech["whisper_model"] or "phone"
+    if installed and installed != planned:
+        changes.append(f"Speech recognition uses {speech_label(installed)}; the plan for this machine is "
+                       f"{speech_label(planned)}.")
     return {"schema": SCHEMA_VERSION, "blockers": blockers, "steps": [executor, speech, network, pusula],
             "warnings": warnings, "differences_from_current": changes}
 
@@ -467,14 +480,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--agent", default=os.environ.get("OPENCLAW_WATCH_AGENT", ""),
                         help="OpenClaw agent whose models are read (default: the installed helper's agent)")
     parser.add_argument("--speech", action="store_true",
-                        help="for the installer: the report on stderr, '<whisper model> <device>' on stdout")
+                        help="for the installer: the report on stderr, 'large-v3 cuda|cpu' or 'phone none' on stdout")
     args = parser.parse_args(argv)
     facts = probe(offline=args.offline, agent=args.agent)
     recipe = recommend(facts)
     if args.speech:
         print(render(facts, recipe), file=sys.stderr)
         speech = next(item for item in recipe["steps"] if item["module"] == "speech")
-        print(f"{speech['whisper_model']} {speech['device']}")
+        print(f"{speech['whisper_model']} {speech['device']}" if speech["engine"] == "local" else "phone none")
         return 0  # the installer decides what is fatal; it has its own Python and service checks
     if args.json:
         print(json.dumps({"facts": facts, "recipe": recipe}, indent=2, ensure_ascii=False))

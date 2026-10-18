@@ -20,6 +20,9 @@ MAX_CAPTURE_AGE = 900
 MAX_FUTURE_SKEW = 30
 MAX_SUBMISSIONS = 512
 IDENTITY_FIELDS = ("ledger_id", "command_id", "audio_digest", "client_timestamp", "continue_job_id")
+# Sent by the iPhone when this helper leaves speech recognition to it. Not part of the identity:
+# a retry may transcribe the same audio slightly differently, and is still the same command.
+PHONE_TRANSCRIPT_FIELDS = {"transcript": 4000, "transcript_source": 40, "transcript_error": 300}
 
 
 def audio_fingerprint(payload):
@@ -210,14 +213,24 @@ class WatchAdmission:
                 raise SessionError("delivery_unknown", "This audio may already have been sent. Check Jobs before recording another command.", 409, uncertain=True)
             return row["job_id"]
 
-    def submit(self, payload, target, execute):
+    def submit(self, payload, target, execute, phone_transcript=False):
         identity = identity_metadata(payload)
-        if set(payload) - set(IDENTITY_FIELDS) - {"audio_data", "format", "locale"}:
+        # Text that is not derived from the audio here must not bypass it, unless this helper
+        # leaves speech recognition to the phone and the text can only come from there.
+        allowed = set(IDENTITY_FIELDS) | {"audio_data", "format", "locale"}
+        if phone_transcript:
+            allowed |= set(PHONE_TRANSCRIPT_FIELDS)
+        if set(payload) - allowed:
             raise SessionError("invalid_audio", "Submit only the original Watch capture and its identity.")
         if (not isinstance(payload.get("audio_data"), str) or not payload["audio_data"]
                 or payload.get("format") not in {"m4a", "aac"}
                 or ("locale" in payload and (not isinstance(payload["locale"], str) or len(payload["locale"]) > 35))):
             raise SessionError("invalid_audio", "Expected a Watch audio capture.")
+        for key, limit in PHONE_TRANSCRIPT_FIELDS.items():
+            if key in payload and (not isinstance(payload[key], str) or len(payload[key]) > limit):
+                raise SessionError("invalid_audio", "The phone's transcript is malformed.")
+        if not re.fullmatch(r"[a-z0-9-]{0,40}", payload.get("transcript_source", "")):
+            raise SessionError("invalid_audio", "The phone's transcript is malformed.")
         material = identity["client_timestamp"] + "\n" + payload["audio_data"]
         if "continue_job_id" in identity:
             material += "\ncontinue_job_id=" + identity["continue_job_id"]

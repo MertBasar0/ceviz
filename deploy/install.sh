@@ -6,7 +6,8 @@
 # Yaptiklari:
 #   - Makineyi inceler (deploy/plan.py) ve planini gosterir; hicbir sey degistirmez
 #   - Python venv olusturur, bagimliliklari kurar (kullanilabilir GPU varsa CUDA lib'leri de)
-#   - Plandaki Whisper modelini bu makinede olcer, yavassa kucuk modele iner (deploy/measure_stt.py)
+#   - Whisper large-v3'u bu makinede olcer (deploy/measure_stt.py); sigmiyor ya da yavassa
+#     konusmayi iPhone cozer ve model indirilmez
 #   - Erisim token'i uretir
 #   - systemd --user servisini yazar ve baslatir (yoksa nohup fallback)
 #   - Tailscale varsa backend'i tailnet'e /ceviz olarak yayinlar
@@ -72,12 +73,11 @@ SYSTEMD_PATH="${SYSTEMD_PATH//\"/\\\"}"
 SYSTEMD_PATH="${SYSTEMD_PATH//%/%%}"
 
 # --- 1a) Plan: what this machine can run well (read-only, deploy/plan.py) ---
-PLAN_MODEL=small
-PLAN_DEVICE=cpu
+PLAN_MODEL=phone
+PLAN_DEVICE=none
 echo "==> Bu makine inceleniyor (hicbir sey degistirilmez)"
 read -r PLAN_MODEL PLAN_DEVICE < <("$INSTALL_PY" "$SCRIPT_DIR/plan.py" --speech --offline || true) || true
-case "$PLAN_MODEL" in large-v3|medium|small) ;; *) PLAN_MODEL=small ;; esac
-case "$PLAN_DEVICE" in cuda|cpu) ;; *) PLAN_DEVICE=cpu ;; esac
+case "$PLAN_MODEL $PLAN_DEVICE" in "large-v3 cuda"|"large-v3 cpu") ;; *) PLAN_MODEL=phone PLAN_DEVICE=none ;; esac
 
 if [ ! -x "$PY" ]; then
   echo "==> Python venv olusturuluyor"
@@ -86,10 +86,14 @@ fi
 "$PIP" install -q --upgrade pip
 "$PIP" install -q -r "$SCRIPT_DIR/requirements.txt"
 
-# --- 2) Speech model: the plan's suggestion, timed on this machine ---
-# The plan sizes Whisper to the GPU memory (or picks the CPU); deploy/measure_stt.py then times
-# it on an 11 s sample and steps down to a smaller model if it is too slow. An explicit
-# WATCH_CEVIZ_WHISPER_MODEL always wins; WATCH_CEVIZ_STT_MEASURE=0 skips the timing.
+# --- 2) Speech recognition: Whisper large-v3 where it runs well, otherwise the iPhone ---
+# Smaller Whisper models misheard too many commands to be worth running. The plan says whether
+# large-v3 fits the GPU (or a strong CPU); deploy/measure_stt.py then times it on an 11 s sample.
+# No room for it, or too slow: the iPhone transcribes each command with Apple's on-device speech
+# recognition and no model is downloaded. An explicit WATCH_CEVIZ_WHISPER_MODEL always wins;
+# WATCH_CEVIZ_STT_MEASURE=0 trusts the plan without timing.
+STT_ENGINE=phone
+WHISPER_MODEL=""
 LD_LIBS=""
 if [ "$PLAN_DEVICE" = cuda ]; then
   echo "==> GPU kullanilabilir — CUDA kutuphaneleri kuruluyor"
@@ -98,25 +102,28 @@ if [ "$PLAN_DEVICE" = cuda ]; then
   LD_LIBS="$SITE/nvidia/cublas/lib:$SITE/nvidia/cudnn/lib"
 fi
 if [ -n "${WATCH_CEVIZ_WHISPER_MODEL:-}" ]; then
-  WHISPER_MODEL="$WATCH_CEVIZ_WHISPER_MODEL"
+  STT_ENGINE=auto WHISPER_MODEL="$WATCH_CEVIZ_WHISPER_MODEL"
   echo "==> Konusma modeli WATCH_CEVIZ_WHISPER_MODEL ile secildi: $WHISPER_MODEL (olcum atlandi)"
+elif [ "$PLAN_MODEL" = phone ]; then
+  echo "==> Bu makinede Whisper large-v3 icin yer yok; konusmayi iPhone cozecek (model indirilmez)"
 elif [ "${WATCH_CEVIZ_STT_MEASURE:-1}" = 0 ]; then
-  WHISPER_MODEL="$PLAN_MODEL"
-  echo "==> Konusma modeli plandan: $WHISPER_MODEL (olcum kapali)"
+  STT_ENGINE=auto WHISPER_MODEL=large-v3
+  echo "==> Konusma modeli plandan: large-v3 (olcum kapali)"
 else
   MEASURE_DEVICE=cpu
   [ "$PLAN_DEVICE" = cuda ] && MEASURE_DEVICE=auto
-  echo "==> Konusma tanima bu makinede olculuyor; model bir kez indirilir ve servis onu kullanir"
-  MEASURED="$(LD_LIBRARY_PATH="$LD_LIBS" "$PY" "$SCRIPT_DIR/measure_stt.py" --start "$PLAN_MODEL" \
-    --device "$MEASURE_DEVICE" || true)"
-  case "$MEASURED" in
-    large-v3|medium|small)
-      WHISPER_MODEL="$MEASURED"
-      echo "==> Secilen konusma modeli: $WHISPER_MODEL" ;;
-    *)
-      WHISPER_MODEL="$PLAN_MODEL"
-      echo "!!  UYARI: Olcum tamamlanamadi; plandaki model kullaniliyor: $WHISPER_MODEL" ;;
+  echo "==> Whisper large-v3 bu makinede olculuyor; bir kez indirilir (~3 GB) ve servis onu kullanir"
+  MEASURE_STATUS=0
+  LD_LIBRARY_PATH="$LD_LIBS" "$PY" "$SCRIPT_DIR/measure_stt.py" --device "$MEASURE_DEVICE" >/dev/null || MEASURE_STATUS=$?
+  case "$MEASURE_STATUS" in
+    0) STT_ENGINE=auto WHISPER_MODEL=large-v3
+       echo "==> Konusma tanima: Whisper large-v3 ($PLAN_DEVICE)" ;;
+    1) echo "==> large-v3 bu makinede yeterince hizli degil; konusmayi iPhone cozecek" ;;
+    *) echo "!!  UYARI: large-v3 olculemedi; simdilik konusmayi iPhone cozecek (deploy/README.md: Konusma tanima)" ;;
   esac
+fi
+if [ "$STT_ENGINE" = phone ]; then
+  LD_LIBS=""  # the service loads no Whisper
 fi
 
 # --- 3) Token ---
@@ -146,8 +153,8 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
     echo "WorkingDirectory=$APP_DIR"
     echo "Environment=HOME=$HOME"
     printf 'Environment="PATH=%s"\n' "$SYSTEMD_PATH"
-    echo "Environment=WATCH_CEVIZ_STT_ENGINE=auto"
-    echo "Environment=WATCH_CEVIZ_WHISPER_MODEL=$WHISPER_MODEL"
+    echo "Environment=WATCH_CEVIZ_STT_ENGINE=$STT_ENGINE"
+    [ -n "$WHISPER_MODEL" ] && echo "Environment=WATCH_CEVIZ_WHISPER_MODEL=$WHISPER_MODEL"
     echo "Environment=WATCH_CEVIZ_WHISPER_LANGUAGE=$LANG_ENV"
     echo "Environment=OPENCLAW_WATCH_AGENT=$AGENT_ENV"
     echo "Environment=WATCH_CEVIZ_AUTH_TOKEN=$TOKEN"
@@ -166,8 +173,8 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
 else
   echo "==> systemd yok — nohup ile baslatiliyor"
   LD_LIBRARY_PATH="$LD_LIBS" WATCH_CEVIZ_AUTH_TOKEN="$TOKEN" \
-    WATCH_CEVIZ_WHISPER_MODEL="$WHISPER_MODEL" WATCH_CEVIZ_WHISPER_LANGUAGE="$LANG_ENV" \
-    WATCH_CEVIZ_STT_ENGINE=auto OPENCLAW_WATCH_AGENT="$AGENT_ENV" \
+    WATCH_CEVIZ_WHISPER_MODEL="${WHISPER_MODEL:-large-v3}" WATCH_CEVIZ_WHISPER_LANGUAGE="$LANG_ENV" \
+    WATCH_CEVIZ_STT_ENGINE="$STT_ENGINE" OPENCLAW_WATCH_AGENT="$AGENT_ENV" \
     nohup "$PY" "$APP_DIR/backend/main.py" "$PORT" > "$APP_DIR/backend.log" 2>&1 &
 fi
 

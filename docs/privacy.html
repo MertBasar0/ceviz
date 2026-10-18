@@ -119,7 +119,7 @@
             <p>When you record a voice command on your Apple Watch, the audio is passed to your paired iPhone and forwarded to the backend you configured — a server you run on your own machine, reachable only over your own private network. Voice recordings, transcripts and full reports are not sent to Basar Labs. To deliver a background completion notification, the backend sends a notification title, concise result summary, job identifier, job status, deep link and handoff flag through the Ceviz relay to APNs. Notification summaries can contain information derived from your command.</p>
 
             <h2>Speech recognition</h2>
-            <p>By default, speech is transcribed locally on your own machine. A third-party speech service is used only if you explicitly configure one with your own API key. That choice, and any data it involves, is yours to make and control.</p>
+            <p>By default, speech is transcribed locally on your own machine. When that machine cannot run the speech model well, your iPhone transcribes the command instead, using Apple's on-device speech recognition: the audio is not sent to Apple or Basar Labs for this, and the text travels with the audio to your own backend. A third-party speech service is used only if you explicitly configure one with your own API key. That choice, and any data it involves, is yours to make and control.</p>
 
             <h2>What is stored on your device</h2>
             <ul>

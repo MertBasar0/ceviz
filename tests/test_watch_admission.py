@@ -120,6 +120,28 @@ class WatchAdmissionHTTPTests(HTTPFixture):
         self.invoke.assert_not_called()
         self.transcribe.assert_not_called()
 
+    def test_phone_transcript_is_accepted_only_when_the_phone_does_speech_recognition(self):
+        ledger = self.bootstrap()
+        self.assertFalse(self.http("GET", "/api/v1/watch/command/capabilities")[1]["speech_on_phone"])
+        text = {"transcript": "masaüstündeki notları aç", "transcript_source": "speech-transcriber"}
+        self.assertEqual(self.http("POST", "/api/v1/watch/command/submit", command(ledger, **text))[0], 400)
+        self.invoke.assert_not_called()
+        with patch.object(self.main.stt_client, "engine", "phone"):
+            self.assertTrue(self.http("GET", "/api/v1/watch/command/capabilities")[1]["speech_on_phone"])
+            for bad in ({"transcript_source": "Speech Transcriber"}, {"transcript": "x" * 4001},
+                        {"transcript_error": ["not", "text"]}, {"unrelated": "field"}):
+                with self.subTest(bad=bad):
+                    self.assertEqual(self.http("POST", "/api/v1/watch/command/submit", command(ledger, **bad))[0], 400)
+            self.invoke.assert_not_called()
+            payload = command(ledger, **text)
+            status, result = self.http("POST", "/api/v1/watch/command/submit", payload)
+            self.assertEqual((status, result["delivery_state"]), (200, "accepted"))
+            self.assertEqual(self.transcribe.call_args.args[0]["transcript"], "masaüstündeki notları aç")
+            # The text is not part of the identity: a retry that heard it differently is the same command.
+            retry = self.http("POST", "/api/v1/watch/command/submit", {**payload, "transcript": "masaüstü notlarını aç"})[1]
+            self.assertEqual(retry["job_id"], result["job_id"])
+        self.invoke.assert_called_once()
+
     def test_bound_identity_parent_target_and_uuid_case_remain_immutable(self):
         payload = command(self.bootstrap(), command_id=str(uuid.uuid4()).upper())
         accepted = self.http("POST", "/api/v1/watch/command/submit", payload)[1]

@@ -165,3 +165,16 @@
 "Start a new message after reviewing?" = "Start a new message after reviewing?";
 "I reviewed it — start a new message" = "I reviewed it — start a new message";
 "The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message." = "The earlier message may still run. This does not resend or cancel it. Review the conversation before starting a new message.";
+
+/* Speech recognition on the iPhone when the helper's machine runs no Whisper */
+"SPEECH ON IPHONE" = "SPEECH ON IPHONE";
+"If your computer cannot run the speech model, this iPhone turns each command into text with Apple's on-device speech recognition. Prepare it once here so commands also work while the phone is locked." = "If your computer cannot run the speech model, this iPhone turns each command into text with Apple's on-device speech recognition. Prepare it once here so commands also work while the phone is locked.";
+"PREPARE SPEECH RECOGNITION" = "PREPARE SPEECH RECOGNITION";
+"PREPARING_" = "PREPARING_";
+"Ready: %@ on this iPhone (Apple speech model)." = "Ready: %@ on this iPhone (Apple speech model).";
+"Ready: %@ on this iPhone (Apple dictation model)." = "Ready: %@ on this iPhone (Apple dictation model).";
+"This iPhone has no on-device speech model for %@." = "This iPhone has no on-device speech model for %@.";
+"Allow Speech Recognition for Ceviz in iOS Settings." = "Allow Speech Recognition for Ceviz in iOS Settings.";
+"The recording could not be read." = "The recording could not be read.";
+"The recording could not be saved for transcription." = "The recording could not be saved for transcription.";
+"iPhone speech recognition failed: %@" = "iPhone speech recognition failed: %@";

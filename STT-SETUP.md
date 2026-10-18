@@ -6,14 +6,19 @@ OpenAI artık zorunlu değil; yalnızca opsiyonel fallback.
 ## Nasıl çalışıyor
 `backend/stt.py` → motor seçimi `WATCH_CEVIZ_STT_ENGINE` (default **auto**):
 1. İstemci `transcript` gönderdiyse → onu kullan (STT atlanır).
-2. **auto/local:** lokal Whisper (`backend/local_whisper.py`, faster-whisper). CUDA varsa GPU, yoksa CPU'ya düşer (warmup ile doğrulanır).
-3. **auto/openai:** lokal başarısızsa ve `OPENAI_API_KEY` varsa OpenAI'ye düşer.
+2. **phone:** bu makine Whisper çalıştırmaz; iPhone her komutu Apple'ın cihaz üstü konuşma tanımasıyla
+   metne çevirip sesle birlikte gönderir. Kurulum, large-v3'e yer yoksa ya da ölçümde yavaşsa bunu seçer.
+3. **auto/local:** lokal Whisper (`backend/local_whisper.py`, faster-whisper). CUDA varsa GPU, yoksa CPU'ya düşer (warmup ile doğrulanır).
+4. **auto/openai:** lokal başarısızsa ve `OPENAI_API_KEY` varsa OpenAI'ye düşer.
+
+Kurulum yalnızca large-v3 kurar: günlük kullanımda küçük modeller komutları fazla yanlış duydu.
+Ayrıntı: [deploy/README.md](deploy/README.md#speech-recognition).
 
 ## Env ayarları
 | Değişken | Default | Açıklama |
 |---|---|---|
-| `WATCH_CEVIZ_STT_ENGINE` | `auto` | `auto` \| `local` \| `openai` |
-| `WATCH_CEVIZ_WHISPER_MODEL` | `small` | `small` \| `medium` \| `large-v3` (Türkçe doğruluk ↑) |
+| `WATCH_CEVIZ_STT_ENGINE` | `auto` | `auto` \| `local` \| `openai` \| `phone` |
+| `WATCH_CEVIZ_WHISPER_MODEL` | `small` (kurulum `large-v3` yazar) | `large-v3` önerilir; elle başka model de verilebilir |
 | `WATCH_CEVIZ_WHISPER_DEVICE` | `auto` | `auto` \| `cuda` \| `cpu` |
 | `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | |
 

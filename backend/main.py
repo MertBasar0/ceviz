@@ -1397,11 +1397,12 @@ class WatchCevizHandler(BoundedHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
-                "watch_command_recovery_v1": True,
+                "watch_command_recovery_v1": True, "speech_on_phone": stt_client.on_phone,
             }).encode("utf-8"))
             return
         if path == "/api/v1/watch/command/capabilities":
-            self.send_json(200, watch_admission.capabilities())
+            # speech_on_phone: this machine runs no Whisper; the iPhone sends each command's text.
+            self.send_json(200, {**watch_admission.capabilities(), "speech_on_phone": stt_client.on_phone})
             return
         if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):
             handle_session_request(self, "GET", path, parse_qs(parsed_url.query))
@@ -1746,7 +1747,8 @@ Content-Type: application/json
                     status, result = 200, watch_admission.status(payload, openclaw_client.agent)
                 else:
                     status, result = watch_admission.submit(payload, openclaw_client.agent,
-                        lambda value: execute_watch_command(value, strict_save=True)["id"])
+                        lambda value: execute_watch_command(value, strict_save=True)["id"],
+                        phone_transcript=stt_client.on_phone)
                 if result.get("job_id"):
                     with jobs_lock:
                         job = job_snapshot(jobs_db.get(result["job_id"]))
@@ -1798,6 +1800,9 @@ Content-Type: application/json
 
 
 def _warmup_stt() -> None:
+    if stt_client.on_phone:
+        logging.info("STT: konuşmayı iPhone çözüyor; bu makinede Whisper yüklenmez")
+        return
     try:
         import local_whisper
         device = local_whisper.warmup()

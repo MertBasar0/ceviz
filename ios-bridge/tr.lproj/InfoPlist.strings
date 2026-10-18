@@ -1,2 +1,3 @@
 "NSMicrophoneUsageDescription" = "Ceviz, yalnızca sizin başlattığınız sesli komutları kaydetmek için mikrofonu kullanır.";
 "NSCameraUsageDescription" = "Ceviz, yalnızca backend eşleşme QR kodunu okumak için kamerayı kullanır.";
+"NSSpeechRecognitionUsageDescription" = "Bilgisayarın konuşma modelini çalıştıramadığında Ceviz sesli komutlarını bu iPhone'da metne çevirir. Tanıma cihazda yapılır.";

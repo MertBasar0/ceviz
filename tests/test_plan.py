@@ -53,42 +53,46 @@ class RecipeTests(unittest.TestCase):
         without_ollama = steps(plan.recommend(facts(ollama=False)))["pusula"]["needs"]
         self.assertEqual(without_ollama[0], "install Ollama")
 
-    def test_smaller_cards_get_smaller_models_and_no_pusula(self):
+    def test_only_large_v3_is_planned_and_a_smaller_card_leaves_speech_to_the_iphone(self):
         # The desktop keeps 1.5 GB of a shared card and each plan leaves 0.6 GB of headroom.
-        expected = {8.0: "large-v3", 5.0: "medium", 4.5: "small", 3.4: "small"}
-        for card, model in expected.items():
-            by = steps(plan.recommend(facts(gpu_gb=card)))
-            self.assertEqual(by["speech"]["whisper_model"], model, card)
+        expected = {8.0: ("large-v3", "cuda"), 6.6: ("large-v3", "cuda"), 6.5: (None, None), 3.4: (None, None)}
+        for card, (model, device) in expected.items():
+            by = steps(plan.recommend(facts(gpu_gb=card, threads=8)))
+            self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), (model, device), card)
+            self.assertEqual(by["speech"]["engine"], "local" if model else "phone", card)
             self.assertEqual(by["pusula"]["status"], "not_recommended", card)
-
-    def test_card_too_small_for_any_model_falls_back_to_the_cpu(self):
-        by = steps(plan.recommend(facts(gpu_gb=2.0, threads=8)))
-        self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("small", "cpu"))
-        self.assertIn("too little", by["speech"]["reasons"][0])
+        phone = steps(plan.recommend(facts(gpu_gb=2.0, threads=8)))["speech"]
+        self.assertEqual(phone["choice"], "Transcribe on the iPhone")
+        self.assertIn("large-v3 needs about 5.1 GB", phone["reasons"][0])
+        self.assertIn("no Whisper model is downloaded", phone["reasons"][-1])
 
     def test_unreachable_gpu_is_reported_and_planned_as_cpu(self):
         by = steps(plan.recommend(facts(gpu_status="blocked")))
-        self.assertEqual(by["speech"]["device"], "cpu")
+        self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("large-v3", "cpu"))
         self.assertIn("wsl --shutdown", by["speech"]["reasons"][0])
         self.assertEqual(by["pusula"]["status"], "not_recommended")
 
-    def test_many_cpu_threads_start_at_medium_for_the_installer_to_time(self):
+    def test_a_strong_cpu_gets_large_v3_timed_and_a_weaker_one_the_iphone(self):
         by = steps(plan.recommend(facts(gpu_status="absent", threads=16, ram=32)))
-        self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("medium", "cpu"))
-        self.assertIn("times this model", by["speech"]["reasons"][-1])
-        fewer = steps(plan.recommend(facts(gpu_status="absent", threads=8, ram=32)))
-        self.assertEqual(fewer["speech"]["whisper_model"], "small")
+        self.assertEqual((by["speech"]["whisper_model"], by["speech"]["device"]), ("large-v3", "cpu"))
+        self.assertIn("the iPhone transcribes instead", by["speech"]["reasons"][-1])
+        for threads, ram in ((8, 32), (16, 8), (2, 4)):
+            weaker = steps(plan.recommend(facts(gpu_status="absent", threads=threads, ram=ram)))
+            self.assertEqual(weaker["speech"]["engine"], "phone", (threads, ram))
 
     def test_installer_output_is_model_and_device_only(self):
-        with mock.patch.object(plan, "probe", return_value=facts(gpu_gb=5.0)), \
-             mock.patch("builtins.print") as printed:
-            self.assertEqual(plan.main(["--speech", "--offline"]), 0)
-        stdout = [call.args[0] for call in printed.call_args_list if call.kwargs.get("file") is None]
-        self.assertEqual(stdout, ["medium cuda"])
+        for machine, expected in ((facts(gpu_gb=5.0), "large-v3 cpu"), (facts(), "large-v3 cuda"),
+                                  (facts(gpu_gb=5.0, threads=8), "phone none")):
+            with mock.patch.object(plan, "probe", return_value=machine), \
+                 mock.patch("builtins.print") as printed:
+                self.assertEqual(plan.main(["--speech", "--offline"]), 0)
+            stdout = [call.args[0] for call in printed.call_args_list if call.kwargs.get("file") is None]
+            self.assertEqual(stdout, [expected])
 
-    def test_weak_machine_is_marked_slow(self):
-        by = steps(plan.recommend(facts(gpu_status="absent", threads=2, ram=4)))
-        self.assertTrue(by["speech"].get("slow"))
+    def test_transcribing_on_the_iphone_needs_no_model_disk_space(self):
+        self.assertEqual(plan.recommend(facts(gpu_status="absent", threads=8, disk=6.0))["warnings"], [])
+        low = plan.recommend(facts(disk=6.0))["warnings"]
+        self.assertTrue(any("GB free" in line for line in low))
 
     def test_missing_openclaw_is_needed_and_pusula_waits_for_it(self):
         by = steps(plan.recommend(facts(openclaw=False)))
@@ -130,12 +134,18 @@ class RecipeTests(unittest.TestCase):
         machine["software"]["openclaw"]["path"] = "/mnt/c/Users/me/AppData/Roaming/npm/openclaw"
         self.assertTrue(any("Windows install" in line for line in plan.recommend(machine)["warnings"]))
 
-    def test_installed_helper_with_a_different_model_is_reported(self):
-        machine = facts(gpu_gb=5.0)
-        machine["ceviz"] = {"systemd_user": True, "installed": True, "active": True,
-                            "settings": {"WATCH_CEVIZ_WHISPER_MODEL": "large-v3"}}
-        self.assertEqual(plan.recommend(machine)["differences_from_current"],
-                         ["Speech model is large-v3; this machine fits medium."])
+    def test_installed_speech_recognition_that_differs_from_the_plan_is_reported(self):
+        def installed(machine, settings):
+            machine["ceviz"] = {"systemd_user": True, "installed": True, "active": True, "settings": settings}
+            return plan.recommend(machine)["differences_from_current"]
+
+        self.assertEqual(installed(facts(gpu_gb=5.0, threads=8), {"WATCH_CEVIZ_WHISPER_MODEL": "large-v3"}),
+                         ["Speech recognition uses Whisper large-v3; the plan for this machine is "
+                          "transcription on the iPhone."])
+        self.assertEqual(installed(facts(), {"WATCH_CEVIZ_STT_ENGINE": "phone"}),
+                         ["Speech recognition uses transcription on the iPhone; the plan for this machine is "
+                          "Whisper large-v3."])
+        self.assertEqual(installed(facts(), {"WATCH_CEVIZ_WHISPER_MODEL": "large-v3"}), [])
 
     def test_render_and_json_carry_the_recipe(self):
         machine = facts()

@@ -23,7 +23,8 @@ BASH = shutil.which("bash") if os.name == "posix" else next(
 
 @unittest.skipUnless(BASH, "Actual Bash installer boundary")
 class WindowsTailscaleInstallerTests(unittest.TestCase):
-    def run_install(self, mode="success", network="tailscale", content=INSTALLER):
+    def run_install(self, mode="success", network="tailscale", content=INSTALLER, plan="large-v3 cpu", measure=0):
+        self.unit = ""
         with tempfile.TemporaryDirectory(prefix="ceviz-windows-install-") as temporary:
             root = Path(temporary)
             app = root / "app"
@@ -36,8 +37,9 @@ class WindowsTailscaleInstallerTests(unittest.TestCase):
             python.write_text(
                 '#!/bin/bash\nif [[ "$1" == "-c" ]]; then exit 0; fi\n'
                 'case "$1" in\n'
-                '  */plan.py) printf "plan %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"; printf "small cpu\\n"; exit 0;;\n'
-                '  */measure_stt.py) printf "measure %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"; printf "small\\n"; exit 0;;\n'
+                '  */plan.py) printf "plan %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"; printf "%s\\n" "$CEVIZ_TEST_PLAN"; exit 0;;\n'
+                '  */measure_stt.py) printf "measure %s\\n" "${*:2}" >> "$CEVIZ_TEST_CALLS"\n'
+                '    [ "$CEVIZ_TEST_MEASURE" = 0 ] && printf "large-v3\\n"; exit "$CEVIZ_TEST_MEASURE";;\n'
                 'esac\n'
                 'printf "pair-url %s\\n" "$2" >> "$CEVIZ_TEST_CALLS"\n')
             python.chmod(0o700)
@@ -103,8 +105,11 @@ source "$FIXTURE_ROOT/app/deploy/install.sh"
 '''
             result = subprocess.run([BASH, "-c", harness, "--", root.as_posix(), network, mode],
                                     capture_output=True, text=True, timeout=15,
+                                    env={**os.environ, "CEVIZ_TEST_PLAN": plan, "CEVIZ_TEST_MEASURE": str(measure)},
                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             calls = (root / "calls").read_text().splitlines() if (root / "calls").exists() else []
+            unit = root / "home/.config/systemd/user/watch-ceviz-backend.service"
+            self.unit = unit.read_text() if unit.exists() else ""
             return result, calls
 
     def test_windows_tailscale_uses_independent_lifetime_and_authenticated_localhost_without_lan(self):
@@ -118,10 +123,24 @@ source "$FIXTURE_ROOT/app/deploy/install.sh"
         self.assertNotIn("192.0.2.10", serve[0])
         self.assertEqual(calls[-1], "pair-url https://fixture.tail.ts.net/ceviz")
         self.assertNotIn("private-fixture-token", result.stdout + result.stderr + "\n".join(calls))
-        # The speech model comes from the read-only plan, then a measurement from that size.
+        # The read-only plan allows large-v3 here, and the measurement confirms it.
         self.assertIn("plan --speech --offline", calls)
-        self.assertIn("measure --start small --device cpu", calls)
-        self.assertLess(calls.index("plan --speech --offline"), calls.index("measure --start small --device cpu"))
+        self.assertIn("measure --device cpu", calls)
+        self.assertLess(calls.index("plan --speech --offline"), calls.index("measure --device cpu"))
+        self.assertIn("Environment=WATCH_CEVIZ_STT_ENGINE=auto\nEnvironment=WATCH_CEVIZ_WHISPER_MODEL=large-v3\n",
+                      self.unit)
+
+    def test_no_room_or_too_slow_for_large_v3_leaves_speech_to_the_iphone(self):
+        for plan, measure, measured in (("phone none", 0, False), ("large-v3 cpu", 1, True),
+                                        ("large-v3 cuda", 2, True), ("medium cpu", 0, False)):
+            with self.subTest(plan=plan, measure=measure):
+                result, calls = self.run_install(plan=plan, measure=measure)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(any(call.startswith("measure ") for call in calls), measured)
+                self.assertIn("Environment=WATCH_CEVIZ_STT_ENGINE=phone\n", self.unit)
+                self.assertNotIn("WATCH_CEVIZ_WHISPER_MODEL", self.unit)
+                self.assertIn("iPhone", result.stdout)
+                self.assertNotIn("LD_LIBRARY_PATH", self.unit)  # the service loads no Whisper
 
     def test_lifetime_localhost_or_publish_failure_cannot_report_pairing_success(self):
         for mode in ("lifetime-failure", "probe-failure", "serve-failure", "dns-empty", "dns-invalid", "dns-failure"):

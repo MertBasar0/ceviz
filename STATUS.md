@@ -1,6 +1,31 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **17 Ekim 2026**
+Son güncelleme: **19 Ekim 2026**
+
+## 19 Ekim — Yardımcı servis 2026.10.19 Beta 1: uyarlanabilir kurulum, PC düğümü
+
+- **Kurulum makineye göre (18–19 Ekim):** `deploy/plan.py` makineyi salt okunur inceliyor;
+  kurulum planı gösterip konuşma tanımayı ona göre kuruyor. Yalnız Whisper large-v3:
+  GPU'ya sığarsa ya da güçlü CPU'da 11 sn örneği 3 sn içinde duyarsa (ölçülerek);
+  aksi halde `WATCH_CEVIZ_STT_ENGINE=phone`, model indirilmez. Küçük modeller günlük
+  kullanımda fayda sağlamadığı için kaldırıldı (Mert'in kararı).
+- **iPhone'da yazıya çevirme:** yardımcı tarafı bu sürümde (`speech_on_phone`, telefon
+  metni yalnız telefon modunda kabul). iPhone tarafı (SpeechTranscriber →
+  DictationTranscriber, iOS 16–25'te cihaz üstü SFSpeechRecognizer; ağ tanıyıcı yok)
+  kaynakta, doğrulama derlemesi yeşil; TestFlight derlemesi henüz yok. Bu yüzden
+  telefon modundaki yeni kurulum 1791334823 ile ses komutlarında "uygulamayı güncelle" der.
+- **PC düğümü (WSL):** `deploy/pc-node.sh` Windows'u yardımcının Gateway'ine düğüm
+  olarak bağlıyor (tek kullanımlık sınırlı kurulum kodu; Gateway token'ı WSL'den
+  çıkmıyor; Ceviz'in kendi OpenClaw kopyası, `ceviz-pc` profili ve `Ceviz PC Node`
+  görevi). İstem ajana PC işleri için `exec host=node` diyor. Canlıda: `Ceviz PC`
+  (OpenClaw 2026.9.6) bağlı, `system.run` onaylı, `system.which` Windows'ta çalıştı.
+  Yolda bulunanlar: OpenClaw 2026.9.6 ayrı profil/klasörle düğüm servisi kurmuyor;
+  eski `OpenClaw Node` görevi yönetici terminalinden kurulmuştu (1 Ekim'den beri
+  şema 20/17 uyumsuzluğuyla ölüydü; Mert'in onayıyla silindi); bozuk gizli başlatıcı
+  satırı. Hepsi düzeltildi, testlerde.
+- 334 Python testi (Ubuntu/macOS, bash 3.2 dahil), 15 Windows PowerShell testi.
+  Güncelleyici değişmedi (SHA aynı). Sürüm notu:
+  `docs/release-notes-helper-2026.10.19-beta.1.md`.
 
 ## 17 Ekim — Yardımcı servis 2026.10.17 Beta 1: güncelleyici düzeltmesi
 

@@ -47,25 +47,30 @@ OpenClaw is installed. If Ceviz is already installed, use the update section
 below; do not reinstall over a working service.
 
 These commands use the versioned helper release
-`ceviz-helper-v2026.10.1-beta.2`, matching the existing TestFlight app
-**2026.6.5 (1789005793)**.
+`ceviz-helper-v2026.10.19-beta.1`, matching the existing TestFlight app
+**2026.6.5 (1791334823)**.
 
 ```bash
-git clone --branch ceviz-helper-v2026.10.1-beta.2 --single-branch https://github.com/MertBasar0/ceviz.git
+git clone --branch ceviz-helper-v2026.10.19-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
 cd ceviz
 bash deploy/install.sh
 ```
 
 The installer:
 
-1. creates a Python virtual environment and installs the backend dependencies;
-2. generates a local bearer token;
-3. installs and starts a user service where supported;
-4. configures the selected network path; and
-5. prints a pairing QR code.
+1. shows a read-only plan of what this machine can run;
+2. creates a Python virtual environment and installs the backend dependencies;
+3. sets up speech recognition: Whisper large-v3 if this machine runs it well
+   (downloaded once, about 3 GB), otherwise transcription on the iPhone (this
+   needs an app build newer than 1791334823);
+4. generates a local bearer token;
+5. installs and starts a user service where supported;
+6. configures the selected network path;
+7. under WSL, connects Windows to OpenClaw as a node so commands can act on the
+   PC; and
+8. prints a pairing QR code.
 
-The first voice command may take a few minutes while the local Whisper model is
-downloaded. Later commands reuse the downloaded model.
+See [deploy/README.md](deploy/README.md) for the details of each step.
 
 After installation—or whenever pairing or delivery fails—run the read-only
 diagnostic report:

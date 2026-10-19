@@ -1249,10 +1249,31 @@ def execute_watch_command(payload: dict, *, strict_save=False) -> dict:
                              client_timestamp=payload.get("client_timestamp"), stt_error=result.error or "",
                              continue_job=parent, locale=str(payload.get("locale") or ""),
                              audio_fingerprint=fingerprint, strict_save=strict_save)
+    if result.source.startswith("iphone:") and stt_client.compare_with_whisper:
+        compare_transcripts_later(job["id"], payload)
     with jobs_lock:
         # The initial receipt describes admission, as before; terminal
         # polling belongs to later queries or a duplicate request.
         return dict(job)
+
+
+_compare_lock = threading.Lock()  # one comparison Whisper run at a time
+
+
+def compare_transcripts_later(job_id: str, payload: dict) -> None:
+    """Keeps local Whisper's text for the same capture beside the phone's (stt_compare), after the
+    job started: the comparison never delays a command."""
+    def run() -> None:
+        with _compare_lock:
+            heard = stt_client.whisper_transcript(payload)
+        with jobs_lock:
+            job = jobs_db.get(job_id)
+            if job is None:
+                return
+            job["stt_compare"] = heard
+        save_jobs()
+
+    threading.Thread(target=run, name=f"stt-compare-{job_id}", daemon=True).start()
 
 
 def parse_shortcut_text(payload: dict | str) -> tuple[str, str | None]:
@@ -1401,8 +1422,12 @@ class WatchCevizHandler(BoundedHTTPRequestHandler):
             }).encode("utf-8"))
             return
         if path == "/api/v1/watch/command/capabilities":
-            # speech_on_phone: this machine runs no Whisper; the iPhone sends each command's text.
-            self.send_json(200, {**watch_admission.capabilities(), "speech_on_phone": stt_client.on_phone})
+            # speech_on_phone: this machine runs no Whisper; the iPhone sends each command's text,
+            # expecting the proper nouns in speech_hints (Whisper's hotwords).
+            capabilities = {**watch_admission.capabilities(), "speech_on_phone": stt_client.on_phone}
+            if stt_client.on_phone:
+                capabilities["speech_hints"] = stt_client.speech_hints()
+            self.send_json(200, capabilities)
             return
         if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):
             handle_session_request(self, "GET", path, parse_qs(parsed_url.query))

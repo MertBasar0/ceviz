@@ -126,8 +126,11 @@ class WatchAdmissionHTTPTests(HTTPFixture):
         text = {"transcript": "masaüstündeki notları aç", "transcript_source": "speech-transcriber"}
         self.assertEqual(self.http("POST", "/api/v1/watch/command/submit", command(ledger, **text))[0], 400)
         self.invoke.assert_not_called()
+        self.assertNotIn("speech_hints", self.http("GET", "/api/v1/watch/command/capabilities")[1])
         with patch.object(self.main.stt_client, "engine", "phone"):
-            self.assertTrue(self.http("GET", "/api/v1/watch/command/capabilities")[1]["speech_on_phone"])
+            capabilities = self.http("GET", "/api/v1/watch/command/capabilities")[1]
+            self.assertTrue(capabilities["speech_on_phone"])
+            self.assertIn("OpenClaw", capabilities["speech_hints"])
             for bad in ({"transcript_source": "Speech Transcriber"}, {"transcript": "x" * 4001},
                         {"transcript_error": ["not", "text"]}, {"unrelated": "field"}):
                 with self.subTest(bad=bad):
@@ -141,6 +144,33 @@ class WatchAdmissionHTTPTests(HTTPFixture):
             retry = self.http("POST", "/api/v1/watch/command/submit", {**payload, "transcript": "masaüstü notlarını aç"})[1]
             self.assertEqual(retry["job_id"], result["job_id"])
         self.invoke.assert_called_once()
+
+    def test_comparison_keeps_whisper_text_beside_the_phone_text_without_delaying_the_command(self):
+        ledger = self.bootstrap()
+        self.transcribe.return_value = SimpleNamespace(transcript="RustDesk'e bağlan", source="iphone:dictation-transcriber", error="")
+        started = threading.Event()
+        release = threading.Event()
+
+        def whisper(payload):
+            started.set()
+            release.wait(5)  # still running when the command is accepted
+            return {"engine": "local-whisper:cuda", "transcript": "Rast desk'e bağlan", "seconds": 1.1}
+
+        with patch.object(self.main.stt_client, "engine", "phone"), \
+             patch.dict(os.environ, {"WATCH_CEVIZ_STT_COMPARE": "whisper"}), \
+             patch.object(self.main.stt_client, "whisper_transcript", side_effect=whisper):
+            payload = command(ledger, transcript="RustDesk'e bağlan", transcript_source="dictation-transcriber")
+            status, result = self.http("POST", "/api/v1/watch/command/submit", payload)
+            self.assertEqual((status, result["delivery_state"]), (200, "accepted"))
+            self.assertTrue(started.wait(5))
+            self.assertNotIn("stt_compare", self.main.jobs_db[result["job_id"]])
+            release.set()
+            for _ in range(100):
+                if "stt_compare" in self.main.jobs_db[result["job_id"]]:
+                    break
+                time.sleep(0.05)
+        self.assertEqual(self.main.jobs_db[result["job_id"]]["stt_compare"]["transcript"], "Rast desk'e bağlan")
+        self.assertEqual(self.main.jobs_db[result["job_id"]]["stt_source"], "iphone:dictation-transcriber")
 
     def test_bound_identity_parent_target_and_uuid_case_remain_immutable(self):
         payload = command(self.bootstrap(), command_id=str(uuid.uuid4()).upper())

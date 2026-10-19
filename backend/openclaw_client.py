@@ -77,6 +77,8 @@ class OpenClawClient:
     REPORT_END = "</watch_ceviz_phone_report>"
     META_START = "<watch_ceviz_meta>"
     META_END = "</watch_ceviz_meta>"
+    # OpenClaw's notice on a reply the model stopped at its output token limit.
+    TRUNCATION_MARKER = "Reply truncated at the model's output token limit"
 
     def __init__(
         self,
@@ -245,6 +247,22 @@ class OpenClawClient:
 
         structured = self._extract_structured_payload(response_text)
         clean_text = redact_secrets(structured["phone_report"] or response_text)
+        if self.TRUNCATION_MARKER in response_text:
+            # OpenClaw appends this when the model hit its output limit: whatever came before is a
+            # fragment ("The"), not an answer, and the work may or may not have been done.
+            turkish = self._locale_code(locale) == "tr"
+            return TaskResult(
+                category=structured["category"] or self._categorize_text(clean_text, locale),
+                canned_result=clean_text,
+                watch_summary=("Modelin yanıtı çıktı sınırında yarıda kesildi; işin sonucu belli değil."
+                               if turkish else "The model's reply was cut off at its output limit; the outcome is unknown."),
+                requires_phone_handoff=True,
+                phone_report=self._build_phone_report(clean_text, locale),
+                next_action=("Komutu yeniden gönder ya da uzun yanıt verebilen bir model seç."
+                             if turkish else "Send the command again, or choose a model that can answer at length."),
+                outcome="blocked",
+                next_action_actor="user",
+            )
         watch_summary = redact_secrets(structured["watch_summary"] or "") or self._build_watch_summary(
             clean_text, locale=locale
         )

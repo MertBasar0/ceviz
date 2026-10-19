@@ -102,6 +102,18 @@ Takvim etkinliğini telefonda açıp katılımcıları kontrol et.
         self.assertIn("Takvim notu hazır", result.watch_summary)
         self.assertEqual(result.outcome, "unknown")
 
+    def test_a_reply_cut_at_the_output_limit_is_not_a_success(self) -> None:
+        # 20 October, live: Nemotron stopped after "The"; the Watch showed that fragment as the summary.
+        text = ("The\n\n⚠️ Reply truncated at the model's output token limit. "
+                "The text above is partial — ask to continue it.")
+        for locale, summary in (("tr-TR", "yarıda kesildi"), ("en-US", "cut off at its output limit")):
+            with self.subTest(locale=locale):
+                result = self.client.extract_result(self._write_log(text), locale=locale)
+                self.assertEqual((result.outcome, result.next_action_actor), ("blocked", "user"))
+                self.assertIn(summary, result.watch_summary)
+                self.assertTrue(result.requires_phone_handoff)
+                self.assertIn("The", result.canned_result)  # the fragment stays visible on the phone
+
     def test_unrecognized_outcome_is_not_inferred_from_success_text(self) -> None:
         for outcome in ("done", "blocked", "needs_input", "unknown", "completed", 1, None):
             with self.subTest(outcome=outcome):

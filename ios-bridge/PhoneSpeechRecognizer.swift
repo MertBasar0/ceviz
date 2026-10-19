@@ -15,7 +15,8 @@ enum PhoneSpeechRecognizer {
         let message: String
     }
 
-    static func transcribe(_ request: WatchCommandRequest) async -> PhoneTranscript {
+    /// `hints`: proper nouns to expect (the helper's speech hints, Whisper's hotwords).
+    static func transcribe(_ request: WatchCommandRequest, hints: [String] = []) async -> PhoneTranscript {
         guard let audio = Data(base64Encoded: request.audioData), !audio.isEmpty else {
             return PhoneTranscript(error: NSLocalizedString("The recording could not be read.", comment: "Phone transcription"))
         }
@@ -31,9 +32,9 @@ enum PhoneSpeechRecognizer {
         let locale = locale(request.locale)
         do {
             if #available(iOS 26.0, *) {
-                return try await analyze(file: file, locale: locale)
+                return try await analyze(file: file, locale: locale, hints: hints)
             }
-            return try await recognizeOnDevice(file: file, locale: locale)
+            return try await recognizeOnDevice(file: file, locale: locale, hints: hints)
         } catch {
             return PhoneTranscript(error: String(format: NSLocalizedString("iPhone speech recognition failed: %@", comment: "Phone transcription"),
                                                  error.localizedDescription))
@@ -74,14 +75,14 @@ enum PhoneSpeechRecognizer {
 
     /// SpeechTranscriber first; on a device or language it cannot serve, the dictation model.
     @available(iOS 26.0, *)
-    private static func analyze(file: URL, locale: Locale) async throws -> PhoneTranscript {
+    private static func analyze(file: URL, locale: Locale, hints: [String]) async throws -> PhoneTranscript {
         var failure: Error?
         if let supported = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
             do {
                 let transcriber = speechTranscriber(supported)
                 try await install(transcriber)
                 async let phrases = try transcriber.results.reduce(into: [String]()) { $0.append(String($1.text.characters)) }
-                try await run(transcriber, file: file)
+                try await run(transcriber, file: file, hints: hints)
                 return PhoneTranscript(text: joined(try await phrases), source: "speech-transcriber")
             } catch {
                 failure = error
@@ -91,7 +92,7 @@ enum PhoneSpeechRecognizer {
             let transcriber = dictationTranscriber(supported)
             try await install(transcriber)
             async let phrases = try transcriber.results.reduce(into: [String]()) { $0.append(String($1.text.characters)) }
-            try await run(transcriber, file: file)
+            try await run(transcriber, file: file, hints: hints)
             return PhoneTranscript(text: joined(try await phrases), source: "dictation-transcriber")
         }
         if let failure { throw failure }
@@ -119,8 +120,13 @@ enum PhoneSpeechRecognizer {
     }
 
     @available(iOS 26.0, *)
-    private static func run(_ module: any SpeechModule, file: URL) async throws {
+    private static func run(_ module: any SpeechModule, file: URL, hints: [String]) async throws {
         let analyzer = SpeechAnalyzer(modules: [module], options: nil)
+        if !hints.isEmpty {
+            let context = AnalysisContext()
+            context.contextualStrings = [.general: hints]
+            try await analyzer.setContext(context)
+        }
         if let end = try await analyzer.analyzeSequence(from: AVAudioFile(forReading: file)) {
             try await analyzer.finalizeAndFinish(through: end)
         } else {
@@ -130,7 +136,7 @@ enum PhoneSpeechRecognizer {
 
     // MARK: - iOS 16–25
 
-    private static func recognizeOnDevice(file: URL, locale: Locale) async throws -> PhoneTranscript {
+    private static func recognizeOnDevice(file: URL, locale: Locale, hints: [String]) async throws -> PhoneTranscript {
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.supportsOnDeviceRecognition else {
             return PhoneTranscript(error: noModel(locale))
         }
@@ -138,6 +144,7 @@ enum PhoneSpeechRecognizer {
         let request = SFSpeechURLRecognitionRequest(url: file)
         request.requiresOnDeviceRecognition = true  // never a network recognizer
         request.shouldReportPartialResults = false
+        request.contextualStrings = hints
         let text: String = try await withCheckedThrowingContinuation { continuation in
             var finished = false
             _ = recognizer.recognitionTask(with: request) { result, error in

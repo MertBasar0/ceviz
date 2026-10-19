@@ -13,7 +13,8 @@ struct PhoneTranscript: Equatable {
 @MainActor
 final class WatchDeliveryCoordinator {
     typealias Loader = (URLRequest) async throws -> (Data, URLResponse)
-    typealias Transcriber = (WatchCommandRequest) async -> PhoneTranscript
+    /// The capture and the proper nouns to expect (the helper's speech hints).
+    typealias Transcriber = (WatchCommandRequest, [String]) async -> PhoneTranscript
     enum Failure: Error { case updateRequired, unknown, connectionChanged, invalidReceipt }
     private let store: WatchDeliveryStore
     private let makeRequest: (String) -> URLRequest
@@ -23,6 +24,7 @@ final class WatchDeliveryCoordinator {
     /// The helper's last capabilities answer. Recovery deliberately fetches none,
     /// so a replay after an app restart sends no text and the helper says so.
     private var speechOnPhone = false
+    private var speechHints: [String] = []
     var deliveryJournalID: String { store.journalID }
 
     init(baseURL: String, token: String, databaseURL: URL? = nil, transcribe: Transcriber? = nil,
@@ -60,13 +62,14 @@ final class WatchDeliveryCoordinator {
                   UUID(uuidString: ledger) != nil else { throw Failure.updateRequired }
             guard isCurrent(), WatchCommandTransport.isCurrent(incoming.request) else { throw Failure.connectionChanged }
             speechOnPhone = capabilities["speech_on_phone"] as? Bool == true
+            speechHints = ((capabilities["speech_hints"] as? [String]) ?? []).prefix(50).map { String($0.prefix(40)) }
             delivery = try store.bindForDispatch(identity, ledgerID: ledger)
         }
         // A helper that runs no Whisper gets the text with the audio. Neither is stored here,
         // and the text is no part of the identity: a retry may hear it slightly differently.
         var heard: PhoneTranscript?
         if speechOnPhone {
-            heard = await transcribe?(incoming.request)
+            heard = await transcribe?(incoming.request, speechHints)
                 ?? PhoneTranscript(error: "This app version cannot transcribe on the phone.")
         }
         guard isCurrent(), WatchCommandTransport.isCurrent(incoming.request) else { throw Failure.connectionChanged }

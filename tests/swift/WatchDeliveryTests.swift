@@ -38,6 +38,7 @@ struct WatchDeliveryTests {
                 precondition(request.httpMethod == "GET" && request.httpBody == nil)
                 var capabilities: [String: Any] = ["watch_command_recovery_v1": true, "watch_command_ledger_id": ledger]
                 if let speechOnPhone { capabilities["speech_on_phone"] = speechOnPhone }
+                if speechOnPhone == true { capabilities["speech_hints"] = ["RustDesk", "OpenClaw"] }
                 response = capabilities
             } else {
                 precondition(request.httpMethod == "POST")
@@ -145,8 +146,10 @@ struct WatchDeliveryTests {
         for (index, (speechOnPhone, heard)) in cases.enumerated() {
             let file = directory.appendingPathComponent("phone-speech-\(index).sqlite")
             var recognized: [WatchCommandRequest] = []
+            var hinted: [[String]] = []
             let coordinator = try WatchDeliveryCoordinator(baseURL: baseURL, token: token, databaseURL: file,
-                transcribe: { request in recognized.append(request); return heard }, isCurrent: { true })
+                transcribe: { request, hints in recognized.append(request); hinted.append(hints); return heard },
+                isCurrent: { true })
             let message = try incoming(coordinator)
             let peer = Peer()
             peer.speechOnPhone = speechOnPhone
@@ -156,6 +159,7 @@ struct WatchDeliveryTests {
             precondition(body["audio_data"] as? String == audio, "The audio and its identity travel unchanged")
             if speechOnPhone == true {
                 precondition(recognized.count == 1 && recognized[0].audioData == audio)
+                precondition(hinted == [["RustDesk", "OpenClaw"]], "The helper's speech hints reach the recognizer")
                 if heard.text.isEmpty {
                     precondition(body["transcript"] == nil && body["transcript_error"] as? String == "no on-device model")
                 } else {

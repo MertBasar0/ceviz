@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import os
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -34,6 +35,37 @@ class WatchSTT:
     @property
     def on_phone(self) -> bool:
         return self.engine == "phone"
+
+    @property
+    def compare_with_whisper(self) -> bool:
+        """WATCH_CEVIZ_STT_COMPARE=whisper: in phone mode, also transcribe the same audio with local
+        Whisper and keep both texts on the job. For comparing the two; the phone's text is used."""
+        return self.on_phone and os.environ.get("WATCH_CEVIZ_STT_COMPARE", "").strip().lower() == "whisper"
+
+    @staticmethod
+    def speech_hints() -> list[str]:
+        """Proper nouns the recognizer should expect: Whisper's hotwords, also sent to the iPhone."""
+        try:
+            import local_whisper
+            words = local_whisper.hotwords() or ""
+        except Exception:
+            words = os.environ.get("WATCH_CEVIZ_WHISPER_HOTWORDS", "")
+        return [word.strip()[:40] for word in words.split(",") if word.strip()][:50]
+
+    def whisper_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """The same capture through local Whisper, for comparison. Never raises."""
+        started = time.perf_counter()
+        try:
+            import local_whisper
+            audio = base64.b64decode(payload.get("audio_data") or "", validate=True)
+            text = (local_whisper.transcribe_bytes(
+                audio, payload.get("format", "m4a"), self.language_from_payload(payload) or self.language or None,
+            ) or "").strip()
+            return {"engine": f"local-whisper:{local_whisper.active_device()}", "transcript": text,
+                    "seconds": round(time.perf_counter() - started, 2)}
+        except Exception as exc:
+            logger.warning("Comparison Whisper failed: %s", exc)
+            return {"engine": "local-whisper", "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
 
     @staticmethod
     def language_from_payload(payload: dict[str, Any]) -> str | None:

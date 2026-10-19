@@ -123,6 +123,22 @@ class WatchSTTErrorTests(unittest.TestCase):
             old_app = stt.transcribe_watch_payload({**self.PAYLOAD, "locale": "en-US"})
             self.assertIn("update the Ceviz iPhone app", old_app.error)
 
+    def test_comparison_whisper_and_hints_for_the_phone(self) -> None:
+        with mock.patch.dict("os.environ", {"WATCH_CEVIZ_STT_COMPARE": "whisper",
+                                            "WATCH_CEVIZ_WHISPER_HOTWORDS": "RustDesk, Ceviz ,, OpenClaw"}):
+            self.assertTrue(self._stt("phone").compare_with_whisper)
+            self.assertFalse(self._stt("auto").compare_with_whisper)  # only beside the phone's text
+            self.assertEqual(WatchSTT.speech_hints(), ["RustDesk", "Ceviz", "OpenClaw"])
+        stt = self._stt("phone")
+        with mock.patch.object(local_whisper, "transcribe_bytes", return_value=" RustDesk'e bağlan ") as whisper, \
+             mock.patch.object(local_whisper, "active_device", return_value="cuda"):
+            heard = stt.whisper_transcript(self.PAYLOAD)
+        self.assertEqual((heard["engine"], heard["transcript"]), ("local-whisper:cuda", "RustDesk'e bağlan"))
+        self.assertEqual(whisper.call_args.args[1:], ("m4a", "tr"))
+        with mock.patch.object(local_whisper, "transcribe_bytes", side_effect=RuntimeError(DEAD_CONTEXT)), \
+             self.assertLogs("watch_ceviz.stt", "WARNING"):
+            self.assertIn(DEAD_CONTEXT, stt.whisper_transcript(self.PAYLOAD)["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

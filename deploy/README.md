@@ -61,6 +61,30 @@ To switch an installed helper, set `WATCH_CEVIZ_STT_ENGINE=phone` (or `auto`
 with `WATCH_CEVIZ_WHISPER_MODEL=large-v3`) in a drop-in under
 `~/.config/systemd/user/watch-ceviz-backend.service.d/` and restart the service.
 
+### Using the computer from the Watch
+
+On macOS and Linux, OpenClaw runs on the computer itself and its exec tool acts
+on it directly. Under WSL the computer is Windows, which OpenClaw in WSL does not
+reach, so the installer connects Windows to OpenClaw as a node by default
+(`deploy/pc-node.sh`):
+
+- The Gateway mints a single-use, limited setup code (no admin access). Windows
+  pairs with it over localhost and from then on uses its own device token; the
+  Gateway token never leaves WSL.
+- Ceviz keeps its own copy of OpenClaw on Windows, at the Gateway's version, in
+  `%LOCALAPPDATA%\Ceviz\pc-node`, and the node's identity in
+  `%USERPROFILE%\.openclaw-ceviz-pc`, apart from any OpenClaw you use on Windows.
+  Node.js is needed on Windows; the installer tries winget when it is missing.
+- The helper tells the agent that the PC is the node `Ceviz PC`, so a command
+  such as "open my notes on the desktop" runs in PowerShell on Windows
+  (`exec host=node`). Commands run there without asking for approval, as
+  OpenClaw's exec does inside WSL.
+
+OpenClaw allows one node service per Windows user. If one exists that Ceviz did
+not create, nothing is changed; `bash deploy/pc-node.sh --replace` replaces it.
+The script can be run again at any time, also on an existing installation, and
+`WATCH_CEVIZ_PC_NODE_SETUP=0` skips it during installation.
+
 The other parts of the plan (OpenClaw, Pusula, the connection) are still shown
 as advice only.
 
@@ -213,6 +237,8 @@ do not reinstall over a working installation.
 | `WATCH_CEVIZ_WHISPER_MODEL` | `large-v3` if the plan and a timing allow it, otherwise none (the iPhone transcribes) | Speech-to-text model; setting it skips the plan and the timing |
 | `WATCH_CEVIZ_STT_MEASURE` | `1` | `0` trusts the plan's large-v3 choice without timing it |
 | `WATCH_CEVIZ_WHISPER_LANGUAGE` | `tr` | Default speech-to-text language |
+| `WATCH_CEVIZ_PC_NODE_SETUP` | `1` | WSL: `0` skips connecting Windows as an OpenClaw node |
+| `WATCH_CEVIZ_PC_NODE_NAME` | `Ceviz PC` | Name of that node |
 | `OPENCLAW_WATCH_AGENT` | `main` | OpenClaw agent used for Watch commands |
 
 The updater does not reselect these values or write them into your existing

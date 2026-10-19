@@ -39,6 +39,20 @@ The pairing bearer token is stored in iOS Keychain and in the user's backend
 installation. Pairing QR codes contain that token and must be treated as
 credentials.
 
+## Windows as an OpenClaw node (WSL)
+
+Under WSL the installer connects Windows to the user's OpenClaw Gateway as a
+node, so commands can act on Windows (`deploy/pc-node.sh`). The Gateway mints a
+single-use setup code with the limited profile (no `operator.admin`); it reaches
+the Windows script on standard input and through a private file that
+`openclaw connect` deletes, never on a command line. Windows then authenticates
+with its own device token; the Gateway token is not copied to Windows. Should the
+Gateway still ask, the script approves only requests from the device it just
+paired. The node's exec runs without approval prompts, the same trust as
+OpenClaw's exec inside WSL: anyone who can command the agent can run commands on
+Windows. Skip it with `WATCH_CEVIZ_PC_NODE_SETUP=0`, or remove the node with
+`openclaw devices remove` and the Windows task `OpenClaw Node`.
+
 ## Completion notification relay
 
 Ceviz uses a small hosted relay to deliver background notifications through

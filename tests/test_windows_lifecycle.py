@@ -302,5 +302,86 @@ catch { $failure = $_.Exception.Message; $caught = $failure -eq 'fixture-network
         self.assertEqual(result["events"], [], "LAN relay must not own, kill or restart the independent WSL lifetime")
 
 
+@unittest.skipUnless(POWERSHELL, "Windows PowerShell subprocess proof")
+class PCNodeInstallerTests(unittest.TestCase):
+    """install-pc-node.ps1 with substituted task, npm and node calls; nothing is installed."""
+
+    DEVICE = "d" * 64
+
+    def run_installer(self, directory, arguments="", task=None, node_version="v24.19.0", engines=">=24.16.0 <25 || >=26.1.0"):
+        source = r'''
+$ErrorActionPreference='Stop'
+$global:calls=[System.Collections.Generic.List[string]]::new()
+function global:Get-ScheduledTask { if (__TASK__) { [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = __TASK__ }) } } }
+function global:Stop-ScheduledTask { $global:calls.Add('stop-task') }
+function global:Unregister-ScheduledTask { $global:calls.Add('unregister-task') }
+function global:fake-winget { $global:calls.Add('winget') }
+function global:fake-npm {
+    $global:calls.Add('npm ' + ($args -join ' '))
+    $prefix = $args[[array]::IndexOf($args, '--prefix') + 1]
+    $package = Join-Path $prefix 'node_modules\openclaw'
+    New-Item -ItemType Directory -Force -Path $package | Out-Null
+    @{ version = '2026.9.1'; bin = @{ openclaw = 'openclaw.mjs' }; engines = @{ node = __ENGINES__ } } | ConvertTo-Json | Set-Content (Join-Path $package 'package.json')
+    $global:LASTEXITCODE = 0
+}
+function global:fake-node {
+    if ($args[0] -eq '--version') { return __NODE_VERSION__ }
+    if ($args[1] -eq 'connect') {
+        $file = $args[3]
+        $global:calls.Add('connect state=' + $env:OPENCLAW_STATE_DIR + ' code=' + (Get-Content -Raw $file) + ' ' + ($args[4..7] -join ' '))
+        $global:LASTEXITCODE = 0; return
+    }
+    if ($args[1] -eq 'node' -and $args[2] -eq 'identity') { '{"deviceId":"__DEVICE__","publicKey":"x"}'; $global:LASTEXITCODE = 0; return }
+    throw ('unexpected node call: ' + ($args -join ' '))
+}
+$output = @(& __SCRIPT__ -Version '2026.9.1' -Prefix __PREFIX__ -StateDir __STATE__ -Node fake-node -Npm fake-npm -Winget fake-winget __ARGUMENTS__)
+$code = $LASTEXITCODE
+'CEVIZ_TEST_RESULT=' + (@{ code = $code; output = @($output | ForEach-Object { "$_" }); calls = @($global:calls);
+    leftovers = @(Get-ChildItem -LiteralPath __STATE__ -Filter 'pair-*' -ErrorAction SilentlyContinue | ForEach-Object Name) } | ConvertTo-Json -Compress)
+'''
+        for key, value in {"__SCRIPT__": literal(ROOT / "deploy/windows/install-pc-node.ps1"),
+                           "__PREFIX__": literal(Path(directory) / "prefix"), "__STATE__": literal(Path(directory) / "state"),
+                           "__TASK__": "$null" if task is None else literal(task), "__ENGINES__": literal(engines),
+                           "__NODE_VERSION__": literal(node_version), "__DEVICE__": self.DEVICE, "__ARGUMENTS__": arguments}.items():
+            source = source.replace(key, value)
+        source = "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop\n" + source
+        encoded = base64.b64encode(source.encode("utf-16le")).decode("ascii")
+        result = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                                 "-EncodedCommand", encoded], capture_output=True, text=True, timeout=30,
+                                input="SINGLE-USE-CODE",  # the setup code arrives on standard input only
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+        records = [line[len("CEVIZ_TEST_RESULT="):] for line in result.stdout.splitlines()
+                   if line.startswith("CEVIZ_TEST_RESULT=")]
+        self.assertEqual(len(records), 1, result.stdout + result.stderr)
+        return json.loads(records[0])
+
+    def test_a_node_service_ceviz_did_not_create_is_left_alone_without_replace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(directory, task=r"C:\Users\me\.openclaw\node.vbs")
+        self.assertEqual(result["code"], 4)
+        self.assertIn(r"CEVIZ_PC_NODE_FOREIGN=C:\Users\me\.openclaw\node.vbs", result["output"])
+        self.assertEqual(result["calls"], [], "Nothing is downloaded, stopped or paired")
+
+    def test_pairs_from_a_private_file_with_its_own_openclaw_copy_and_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(directory, "-Replace", task=r"C:\Users\me\.openclaw\node.vbs")
+            state = str(Path(directory) / "state")
+            prefix = str(Path(directory) / "prefix")
+        self.assertEqual(result["code"], 0, result)
+        self.assertEqual(result["output"][-1], "CEVIZ_PC_NODE_ID=" + self.DEVICE)
+        self.assertEqual(result["calls"][0], f"npm install --prefix {prefix} --no-fund --no-audit --omit=dev "
+                                             "--loglevel=error openclaw@2026.9.1")
+        self.assertEqual(result["calls"][1:3], ["stop-task", "unregister-task"])
+        self.assertEqual(result["calls"][3], f"connect state={state} code=SINGLE-USE-CODE --service --display-name Ceviz PC")
+        self.assertEqual(result["leftovers"], [], "The setup code file is removed")
+
+    def test_a_node_too_old_for_this_openclaw_is_reported_before_pairing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(directory, node_version="v22.12.0")
+        self.assertEqual(result["code"], 3)
+        self.assertTrue(any("needs Node.js >=24.16.0" in line for line in result["output"]), result)
+        self.assertFalse(any(call.startswith("connect") for call in result["calls"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

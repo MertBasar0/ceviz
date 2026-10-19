@@ -554,6 +554,19 @@ class OpenClawClient:
             f"{emphatic}\n"
         )
 
+    @staticmethod
+    def _pc_block() -> str:
+        """The user's Windows PC, when this helper runs in WSL and deploy/pc-node.sh connected it."""
+        name = re.sub(r"[^\w .()-]", "", os.environ.get("WATCH_CEVIZ_PC_NODE", ""))[:40].strip()
+        if not name:
+            return ""
+        return (
+            f"KULLANICININ BİLGİSAYARI: Sen WSL içinde (Linux) çalışıyorsun; kullanıcının Windows bilgisayarı "
+            f"'{name}' adlı OpenClaw düğümü olarak bağlı. Kullanıcı bilgisayarında bir şey istediğinde (uygulama, "
+            "dosya, klasör, ayar, Windows komutu) exec aracını host=node ile çalıştır; komut o bilgisayarda "
+            "PowerShell'de çalışır. WSL/Linux tarafındaki işler için host belirtme.\n"
+        )
+
     def _build_prompt(self, payload: dict[str, Any]) -> str:
         audio_format = payload.get("format", "unknown")
         client_timestamp = payload.get("client_timestamp", "unknown")
@@ -605,6 +618,7 @@ class OpenClawClient:
             f"{continuation_block}"
             f"{live_block}\n"
             f"{self._language_block(payload)}"
+            f"{self._pc_block()}"
             "GÖREV VE İÇERİK TALİMATI:\n"
             "1. Soru, Bilgi, Sohbet, Karşılaştırma veya Açıklama İsteklerinde:\n"
             f"   - {self.REPORT_START} bloğunda kullanıcının sorusunun EKSİKSİZ, DOĞRUDAN ve AYRINTILI yanıtını ver. "

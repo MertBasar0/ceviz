@@ -129,6 +129,15 @@ class RecipeTests(unittest.TestCase):
         self.assertIn("relay", steps(plan.recommend(facts()))["network"]["choice"])
         self.assertEqual(steps(plan.recommend(facts(wsl=False)))["network"]["choice"], "Manual address")
 
+    def test_wsl_connects_windows_as_a_node_and_other_systems_use_the_computer_itself(self):
+        pc = steps(plan.recommend(facts()))["pc"]
+        self.assertEqual((pc["status"], pc["choice"]), ("recommended", "Connect Windows as an OpenClaw node"))
+        self.assertEqual(pc["needs"], ["install Node.js on Windows (the installer tries winget)"])
+        with_node = facts()
+        with_node["software"]["windows_node"] = {"present": True}
+        self.assertEqual(steps(plan.recommend(with_node))["pc"]["needs"], [])
+        self.assertEqual(steps(plan.recommend(facts(wsl=False)))["pc"]["choice"], "This computer")
+
     def test_windows_openclaw_inside_wsl_is_flagged(self):
         machine = facts()
         machine["software"]["openclaw"]["path"] = "/mnt/c/Users/me/AppData/Roaming/npm/openclaw"

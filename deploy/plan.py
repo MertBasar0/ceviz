@@ -259,8 +259,9 @@ def probe(offline: bool = False, agent: str = "") -> dict:
     home = Path.home()
     service, runtime = ceviz_service()
     agent = agent or (service.get("settings") or {}).get("OPENCLAW_WATCH_AGENT", "")
+    wsl = is_wsl()
     return {
-        "platform": {"system": platform.system(), "machine": platform.machine(), "wsl": is_wsl(),
+        "platform": {"system": platform.system(), "machine": platform.machine(), "wsl": wsl,
                      "python": platform.python_version()},
         "cpu": {"model": cpu_model(), "threads": os.cpu_count() or 0},
         "memory_gb": memory_gb(),
@@ -271,6 +272,8 @@ def probe(offline: bool = False, agent: str = "") -> dict:
             "node": version_of("node"),
             "ollama": ollama_state(),
             "tailscale": version_of("tailscale"),
+            # The PC node needs Node.js on Windows; the installer tries winget when it is missing.
+            "windows_node": {"present": wsl and Path("/mnt/c/Program Files/nodejs/node.exe").exists()},
         },
         "ceviz": service,
         "network": None if offline else {name: reachable(url) for name, url in ENDPOINTS.items()},
@@ -386,6 +389,21 @@ def plan_network(facts: dict) -> dict:
     return step("network", "recommended", "Manual address", ["No Tailscale; enter the helper's address in the app."])
 
 
+def plan_pc(facts: dict) -> dict:
+    """Where commands from the Watch act: the computer itself, or Windows through a node."""
+    if not facts["platform"]["wsl"]:
+        return step("pc", "recommended", "This computer",
+                    ["OpenClaw runs on this computer, so its exec tool acts on it directly."])
+    needs = [] if facts["software"].get("windows_node", {}).get("present") else [
+        "install Node.js on Windows (the installer tries winget)"]
+    return step("pc", "recommended", "Connect Windows as an OpenClaw node",
+                ["Ceviz runs in WSL; without a node, commands from the Watch reach Linux but not your Windows "
+                 "apps and files.",
+                 "deploy/pc-node.sh pairs Windows with a single-use setup code and keeps its own OpenClaw copy and "
+                 "state apart from any OpenClaw you use on Windows. Commands then run there without asking, as "
+                 "OpenClaw's exec does in WSL."], needs=needs)
+
+
 def recommend(facts: dict) -> dict:
     warnings, blockers = [], []
     python = tuple(int(part) for part in facts["platform"]["python"].split(".")[:2])
@@ -429,7 +447,8 @@ def recommend(facts: dict) -> dict:
     if installed and installed != planned:
         changes.append(f"Speech recognition uses {speech_label(installed)}; the plan for this machine is "
                        f"{speech_label(planned)}.")
-    return {"schema": SCHEMA_VERSION, "blockers": blockers, "steps": [executor, speech, network, pusula],
+    return {"schema": SCHEMA_VERSION, "blockers": blockers,
+            "steps": [executor, speech, network, plan_pc(facts), pusula],
             "warnings": warnings, "differences_from_current": changes}
 
 

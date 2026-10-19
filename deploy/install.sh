@@ -11,6 +11,8 @@
 #   - Erisim token'i uretir
 #   - systemd --user servisini yazar ve baslatir (yoksa nohup fallback)
 #   - Tailscale varsa backend'i tailnet'e /ceviz olarak yayinlar
+#   - WSL'de Windows'u OpenClaw'a dugum olarak baglar (deploy/pc-node.sh); saatten verilen
+#     bilgisayar komutlari Windows'ta calisir
 #   - Telefonda okutacagin QR + pairing bilgisini basar
 #
 # Ceviz repo kok dizininde calistirilabilir.
@@ -271,6 +273,14 @@ elif [ "$NETWORK_MODE" = relay ] && [ "$IS_WSL" = 1 ]; then
   echo "==> Windows LAN relay: $BASE_URL"
 else
   echo "==> Manuel ag modu — erisilebilir backend adresini uygulamaya gir"
+fi
+
+# --- 5b) PC: commands from the Watch act on this computer ---
+# Under WSL the computer is Windows: deploy/pc-node.sh connects it to OpenClaw as a node.
+# Elsewhere OpenClaw runs on the computer itself. WATCH_CEVIZ_PC_NODE_SETUP=0 skips it; a failure
+# never stops the installation (run deploy/pc-node.sh again later).
+if [ "$IS_WSL" = 1 ] && [ "${WATCH_CEVIZ_PC_NODE_SETUP:-1}" != 0 ]; then
+  bash "$SCRIPT_DIR/pc-node.sh" || echo "!!  UYARI: PC dugumu kurulamadi; kurulum devam ediyor. Sonra: bash deploy/pc-node.sh"
 fi
 
 # --- 6) Pairing QR + bilgi ---

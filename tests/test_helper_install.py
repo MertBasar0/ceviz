@@ -23,7 +23,8 @@ BASH = shutil.which("bash") if os.name == "posix" else next(
 
 @unittest.skipUnless(BASH, "Actual Bash installer boundary")
 class WindowsTailscaleInstallerTests(unittest.TestCase):
-    def run_install(self, mode="success", network="tailscale", content=INSTALLER, plan="large-v3 cpu", measure=0):
+    def run_install(self, mode="success", network="tailscale", content=INSTALLER, plan="large-v3 cpu", measure=0,
+                    pc_node="", pc_status=0):
         self.unit = ""
         with tempfile.TemporaryDirectory(prefix="ceviz-windows-install-") as temporary:
             root = Path(temporary)
@@ -61,6 +62,10 @@ dirname() { printf '%s\n' "${1%/*}"; }
 mkdir() { [[ "$*" == "-p $HOME/.config/systemd/user" ]]; }
 grep() { [[ "$*" == '-qi microsoft /proc/version' ]]; }
 openclaw() { return 99; }
+bash() {
+  [[ "$1" == */app/deploy/pc-node.sh && $# == 1 ]] || return 95
+  record 'pc-node'; return "$CEVIZ_TEST_PC_STATUS"
+}
 systemctl() {
   record "systemctl $*"
   case "$*" in
@@ -105,7 +110,8 @@ source "$FIXTURE_ROOT/app/deploy/install.sh"
 '''
             result = subprocess.run([BASH, "-c", harness, "--", root.as_posix(), network, mode],
                                     capture_output=True, text=True, timeout=15,
-                                    env={**os.environ, "CEVIZ_TEST_PLAN": plan, "CEVIZ_TEST_MEASURE": str(measure)},
+                                    env={**os.environ, "CEVIZ_TEST_PLAN": plan, "CEVIZ_TEST_MEASURE": str(measure),
+                                         "WATCH_CEVIZ_PC_NODE_SETUP": pc_node, "CEVIZ_TEST_PC_STATUS": str(pc_status)},
                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             calls = (root / "calls").read_text().splitlines() if (root / "calls").exists() else []
             unit = root / "home/.config/systemd/user/watch-ceviz-backend.service"
@@ -129,6 +135,17 @@ source "$FIXTURE_ROOT/app/deploy/install.sh"
         self.assertLess(calls.index("plan --speech --offline"), calls.index("measure --device cpu"))
         self.assertIn("Environment=WATCH_CEVIZ_STT_ENGINE=auto\nEnvironment=WATCH_CEVIZ_WHISPER_MODEL=large-v3\n",
                       self.unit)
+
+    def test_wsl_connects_the_windows_pc_by_default_and_a_failure_does_not_stop_the_install(self):
+        result, calls = self.run_install()
+        self.assertLess(calls.index("pc-node"), calls.index("pair-url https://fixture.tail.ts.net/ceviz"))
+        result, calls = self.run_install(pc_status=2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PC dugumu kurulamadi; kurulum devam ediyor", result.stdout)
+        self.assertEqual(calls[-1], "pair-url https://fixture.tail.ts.net/ceviz")
+        result, calls = self.run_install(pc_node="0")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("pc-node", calls)
 
     def test_no_room_or_too_slow_for_large_v3_leaves_speech_to_the_iphone(self):
         for plan, measure, measured in (("phone none", 0, False), ("large-v3 cpu", 1, True),

@@ -120,15 +120,20 @@ OUTPUT="$(printf '%s' "$CODE" | powershell.exe -NoProfile -NonInteractive -Execu
   -File "$(wslpath -w "$SCRIPT_DIR/windows/install-pc-node.ps1")" -Version "$VERSION" -DisplayName "$NAME" \
   ${REPLACE[@]+"${REPLACE[@]}"} 2>&1 | tr -d '\r')" || STATUS=$?
 CODE=""
-printf '%s\n' "$OUTPUT" | grep -v '^CEVIZ_PC_NODE_' || true
+# PowerShell error records can carry bytes grep would call binary; read them as text.
+printf '%s\n' "$OUTPUT" | grep -av '^CEVIZ_PC_NODE_' || true
 DEVICE="$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_ID=\([0-9a-f]\{64\}\)$/\1/p' | tail -1)"
+REASON="$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_ERROR=//p' | tail -1)"
 case "$STATUS" in
   0) ;;
   4) echo "!! Windows'ta Ceviz'in kurmadigi bir OpenClaw dugum servisi var:" \
           "$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_FOREIGN=//p')" >&2
      echo "   Hicbir sey degistirilmedi. Yerine Ceviz'inkini kurmak icin: bash deploy/pc-node.sh --replace" >&2
      exit 2 ;;
-  *) echo "!! PC dugumu kurulamadi: $(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_ERROR=//p')" >&2
+  7) echo "!! Eski OpenClaw dugum gorevi yonetici onayi olmadan degistirilemiyor; hicbir sey degistirilmedi." >&2
+     echo "   Onay penceresini kabul ederek tekrar dene: bash deploy/pc-node.sh --replace" >&2
+     exit 2 ;;
+  *) echo "!! PC dugumu kurulamadi (PowerShell cikis kodu $STATUS): ${REASON:-ayrinti yukarida}" >&2
      exit 2 ;;
 esac
 [ -n "$DEVICE" ] || { echo "!! Dugum kimligi okunamadi." >&2; exit 2; }

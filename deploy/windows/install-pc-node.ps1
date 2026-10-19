@@ -10,7 +10,8 @@
 # build migrated it to a schema the node's version could not open.
 #
 # Exit codes: 0 connected and installed, 3 Node.js missing or too old, 4 another OpenClaw node
-# service exists (rerun with -Replace to replace it), 5 OpenClaw download failed, 6 pairing failed.
+# service exists (rerun with -Replace to replace it), 5 OpenClaw download failed, 6 pairing failed,
+# 7 replacing a node service registered by an administrator was not approved.
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [string]$DisplayName = 'Ceviz PC',
@@ -19,10 +20,13 @@ param(
     [string]$StateDir = (Join-Path $env:USERPROFILE '.openclaw-ceviz-pc'),
     [string]$Node = '',
     [string]$Npm = '',
-    [string]$Winget = 'winget.exe'
+    [string]$Winget = 'winget.exe',
+    [string]$PowerShell = 'powershell.exe'
 )
 $ErrorActionPreference = 'Stop'
 $TaskName = 'OpenClaw Node'  # fixed by OpenClaw: one node service per Windows user
+# Started from WSL the current folder is a \\wsl.localhost path, which npm.cmd cannot use.
+Set-Location -LiteralPath $env:USERPROFILE
 
 if ($Version -notmatch '^\d{4}\.\d+\.\d+([-+.][0-9A-Za-z.-]+)?$') { throw "Unexpected OpenClaw version: $Version" }
 if ($DisplayName -notmatch '^[\w .()-]{1,40}$') { throw "Unexpected node name: $DisplayName" }
@@ -48,6 +52,28 @@ function Test-NodeVersion([string]$Have, [string]$Range) {
         if ($ok) { return $true }
     }
     return $false
+}
+
+function Remove-NodeTask {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    try {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
+        return
+    } catch {
+        # A task registered from an elevated terminal can be removed only by an administrator.
+        Write-Output "Eski '$TaskName' gorevi yonetici izniyle kurulmus; Windows bir onay (UAC) isteyecek."
+    }
+    $remove = "Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
+    try {
+        $admin = Start-Process $PowerShell -Verb RunAs -WindowStyle Hidden -Wait -PassThru `
+            -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $remove)
+    } catch {
+        $admin = $null  # the approval was declined
+    }
+    if (-not $admin -or $admin.ExitCode -ne 0 -or (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) {
+        Write-Output "CEVIZ_PC_NODE_ERROR=Replacing the existing '$TaskName' task needs administrator approval; it was not changed."
+        exit 7
+    }
 }
 
 function Find-Node {
@@ -104,10 +130,7 @@ $bin = if ($manifest.bin -is [string]) { $manifest.bin } else { $manifest.bin.op
 $entry = Join-Path (Split-Path -Parent $package) $bin
 
 # 4) Pair with the single-use code and install the node service under Ceviz's state folder.
-if ($task) {
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-}
+if ($task) { Remove-NodeTask }
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $env:OPENCLAW_STATE_DIR = $StateDir
 # A private file that `openclaw connect --target-file` reads and removes.

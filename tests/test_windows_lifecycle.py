@@ -308,13 +308,25 @@ class PCNodeInstallerTests(unittest.TestCase):
 
     DEVICE = "d" * 64
 
-    def run_installer(self, directory, arguments="", task=None, node_version="v24.19.0", engines=">=24.16.0 <25 || >=26.1.0"):
+    def run_installer(self, directory, arguments="", task=None, node_version="v24.19.0", engines=">=24.16.0 <25 || >=26.1.0",
+                      protected=False, decline=False):
         source = r'''
 $ErrorActionPreference='Stop'
 $global:calls=[System.Collections.Generic.List[string]]::new()
-function global:Get-ScheduledTask { if (__TASK__) { [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = __TASK__ }) } } }
+$global:removed=$false
+function global:Get-ScheduledTask { if (__TASK__ -and -not $global:removed) { [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = __TASK__ }) } } }
 function global:Stop-ScheduledTask { $global:calls.Add('stop-task') }
-function global:Unregister-ScheduledTask { $global:calls.Add('unregister-task') }
+function global:Unregister-ScheduledTask {
+    if (__PROTECTED__) { $global:calls.Add('unregister-denied'); throw 'Access is denied.' }
+    $global:calls.Add('unregister-task'); $global:removed=$true
+}
+function global:Start-Process {
+    param($FilePath, $Verb, $WindowStyle, [switch]$Wait, [switch]$PassThru, $ArgumentList)
+    $global:calls.Add("elevated $FilePath $Verb " + ($ArgumentList -join ' '))
+    if (__DECLINE__) { throw 'The operation was canceled by the user.' }
+    $global:removed=$true
+    [pscustomobject]@{ ExitCode = 0 }
+}
 function global:fake-winget { $global:calls.Add('winget') }
 function global:fake-npm {
     $global:calls.Add('npm ' + ($args -join ' '))
@@ -342,7 +354,9 @@ $code = $LASTEXITCODE
         for key, value in {"__SCRIPT__": literal(ROOT / "deploy/windows/install-pc-node.ps1"),
                            "__PREFIX__": literal(Path(directory) / "prefix"), "__STATE__": literal(Path(directory) / "state"),
                            "__TASK__": "$null" if task is None else literal(task), "__ENGINES__": literal(engines),
-                           "__NODE_VERSION__": literal(node_version), "__DEVICE__": self.DEVICE, "__ARGUMENTS__": arguments}.items():
+                           "__NODE_VERSION__": literal(node_version), "__DEVICE__": self.DEVICE, "__ARGUMENTS__": arguments,
+                           "__PROTECTED__": "$true" if protected else "$false",
+                           "__DECLINE__": "$true" if decline else "$false"}.items():
             source = source.replace(key, value)
         source = "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop\n" + source
         encoded = base64.b64encode(source.encode("utf-16le")).decode("ascii")
@@ -374,6 +388,22 @@ $code = $LASTEXITCODE
         self.assertEqual(result["calls"][1:3], ["stop-task", "unregister-task"])
         self.assertEqual(result["calls"][3], f"connect state={state} code=SINGLE-USE-CODE --service --display-name Ceviz PC")
         self.assertEqual(result["leftovers"], [], "The setup code file is removed")
+
+    def test_a_node_task_registered_by_an_administrator_is_replaced_only_with_approval(self):
+        foreign = r"C:\Users\me\.openclaw\node.vbs"
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(directory, "-Replace", task=foreign, protected=True)
+        self.assertEqual(result["code"], 0, result)
+        self.assertEqual(result["calls"][1:4], [
+            "stop-task", "unregister-denied",
+            "elevated powershell.exe RunAs -NoProfile -NonInteractive -Command "
+            "Unregister-ScheduledTask -TaskName 'OpenClaw Node' -Confirm:$false"])
+        self.assertTrue(result["calls"][4].startswith("connect "), result)
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(directory, "-Replace", task=foreign, protected=True, decline=True)
+        self.assertEqual(result["code"], 7)
+        self.assertTrue(any("needs administrator approval" in line for line in result["output"]), result)
+        self.assertFalse(any(call.startswith("connect") for call in result["calls"]))
 
     def test_a_node_too_old_for_this_openclaw_is_reported_before_pairing(self):
         with tempfile.TemporaryDirectory() as directory:

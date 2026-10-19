@@ -26,6 +26,12 @@ Son güncelleme: **19 Ekim 2026**
 - 334 Python testi (Ubuntu/macOS, bash 3.2 dahil), 15 Windows PowerShell testi.
   Güncelleyici değişmedi (SHA aynı). Sürüm notu:
   `docs/release-notes-helper-2026.10.19-beta.1.md`.
+- **Yayın ve canlı güncelleme:** etiket `ceviz-helper-v2026.10.19-beta.1` → `effe952`
+  (CI 39306086965), GitHub ön sürüm sayfası yayında. Canlı kurulum resmi güncelleyiciyle
+  güncellendi (`UPDATED`, çıkış 0, ardından `READY`); servis `releases/effe952`'den
+  çalışıyor, `WATCH_CEVIZ_PC_NODE=Ceviz PC` ortamda; Whisper large-v3 GPU'da, Pusula ve
+  OpenJev yüklü, röle 200, `Ceviz PC` bağlı. Sıradaki: saatten Windows'ta iş yaptıran
+  bir komutla uçtan uca deneme (Mert).
 
 ## 17 Ekim — Yardımcı servis 2026.10.17 Beta 1: güncelleyici düzeltmesi
 

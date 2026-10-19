@@ -51,7 +51,9 @@ Gateway still ask, the script approves only requests from the device it just
 paired. The node's exec runs without approval prompts, the same trust as
 OpenClaw's exec inside WSL: anyone who can command the agent can run commands on
 Windows. Skip it with `WATCH_CEVIZ_PC_NODE_SETUP=0`, or remove the node with
-`openclaw devices remove` and the Windows task `OpenClaw Node`.
+`openclaw devices remove` and the Windows task `Ceviz PC Node`. The node runs as
+the signed-in Windows user from that task; Ceviz does not change an `OpenClaw Node`
+task the user set up.
 
 ## Completion notification relay
 

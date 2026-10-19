@@ -49,7 +49,6 @@ powershell.exe() {
   record "stdin $(cat)"
   case "$CEVIZ_TEST_WINDOWS" in
     success) printf 'OpenClaw 2026.9.1 Windows%sa indiriliyor\r\nCEVIZ_PC_NODE_ID=%s\r\n' "'" "$DEVICE";;
-    foreign) printf 'CEVIZ_PC_NODE_FOREIGN=C:\\Users\\me\\.openclaw\\node.vbs\r\n'; return 4;;
     no-node) printf 'CEVIZ_PC_NODE_ERROR=Node.js is not installed on Windows.\r\n'; return 3;;
   esac
 }
@@ -99,8 +98,7 @@ class PCNodeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PC dugumu bagli: Ceviz PC", result.stdout)
         powershell = next(call for call in calls if call.startswith("powershell "))
-        self.assertIn("install-pc-node.ps1 -Version 2026.9.1 -DisplayName Ceviz PC", powershell)
-        self.assertNotIn("-Replace", powershell)
+        self.assertIn("install-pc-node.ps1 -Version 2026.9.1 -Port 19555 -DisplayName Ceviz PC", powershell)
         self.assertIn("stdin SINGLE-USE-SETUP-CODE", calls)
         # The code travels on stdin only: no recorded command line carries it.
         self.assertEqual([call for call in calls if "SINGLE-USE-SETUP-CODE" in call and not call.startswith("stdin ")], [])
@@ -117,17 +115,6 @@ class PCNodeTests(unittest.TestCase):
         self.assertIn("zaten bagli: Desk", result.stdout)
         self.assertFalse(any(call.startswith(("powershell ", "openclaw qr")) for call in calls))
         self.assertIn("WATCH_CEVIZ_PC_NODE=Desk", dropin)
-
-    def test_a_node_service_ceviz_did_not_create_is_replaced_only_on_request(self):
-        result, calls, dropin = self.run_script(windows="foreign")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("bash deploy/pc-node.sh --replace", result.stderr)
-        self.assertIn(r"C:\Users\me\.openclaw\node.vbs", result.stderr)
-        self.assertIsNone(dropin)
-        self.assertFalse(any(call.startswith("openclaw devices approve") for call in calls))
-        result, calls, _ = self.run_script("--replace")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(next(call for call in calls if call.startswith("powershell ")).endswith("-Replace"))
 
     def test_windows_failures_and_a_node_that_never_connects_are_reported(self):
         result, _, dropin = self.run_script(windows="no-node")

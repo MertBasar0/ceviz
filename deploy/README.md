@@ -72,18 +72,24 @@ reach, so the installer connects Windows to OpenClaw as a node by default
   pairs with it over localhost and from then on uses its own device token; the
   Gateway token never leaves WSL.
 - Ceviz keeps its own copy of OpenClaw on Windows, at the Gateway's version, in
-  `%LOCALAPPDATA%\Ceviz\pc-node`, and the node's identity in
-  `%USERPROFILE%\.openclaw-ceviz-pc`, apart from any OpenClaw you use on Windows.
-  Node.js is needed on Windows; the installer tries winget when it is missing.
+  `%LOCALAPPDATA%\Ceviz\pc-node`, and the node's identity in the OpenClaw profile
+  `ceviz-pc` (`%USERPROFILE%\.openclaw-ceviz-pc`), apart from any OpenClaw you use
+  on Windows. Node.js is needed on Windows; the installer tries winget when it is
+  missing.
+- Its own scheduled task, `Ceviz PC Node`, starts the node hidden at logon. An
+  `OpenClaw Node` task you set up yourself is left alone: OpenClaw allows only one
+  of those per Windows user, and 2026.9.6 will not install it for a separate
+  profile.
 - The helper tells the agent that the PC is the node `Ceviz PC`, so a command
   such as "open my notes on the desktop" runs in PowerShell on Windows
   (`exec host=node`). Commands run there without asking for approval, as
   OpenClaw's exec does inside WSL.
 
-OpenClaw allows one node service per Windows user. If one exists that Ceviz did
-not create, nothing is changed; `bash deploy/pc-node.sh --replace` replaces it.
-The script can be run again at any time, also on an existing installation, and
-`WATCH_CEVIZ_PC_NODE_SETUP=0` skips it during installation.
+The script can be run again at any time, also on an existing installation; it
+replaces only Ceviz's own task. `WATCH_CEVIZ_PC_NODE_SETUP=0` skips it during
+installation. To remove the node: `Unregister-ScheduledTask 'Ceviz PC Node'` on
+Windows, `openclaw devices remove <device id>` on the Gateway, and the two
+folders above.
 
 The other parts of the plan (OpenClaw, Pusula, the connection) are still shown
 as advice only.

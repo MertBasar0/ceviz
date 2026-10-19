@@ -304,28 +304,35 @@ catch { $failure = $_.Exception.Message; $caught = $failure -eq 'fixture-network
 
 @unittest.skipUnless(POWERSHELL, "Windows PowerShell subprocess proof")
 class PCNodeInstallerTests(unittest.TestCase):
-    """install-pc-node.ps1 with substituted task, npm and node calls; nothing is installed."""
+    """install-pc-node.ps1 with substituted task, process, npm and node calls; nothing is installed."""
 
     DEVICE = "d" * 64
 
-    def run_installer(self, directory, arguments="", task=None, node_version="v24.19.0", engines=">=24.16.0 <25 || >=26.1.0",
-                      protected=False, decline=False):
-        source = r'''
+    def run_installer(self, directory, node_version="v24.19.0", engines=">=24.16.0 <25 || >=26.1.0", pairs=True):
+        source = r"""
 $ErrorActionPreference='Stop'
 $global:calls=[System.Collections.Generic.List[string]]::new()
-$global:removed=$false
-function global:Get-ScheduledTask { if (__TASK__ -and -not $global:removed) { [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = __TASK__ }) } } }
-function global:Stop-ScheduledTask { $global:calls.Add('stop-task') }
-function global:Unregister-ScheduledTask {
-    if (__PROTECTED__) { $global:calls.Add('unregister-denied'); throw 'Access is denied.' }
-    $global:calls.Add('unregister-task'); $global:removed=$true
+$env:OPENCLAW_STATE_DIR = 'C:\inherited\state'  # must not reach OpenClaw
+# Load the real module first so these fakes replace its commands, and fake every command used:
+# an autoloaded ScheduledTasks module would otherwise register a real task.
+Import-Module ScheduledTasks -ErrorAction Stop
+function global:New-ScheduledTaskAction { param($Execute, $Argument) [pscustomobject]@{ Execute = $Execute; Arguments = $Argument } }
+function global:New-ScheduledTaskTrigger { param([switch]$AtLogOn, $User) [pscustomobject]@{ User = $User } }
+function global:New-ScheduledTaskSettingsSet { [pscustomobject]@{} }
+function global:Stop-ScheduledTask { $global:calls.Add('stop-own-task') }
+function global:Start-ScheduledTask { param($TaskName) $global:calls.Add("start-task $TaskName") }
+function global:Register-ScheduledTask {
+    param($TaskName, $Action, $Trigger, $Settings, $Description, [switch]$Force)
+    $global:calls.Add("register $TaskName $($Action.Execute) $($Action.Arguments)")
 }
+function global:Get-CimInstance { }
+function global:Stop-Process { param($Id, [switch]$Force) $global:calls.Add("stop-pairing $Id") }
 function global:Start-Process {
-    param($FilePath, $Verb, $WindowStyle, [switch]$Wait, [switch]$PassThru, $ArgumentList)
-    $global:calls.Add("elevated $FilePath $Verb " + ($ArgumentList -join ' '))
-    if (__DECLINE__) { throw 'The operation was canceled by the user.' }
-    $global:removed=$true
-    [pscustomobject]@{ ExitCode = 0 }
+    param($FilePath, [switch]$NoNewWindow, [switch]$PassThru, $RedirectStandardOutput, $RedirectStandardError, $ArgumentList)
+    $code = Get-Content -Raw ($ArgumentList[5].Trim('"'))
+    $global:calls.Add('pair ' + ($ArgumentList -join ' ').Replace($ArgumentList[5], '<file>') + " code=$code state=$env:OPENCLAW_STATE_DIR")
+    if (__PAIRS__) { Set-Content $RedirectStandardOutput 'node host gateway connected: ws://127.0.0.1:20110' }
+    [pscustomobject]@{ Id = 4242; HasExited = -not (__PAIRS__) }
 }
 function global:fake-winget { $global:calls.Add('winget') }
 function global:fake-npm {
@@ -333,35 +340,35 @@ function global:fake-npm {
     $prefix = $args[[array]::IndexOf($args, '--prefix') + 1]
     $package = Join-Path $prefix 'node_modules\openclaw'
     New-Item -ItemType Directory -Force -Path $package | Out-Null
-    @{ version = '2026.9.1'; bin = @{ openclaw = 'openclaw.mjs' }; engines = @{ node = __ENGINES__ } } | ConvertTo-Json | Set-Content (Join-Path $package 'package.json')
+    @{ version = '2026.9.6'; bin = @{ openclaw = 'openclaw.mjs' }; engines = @{ node = __ENGINES__ } } | ConvertTo-Json | Set-Content (Join-Path $package 'package.json')
     $global:LASTEXITCODE = 0
 }
 function global:fake-node {
     if ($args[0] -eq '--version') { return __NODE_VERSION__ }
-    if ($args[1] -eq 'connect') {
-        $file = $args[3]
-        $global:calls.Add('connect state=' + $env:OPENCLAW_STATE_DIR + ' code=' + (Get-Content -Raw $file) + ' ' + ($args[4..7] -join ' '))
-        $global:LASTEXITCODE = 0; return
+    $cli = @($args | Select-Object -Skip 1)  # after the entry script
+    if ($cli[0] -eq '--profile' -and $cli[1] -eq 'ceviz-pc' -and $cli[2] -eq 'node' -and $cli[3] -eq 'identity') {
+        '{"deviceId":"__DEVICE__","publicKey":"x"}'; $global:LASTEXITCODE = 0; return
     }
-    if ($args[1] -eq 'node' -and $args[2] -eq 'identity') { '{"deviceId":"__DEVICE__","publicKey":"x"}'; $global:LASTEXITCODE = 0; return }
     throw ('unexpected node call: ' + ($args -join ' '))
 }
-$output = @(& __SCRIPT__ -Version '2026.9.1' -Prefix __PREFIX__ -StateDir __STATE__ -Node fake-node -Npm fake-npm -Winget fake-winget __ARGUMENTS__)
+$output = @(& __SCRIPT__ -Version '2026.9.6' -Port 20110 -Prefix __PREFIX__ -StateDir __STATE__ -Node fake-node -Npm fake-npm -Winget fake-winget -PairSeconds 2)
 $code = $LASTEXITCODE
+$launcher = Join-Path __STATE__ 'ceviz-node.cmd'
 'CEVIZ_TEST_RESULT=' + (@{ code = $code; output = @($output | ForEach-Object { "$_" }); calls = @($global:calls);
+    launcher = if (Test-Path $launcher) { [IO.File]::ReadAllText($launcher) } else { '' };
+    hidden = if (Test-Path ($launcher -replace 'cmd$', 'vbs')) { [IO.File]::ReadAllText(($launcher -replace 'cmd$', 'vbs')) } else { '' };
     leftovers = @(Get-ChildItem -LiteralPath __STATE__ -Filter 'pair-*' -ErrorAction SilentlyContinue | ForEach-Object Name) } | ConvertTo-Json -Compress)
-'''
+"""
         for key, value in {"__SCRIPT__": literal(ROOT / "deploy/windows/install-pc-node.ps1"),
                            "__PREFIX__": literal(Path(directory) / "prefix"), "__STATE__": literal(Path(directory) / "state"),
-                           "__TASK__": "$null" if task is None else literal(task), "__ENGINES__": literal(engines),
-                           "__NODE_VERSION__": literal(node_version), "__DEVICE__": self.DEVICE, "__ARGUMENTS__": arguments,
-                           "__PROTECTED__": "$true" if protected else "$false",
-                           "__DECLINE__": "$true" if decline else "$false"}.items():
+                           "__ENGINES__": literal(engines), "__NODE_VERSION__": literal(node_version),
+                           "__DEVICE__": self.DEVICE, "__PAIRS__": "$true" if pairs else "$false"}.items():
             source = source.replace(key, value)
         source = "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop\n" + source
         encoded = base64.b64encode(source.encode("utf-16le")).decode("ascii")
+        self.addCleanup(self.assert_no_real_task)
         result = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                                 "-EncodedCommand", encoded], capture_output=True, text=True, timeout=30,
+                                 "-EncodedCommand", encoded], capture_output=True, text=True, timeout=60,
                                 input="SINGLE-USE-CODE",  # the setup code arrives on standard input only
                                 creationflags=subprocess.CREATE_NO_WINDOW)
         records = [line[len("CEVIZ_TEST_RESULT="):] for line in result.stdout.splitlines()
@@ -369,49 +376,54 @@ $code = $LASTEXITCODE
         self.assertEqual(len(records), 1, result.stdout + result.stderr)
         return json.loads(records[0])
 
-    def test_a_node_service_ceviz_did_not_create_is_left_alone_without_replace(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(directory, task=r"C:\Users\me\.openclaw\node.vbs")
-        self.assertEqual(result["code"], 4)
-        self.assertIn(r"CEVIZ_PC_NODE_FOREIGN=C:\Users\me\.openclaw\node.vbs", result["output"])
-        self.assertEqual(result["calls"], [], "Nothing is downloaded, stopped or paired")
+    def assert_no_real_task(self):
+        probe = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+                                "if (Get-ScheduledTask -TaskName 'Ceviz PC Node' -ErrorAction SilentlyContinue | "
+                                "Where-Object { $_.Actions.Arguments -like '*\\Temp\\*' }) { exit 1 }"],
+                               capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(probe.returncode, 0, "The test registered a real scheduled task")
 
-    def test_pairs_from_a_private_file_with_its_own_openclaw_copy_and_state(self):
+    def test_pairs_from_a_private_file_then_runs_the_node_from_its_own_task(self):
         with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(directory, "-Replace", task=r"C:\Users\me\.openclaw\node.vbs")
-            state = str(Path(directory) / "state")
+            result = self.run_installer(directory)
             prefix = str(Path(directory) / "prefix")
+            state = str(Path(directory) / "state")
         self.assertEqual(result["code"], 0, result)
         self.assertEqual(result["output"][-1], "CEVIZ_PC_NODE_ID=" + self.DEVICE)
-        self.assertEqual(result["calls"][0], f"npm install --prefix {prefix} --no-fund --no-audit --omit=dev "
-                                             "--loglevel=error openclaw@2026.9.1")
-        self.assertEqual(result["calls"][1:3], ["stop-task", "unregister-task"])
-        self.assertEqual(result["calls"][3], f"connect state={state} code=SINGLE-USE-CODE --service --display-name Ceviz PC")
+        calls = result["calls"]
+        self.assertEqual(calls[0], f"npm install --prefix {prefix} --no-fund --no-audit --omit=dev "
+                                   "--loglevel=error openclaw@2026.9.6")
+        self.assertEqual(calls[1], "stop-own-task")
+        entry = f'"{prefix}\\node_modules\\openclaw\\openclaw.mjs"'
+        # A profile, not OPENCLAW_STATE_DIR; connect without --service; the code only in the file.
+        self.assertEqual(calls[2], f'pair {entry} --profile ceviz-pc connect --target-file <file> '
+                                   '--display-name "Ceviz PC" code=SINGLE-USE-CODE state=')
+        self.assertEqual(calls[3], "stop-pairing 4242")
+        self.assertEqual(calls[4], f'register Ceviz PC Node wscript.exe "{state}\\ceviz-node.vbs"')
+        self.assertEqual(calls[5], "start-task Ceviz PC Node")
+        self.assertNotIn("OpenClaw Node", " ".join(calls), "A node task the user set up is never touched")
+        self.assertIn(f'"{prefix}\\node_modules\\openclaw\\openclaw.mjs" --profile ceviz-pc node run --host 127.0.0.1 '
+                      '--port 20110 --no-tls --display-name "Ceviz PC"', result["launcher"])
+        self.assertNotIn("SINGLE-USE-CODE", result["launcher"])
+        # One VBScript line that runs the launcher hidden and waits (it once split into three lines).
+        self.assertEqual(result["hidden"].splitlines()[1],
+                         f'WScript.Quit CreateObject("WScript.Shell").Run("""{state}\\ceviz-node.cmd""", 0, True)')
         self.assertEqual(result["leftovers"], [], "The setup code file is removed")
 
-    def test_a_node_task_registered_by_an_administrator_is_replaced_only_with_approval(self):
-        foreign = r"C:\Users\me\.openclaw\node.vbs"
+    def test_no_gateway_connection_registers_no_task(self):
         with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(directory, "-Replace", task=foreign, protected=True)
-        self.assertEqual(result["code"], 0, result)
-        self.assertEqual(result["calls"][1:4], [
-            "stop-task", "unregister-denied",
-            "elevated powershell.exe RunAs -NoProfile -NonInteractive -Command "
-            "Unregister-ScheduledTask -TaskName 'OpenClaw Node' -Confirm:$false"])
-        self.assertTrue(result["calls"][4].startswith("connect "), result)
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(directory, "-Replace", task=foreign, protected=True, decline=True)
-        self.assertEqual(result["code"], 7)
-        self.assertTrue(any("needs administrator approval" in line for line in result["output"]), result)
-        self.assertFalse(any(call.startswith("connect") for call in result["calls"]))
+            result = self.run_installer(directory, pairs=False)
+        self.assertEqual(result["code"], 6)
+        self.assertTrue(any("did not reach the Gateway on port 20110" in line for line in result["output"]), result)
+        self.assertFalse(any(call.startswith(("register", "start-task")) for call in result["calls"]))
+        self.assertEqual(result["leftovers"], [])
 
     def test_a_node_too_old_for_this_openclaw_is_reported_before_pairing(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_installer(directory, node_version="v22.12.0")
         self.assertEqual(result["code"], 3)
         self.assertTrue(any("needs Node.js >=24.16.0" in line for line in result["output"]), result)
-        self.assertFalse(any(call.startswith("connect") for call in result["calls"]))
-
+        self.assertFalse(any(call.startswith("pair") for call in result["calls"]))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # Connects this Windows PC to OpenClaw as a node, so commands from the Watch can act on Windows.
 #
-#   bash deploy/pc-node.sh            # set up, or report the node that is already connected
-#   bash deploy/pc-node.sh --replace  # also replace an OpenClaw node service Ceviz did not create
+#   bash deploy/pc-node.sh   # set up (again), or report the Windows node that is already connected
 #
 # WSL only: elsewhere the Gateway runs on the computer itself and OpenClaw's exec already acts
 # on it. deploy/install.sh runs this by default (WATCH_CEVIZ_PC_NODE_SETUP=0 skips it).
 #
 # The Gateway mints a single-use, limited setup code (no admin access); Windows pairs with it and
-# then uses its own device token. The Gateway token never leaves WSL. Commands then run on
-# Windows without asking for approval, as OpenClaw's exec does inside WSL (deploy/README.md).
+# then uses its own device token. The Gateway token never leaves WSL. Ceviz's own scheduled task
+# 'Ceviz PC Node' runs the node at logon; an 'OpenClaw Node' task you set up yourself is left
+# alone. Commands then run on Windows without asking for approval, as OpenClaw's exec does inside
+# WSL (deploy/README.md).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NAME="${WATCH_CEVIZ_PC_NODE_NAME:-Ceviz PC}"
-REPLACE=()
-[ "${1:-}" = --replace ] && REPLACE=(-Replace)
 
 if ! grep -qi microsoft /proc/version 2>/dev/null; then
   echo "==> PC dugumu gerekmiyor: OpenClaw bu bilgisayarda calisiyor, komutlar dogrudan burada calisir"
@@ -117,8 +116,8 @@ CODE="$(openclaw qr --setup-code-only --limited --no-ascii --url "ws://127.0.0.1
 echo "==> Bu PC OpenClaw'a dugum olarak baglaniyor: $NAME (OpenClaw $VERSION, ayri klasorde)"
 STATUS=0
 OUTPUT="$(printf '%s' "$CODE" | powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-  -File "$(wslpath -w "$SCRIPT_DIR/windows/install-pc-node.ps1")" -Version "$VERSION" -DisplayName "$NAME" \
-  ${REPLACE[@]+"${REPLACE[@]}"} 2>&1 | tr -d '\r')" || STATUS=$?
+  -File "$(wslpath -w "$SCRIPT_DIR/windows/install-pc-node.ps1")" -Version "$VERSION" -Port "$PORT" \
+  -DisplayName "$NAME" 2>&1 | tr -d '\r')" || STATUS=$?
 CODE=""
 # PowerShell error records can carry bytes grep would call binary; read them as text.
 printf '%s\n' "$OUTPUT" | grep -av '^CEVIZ_PC_NODE_' || true
@@ -126,13 +125,6 @@ DEVICE="$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_ID=\([0-9a-f]\{64\}
 REASON="$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_ERROR=//p' | tail -1)"
 case "$STATUS" in
   0) ;;
-  4) echo "!! Windows'ta Ceviz'in kurmadigi bir OpenClaw dugum servisi var:" \
-          "$(printf '%s\n' "$OUTPUT" | sed -n 's/^CEVIZ_PC_NODE_FOREIGN=//p')" >&2
-     echo "   Hicbir sey degistirilmedi. Yerine Ceviz'inkini kurmak icin: bash deploy/pc-node.sh --replace" >&2
-     exit 2 ;;
-  7) echo "!! Eski OpenClaw dugum gorevi yonetici onayi olmadan degistirilemiyor; hicbir sey degistirilmedi." >&2
-     echo "   Onay penceresini kabul ederek tekrar dene: bash deploy/pc-node.sh --replace" >&2
-     exit 2 ;;
   *) echo "!! PC dugumu kurulamadi (PowerShell cikis kodu $STATUS): ${REASON:-ayrinti yukarida}" >&2
      exit 2 ;;
 esac

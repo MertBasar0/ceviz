@@ -22,7 +22,9 @@ if ! grep -qi microsoft /proc/version 2>/dev/null; then
 fi
 # Run OpenClaw as the installed helper does (its PATH and OPENCLAW_HOME): under WSL a shell
 # without ~/.local/bin finds the Windows `openclaw`, which belongs to another setup.
-if SERVICE_ENV="$(python3 - "$SCRIPT_DIR" 2>/dev/null <<'PY'
+# (A function, not a heredoc inside $(...): bash 3.2 misparses the quotes there.)
+service_environment() {
+  python3 - "$SCRIPT_DIR" 2>/dev/null <<'PY'
 import shlex, sys
 sys.path.insert(0, sys.argv[1])
 import plan
@@ -31,7 +33,8 @@ for key, value in runtime.items():
     # In front of this shell's PATH, which still finds powershell.exe and wslpath.
     print(f'export {key}={shlex.quote(value)}' + (':"$PATH"' if key == "PATH" else ""))
 PY
-)"; then
+}
+if SERVICE_ENV="$(service_environment)"; then
   eval "$SERVICE_ENV"
 fi
 for tool in openclaw powershell.exe wslpath python3; do
@@ -58,9 +61,8 @@ for node in nodes:
 
 # Bootstrap pairing normally approves the device and its commands at once. Should the Gateway
 # still ask, approve only requests from the device this run paired.
-approve_own_requests() {
-  local device="$1" request
-  for request in $(openclaw devices list --json 2>/dev/null | python3 -c '
+pending_device_requests() {
+  openclaw devices list --json 2>/dev/null | python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -69,10 +71,10 @@ except ValueError:
 for item in data.get("pending", []) if isinstance(data, dict) else []:
     if item.get("deviceId") == sys.argv[1]:
         print(item.get("requestId") or item.get("id") or "")
-' "$device"); do
-    openclaw devices approve "$request" >/dev/null 2>&1 || true
-  done
-  for request in $(openclaw nodes pending --json 2>/dev/null | python3 -c '
+' "$1"
+}
+pending_node_requests() {
+  openclaw nodes pending --json 2>/dev/null | python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -81,7 +83,14 @@ except ValueError:
 for item in data if isinstance(data, list) else data.get("pending", []):
     if item.get("nodeId") == sys.argv[1] or item.get("deviceId") == sys.argv[1]:
         print(item.get("requestId") or item.get("id") or "")
-' "$device"); do
+' "$1"
+}
+approve_own_requests() {
+  local request
+  for request in $(pending_device_requests "$1"); do
+    openclaw devices approve "$request" >/dev/null 2>&1 || true
+  done
+  for request in $(pending_node_requests "$1"); do
     openclaw nodes approve "$request" >/dev/null 2>&1 || true
   done
 }

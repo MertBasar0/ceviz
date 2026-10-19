@@ -17,6 +17,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import ssl
 import subprocess
@@ -209,7 +210,12 @@ def openclaw_state(agent: str, environment: dict | None = None) -> dict:
 def parse_service_environment(line: str, keys: tuple[str, ...] = SERVICE_SETTINGS) -> dict:
     """Allowlisted settings from `systemctl show -p Environment`; nothing else is kept."""
     settings = {}
-    for item in line.replace("Environment=", "", 1).split():
+    # systemd quotes an entry that contains spaces, as a WSL PATH with Windows folders does.
+    try:
+        items = shlex.split(line.replace("Environment=", "", 1))
+    except ValueError:
+        items = line.replace("Environment=", "", 1).split()
+    for item in items:
         key, _, value = item.partition("=")
         if key in keys:
             settings[key] = value

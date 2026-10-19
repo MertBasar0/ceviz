@@ -21,6 +21,20 @@ if ! grep -qi microsoft /proc/version 2>/dev/null; then
   echo "==> PC dugumu gerekmiyor: OpenClaw bu bilgisayarda calisiyor, komutlar dogrudan burada calisir"
   exit 0
 fi
+# Run OpenClaw as the installed helper does (its PATH and OPENCLAW_HOME): under WSL a shell
+# without ~/.local/bin finds the Windows `openclaw`, which belongs to another setup.
+if SERVICE_ENV="$(python3 - "$SCRIPT_DIR" 2>/dev/null <<'PY'
+import shlex, sys
+sys.path.insert(0, sys.argv[1])
+import plan
+_, runtime = plan.ceviz_service()
+for key, value in runtime.items():
+    # In front of this shell's PATH, which still finds powershell.exe and wslpath.
+    print(f'export {key}={shlex.quote(value)}' + (':"$PATH"' if key == "PATH" else ""))
+PY
+)"; then
+  eval "$SERVICE_ENV"
+fi
 for tool in openclaw powershell.exe wslpath python3; do
   command -v "$tool" >/dev/null 2>&1 || { echo "!! PC dugumu icin $tool gerekli." >&2; exit 1; }
 done

@@ -190,6 +190,9 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(settings, {"WATCH_CEVIZ_WHISPER_MODEL": "large-v3", "OPENCLAW_HOME": "/home/me/.openclaw"})
         self.assertEqual(plan.parse_service_environment(line, plan.SERVICE_RUNTIME), {"PATH": "/usr/bin"})
         self.assertNotIn("secret-pairing-token", json.dumps(settings))
+        quoted = 'Environment="PATH=/usr/bin:/mnt/c/Program Files/nodejs" OPENCLAW_HOME=/home/me/.ocm/envs/main'
+        self.assertEqual(plan.parse_service_environment(quoted, plan.SERVICE_RUNTIME),
+                         {"PATH": "/usr/bin:/mnt/c/Program Files/nodejs"})
 
 
 if __name__ == "__main__":

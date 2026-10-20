@@ -25,6 +25,20 @@ TOKEN = "ceviz-phone-ui-test-only"
 PORT = 18790
 MAIN_KEY = "agent:planner:weekend"
 BUSY_KEY = "agent:builder:review"
+REPORT_JOB_ID = "job-ui-report"
+
+
+def report_job() -> dict:
+    """A finished Watch job whose answer carries a URL and a code to copy."""
+    return {
+        "id": REPORT_JOB_ID, "name": "Report check", "status": "completed", "outcome": "done",
+        "created_at": time.time(), "elapsed_seconds": 12, "category": "Bilgi",
+        "transcript": "open the sign-in page", "stt_source": "client", "stt_error": "",
+        "watch_summary": "Open https://example.com/sign-in and enter code 4F7K-29QX.",
+        "requires_phone_handoff": True,
+        "phone_report": "1. Kısa durum\nThe sign-in page is https://example.com/sign-in.",
+        "canned_result": "Sign-in page ready.",
+    }
 
 
 class PhoneFixtureGateway:
@@ -32,7 +46,7 @@ class PhoneFixtureGateway:
         self.reset("normal")
 
     def reset(self, scenario: str):
-        if scenario not in {"normal", "queued", "failed", "uncertain", "reset"}:
+        if scenario not in {"normal", "queued", "failed", "uncertain", "reset", "report"}:
             raise ValueError("Unknown fixture scenario")
         self.scenario = scenario
         self.calls = []
@@ -158,6 +172,8 @@ def main() -> None:
                         backend.AUTH_TOKEN = "ceviz-fixture-" + uuid.uuid4().hex
                         FixtureHandler.state_path = Path(temporary) / (uuid.uuid4().hex + ".sqlite")
                         backend.jobs_db.clear()
+                        if fake.scenario == "report":
+                            backend.jobs_db[REPORT_JOB_ID] = report_job()
                     if parsed.path in {"/__fixture/reset", "/__fixture/restart_helper"}:
                         session_api.sessions_api = session_api.OpenClawSessions(FixtureHandler.state_path)
                         FixtureHandler.helper_generation += 1

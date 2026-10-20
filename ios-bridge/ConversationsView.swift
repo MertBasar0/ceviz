@@ -206,8 +206,10 @@ private struct ConversationDetailView: View {
                                 }
                                 .foregroundColor(message.role == "user" ? CVZ.accent : CVZ.textSub)
                                 if !message.text.isEmpty {
-                                    Text(message.text).font(.body).textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                    // 17 pt is .body at the default size; SelectableText scales it with Dynamic Type.
+                                    SelectableText(text: message.text, font: .systemFont(ofSize: 17),
+                                                   color: .primary, lineSpacing: 2)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 if message.hasOtherContent {
                                     Text("Attachments or other content are available in OpenClaw.")

@@ -263,31 +263,47 @@ struct CompanionApp: App {
         _ = router.open(url: url, source: .deepLink, presentImmediately: true)
     }
 
+    /// `currentRoute` as a navigation path: a report is the one screen above Home. Popping it
+    /// (back swipe or CLOSE) returns the route to Home; opening another job replaces it.
+    private var reportPath: Binding<[String]> {
+        Binding(
+            get: {
+                if case .jobReport(let id) = router.currentRoute { return [id] }
+                return []
+            },
+            set: { path in
+                if let id = path.last {
+                    router.currentRoute = .jobReport(id: id)
+                } else {
+                    router.dismissToHome()
+                }
+            }
+        )
+    }
+
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
-                Group {
-                    switch router.currentRoute {
-                    case .home:
-                        HomeView(router: router)
-                    case .jobReport(let id):
+            // The open report is pushed over Home, so the system back swipe returns to it.
+            NavigationStack(path: reportPath) {
+                HomeView(router: router)
+                    .navigationDestination(for: String.self) { id in
                         // .id(id) sart: kimlik degismezse SwiftUI ayni view'i
                         // yeniden kullanir, @State eski raporu tutar ve
                         // onAppear tetiklenmez → yeni is yerine eskisi acilir.
                         JobDetailView(jobId: id, router: router, onClose: router.dismissToHome)
                             .id(id)
                     }
-                }
-                .onOpenURL { url in
-                    // ceviz://pair — QR'i Kamera uygulamasiyla okuyunca da eslessin.
-                    if url.host == "pair", BackendConfig.applyPairing(url) != nil {
-                        DemoMode.setExplicit(false)
-                        return
-                    }
-                    _ = router.open(url: url, source: .deepLink, presentImmediately: true)
-                }
-                .onAppear(perform: applyLaunchRouteIfNeeded)
             }
+            // On the stack, not on Home: Home appears again after every report is closed.
+            .onOpenURL { url in
+                // ceviz://pair — QR'i Kamera uygulamasiyla okuyunca da eslessin.
+                if url.host == "pair", BackendConfig.applyPairing(url) != nil {
+                    DemoMode.setExplicit(false)
+                    return
+                }
+                _ = router.open(url: url, source: .deepLink, presentImmediately: true)
+            }
+            .onAppear(perform: applyLaunchRouteIfNeeded)
             // CVZ uses a fixed dark palette. System chrome and input controls
             // must use the same appearance, including on a light-mode phone.
             .preferredColorScheme(.dark)
@@ -441,14 +457,16 @@ struct HomeView: View {
         .onAppear {
             fetchRecentJobs()
         }
+        // Home stays in the navigation stack under an open report; it acts only while shown,
+        // as when a report replaced it.
         .onChange(of: homeScenePhase) { phase in
-            if phase == .active {
+            if phase == .active && router.currentRoute == .home {
                 router.activatePendingRouteIfNeeded()
                 fetchRecentJobs()
             }
         }
         .onReceive(jobsRefreshTimer) { _ in
-            if homeScenePhase == .active {
+            if homeScenePhase == .active && router.currentRoute == .home {
                 fetchRecentJobs()
             }
         }
@@ -1463,6 +1481,7 @@ struct JobDetailView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(CVZ.text)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             HStack(spacing: 6) {
                 CVZStatusChip(state: report.presentationState, size: 10.5)

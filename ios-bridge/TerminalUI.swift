@@ -36,12 +36,9 @@ struct CVZSectionView: View {
                 .tracking(1.4)
                 .foregroundColor(CVZ.accent)
                 .padding(.top, 10)
-            Text(content)
-                .font(.system(size: 13.5))
-                .lineSpacing(6)
-                .foregroundColor(emphasized ? CVZ.text : CVZ.textSub)
+            // Selectable, with tappable links: answers often carry a URL to open or a code to copy.
+            SelectableText(text: content, color: emphasized ? CVZ.text : CVZ.textSub)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

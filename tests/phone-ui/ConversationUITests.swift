@@ -19,6 +19,11 @@ final class ConversationUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
+    /// Messages and report text are selectable text views; their text is the element's value.
+    private func selectableText(_ text: String) -> XCUIElement {
+        app.textViews.matching(NSPredicate(format: "value == %@", text)).firstMatch
+    }
+
     private func capture(_ name: String) {
         let picture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         picture.name = name
@@ -91,7 +96,7 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(row.isHittable)
         row.tap()
         XCTAssertTrue(element("conversation.target").waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["The riverside route is quieter."].waitForExistence(timeout: 10))
+        XCTAssertTrue(selectableText("The riverside route is quieter.").waitForExistence(timeout: 10))
     }
 
     private func send(_ text: String) {
@@ -339,7 +344,7 @@ final class ConversationUITests: XCTestCase {
         for _ in 0..<5 where !earlier.isHittable { app.scrollViews.firstMatch.swipeDown() }
         XCTAssertTrue(earlier.isHittable)
         earlier.tap()
-        XCTAssertTrue(app.staticTexts["Earlier route notes."].waitForExistence(timeout: 10))
+        XCTAssertTrue(selectableText("Earlier route notes.").waitForExistence(timeout: 10))
         send("Show the shorter route.")
         waitForStatus("Run finished — review the conversation.")
         capture("phone-conversation-response-en")
@@ -400,6 +405,33 @@ final class ConversationUITests: XCTestCase {
         waitForStatus("The response could not be completed.")
         capture("phone-conversation-failed-en")
         try await assertSends(1, key: mainKey)
+    }
+
+    func testReportTextIsSelectableWithLinksAndBackSwipeReturnsHome() async throws {
+        try await prepare("report")
+        app.navigationBars.buttons.firstMatch.tap()
+        let row = app.staticTexts["Report check"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        row.tap()
+
+        let summary = selectableText("Open https://example.com/sign-in and enter code 4F7K-29QX.")
+        XCTAssertTrue(summary.waitForExistence(timeout: 15))
+        XCTAssertTrue(summary.links.firstMatch.exists, "The URL in an answer opens in the browser")
+        // A long press on a word selects it and offers Copy, so part of an answer can be copied.
+        summary.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.5)).press(forDuration: 1.2)
+        // The edit menu shows Copy as a menu item or a button, depending on the iOS version.
+        let copy = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        XCTAssertTrue(copy.waitForExistence(timeout: 5), "Answer text can be selected and copied")
+        capture("phone-report-selection-en")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)).tap()
+
+        // The report hides the navigation bar; the edge swipe still goes back to Home.
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 2, dy: 0))
+        edge.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+        XCTAssertTrue(element("conversations.open").waitForExistence(timeout: 10))
+        XCTAssertTrue(element("conversations.open").isHittable)
+        XCTAssertFalse(summary.exists)
+        capture("phone-report-back-swipe-en")
     }
 
     func testTurkishListAndHistoryStayReadable() async throws {

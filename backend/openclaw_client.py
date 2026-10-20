@@ -147,8 +147,8 @@ class OpenClawClient:
             "--message",
             prompt,
         ]
-        # Without an enabled router plugin there is no --model or --thinking: the agent's own
-        # model and its OpenClaw fallback chain decide.
+        # Without an enabled router plugin there is no --model: the agent's own model and its
+        # OpenClaw fallback chain decide. --thinking comes only from a router or the operator.
         choice = self.router.choose(
             (payload.get("transcript") or "").strip(),
             continuation=(payload.get("_continuation_context") or "").strip(),
@@ -160,6 +160,8 @@ class OpenClawClient:
                 f"[router] {choice.router}: model={choice.model} thinking={choice.thinking} "
                 f"({choice.reason or 'no reason'}) {choice.latency_ms}ms"
             )
+        if "--thinking" not in command:
+            command.extend(self._standing_thinking_args())
 
         try:
             process = subprocess.Popen(  # noqa: S603
@@ -191,6 +193,24 @@ class OpenClawClient:
         re.IGNORECASE,
     )
 
+    _THINKING_LEVEL = re.compile(r"^[a-z][a-z-]{0,15}$")
+
+    @classmethod
+    def _standing_thinking_args(cls) -> list[str]:
+        """--thinking <WATCH_CEVIZ_THINKING> for runs no router set a level for, or nothing.
+
+        OpenClaw keeps the last --thinking on the session. Without a standing level, a router's
+        level (even from a pinned run that failed) would carry over to later turns on the agent's
+        own model. The operator picks a level that model supports; OpenClaw rejects others.
+        """
+        level = os.environ.get("WATCH_CEVIZ_THINKING", "").strip().lower()
+        if not level:
+            return []
+        if not cls._THINKING_LEVEL.match(level):
+            logger.warning("WATCH_CEVIZ_THINKING is not a thinking level; ignored")
+            return []
+        return ["--thinking", level]
+
     @staticmethod
     def is_pinned(command: list[str]) -> bool:
         return "--model" in (command or [])
@@ -218,6 +238,7 @@ class OpenClawClient:
                 skip = True
                 continue
             unpinned.append(arg)
+        unpinned.extend(self._standing_thinking_args())
         log_path = self.runtime_dir / f"watch-job-{uuid.uuid4().hex}.log"
         with log_path.open("w", encoding="utf-8") as log_file:
             process = subprocess.Popen(  # noqa: S603

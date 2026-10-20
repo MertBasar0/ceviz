@@ -271,7 +271,11 @@ class OpenClawClientRoutingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
         os.environ.pop("WATCH_CEVIZ_ROUTER", None)
+        os.environ.pop("WATCH_CEVIZ_THINKING", None)
 
     def invoke(self, client, payload):
         with mock.patch.object(client, "_assert_source_runtime_ready"), mock.patch.object(
@@ -292,6 +296,30 @@ class OpenClawClientRoutingTests(unittest.TestCase):
         command = self.invoke(client, {"transcript": "yine olmadı", "locale": "tr-TR"})
         self.assertEqual(command[-4:], ["--model", "anthropic/claude-sonnet-5", "--thinking", "high"])
         self.assertTrue(client.is_pinned(command))
+
+    def test_standing_thinking_level_applies_where_no_router_set_one(self) -> None:
+        os.environ["WATCH_CEVIZ_THINKING"] = "High"
+        client = OpenClawClient(agent="cevizmain", runtime_dir=self.tmp.name)
+        command = self.invoke(client, {"transcript": "Selam"})
+        self.assertEqual(command[-2:], ["--thinking", "high"])
+        self.assertNotIn("--model", command)
+        client.router = host_with(FakeRouter({"model": "anthropic/claude-sonnet-5", "thinking": "medium"}))
+        pinned = self.invoke(client, {"transcript": "yine olmadı"})
+        self.assertEqual(pinned.count("--thinking"), 1)
+        self.assertEqual(pinned[-4:], ["--model", "anthropic/claude-sonnet-5", "--thinking", "medium"])
+        os.environ["WATCH_CEVIZ_THINKING"] = "--yolo"
+        self.assertNotIn("--thinking", self.invoke(OpenClawClient(agent="cevizmain", runtime_dir=self.tmp.name),
+                                                   {"transcript": "Selam"}))
+
+    def test_retry_of_a_failed_pin_restores_the_standing_level(self) -> None:
+        # OpenClaw keeps the failed pin's --thinking on the session; the retry must set the level back.
+        pinned = ["openclaw", "agent", "--agent", "cevizmain", "--message", "m",
+                  "--model", "anthropic/claude-sonnet-5", "--thinking", "medium"]
+        client = OpenClawClient(agent="cevizmain", runtime_dir=self.tmp.name)
+        with mock.patch("openclaw_client.subprocess.Popen", return_value=mock.Mock()):
+            self.assertEqual(client.relaunch_unpinned(pinned).command, pinned[:6])
+            os.environ["WATCH_CEVIZ_THINKING"] = "high"
+            self.assertEqual(client.relaunch_unpinned(pinned).command, pinned[:6] + ["--thinking", "high"])
 
     def test_router_failure_still_starts_the_command_unpinned(self) -> None:
         client = OpenClawClient(agent="cevizmain", runtime_dir=self.tmp.name)

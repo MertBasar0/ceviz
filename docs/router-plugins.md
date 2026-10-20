@@ -2,7 +2,8 @@
 
 Ceviz does not choose models. By default, every Watch command runs on the OpenClaw agent's own
 model, and the fallback chain configured in OpenClaw handles provider outages. Ceviz never sends
-`--model` or `--thinking`.
+`--model`, and sends `--thinking` only for a router or a [standing thinking
+level](#standing-thinking-level) the operator sets.
 
 A router plugin is a separately installed package that can pick a model and thinking level per
 command, for example a stronger model after the user corrects a missed answer. Routing stays off
@@ -49,6 +50,23 @@ share that environment with the helper.
   limit), Ceviz retries it once without the pin.
 - **One routing decision at a time.** The router is called from a single worker thread. A hung
   router makes later commands time out and run unpinned; it never piles up threads.
+
+## Standing thinking level
+
+OpenClaw keeps the last `--thinking` a command sent on the agent's session. A router's level,
+even from a pinned run that failed and was retried unpinned, therefore stays for later commands
+on the agent's own model. To keep that model at one level, set it for the helper service:
+
+```bash
+systemctl --user edit watch-ceviz-backend
+# [Service]
+# Environment=WATCH_CEVIZ_THINKING=high
+systemctl --user restart watch-ceviz-backend
+```
+
+Every command a router does not set a level for, and every unpinned retry, then sends
+`--thinking high`. Choose a level the agent's primary model supports; OpenClaw rejects a run
+with an unsupported explicit level. Unset (the default), Ceviz sends no level of its own.
 
 ## Writing a router (contract v1)
 

@@ -16,9 +16,11 @@ import threading
 
 logger = logging.getLogger("watch_ceviz.local_whisper")
 
-# Proper nouns Whisper otherwise hears as ordinary words ("Claude Code" -> "cloud kod").
+# Proper nouns and English technical terms otherwise heard as ordinary words ("Claude Code" ->
+# "cloud kod"; in Turkish speech the iPhone heard IMAP as "iMac" and Node as "not").
 # hotwords biases decoding without the silence hallucinations an initial_prompt can cause.
-DEFAULT_HOTWORDS = "Claude Code, Claude, Codex, OpenClaw, Ceviz, GitHub, PR, CI, WSL, Antigravity, Nemotron, Kev, Jev"
+DEFAULT_HOTWORDS = ("Claude Code, Claude, Codex, OpenClaw, Ceviz, GitHub, PR, CI, WSL, Antigravity, Nemotron, Kev, Jev, "
+                    "IMAP, SMTP, URL, OAuth, API, Node, Chrome, Windows, PowerShell")
 
 _model = None
 _model_key: tuple | None = None

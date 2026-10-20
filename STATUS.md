@@ -2,6 +2,24 @@
 
 Son güncelleme: **20 Ekim 2026**
 
+## 20 Ekim — Yardımcı 2026.10.20 Beta 3: düşünme düzeyi, model karşılaştırması
+
+- **Günün incelemesi (40 iş):** Cevapların hepsini Nemotron 3 Ultra 550B verdi. Pusula 11 kez
+  Sonnet'e yükseltti; 11'i de Claude CLI OAuth hatasıyla düştü ve Nemotron'da tekrarlandı. Bir
+  kez NVIDIA 503 verdi ve OpenClaw OpenRouter'daki ücretsiz sürüme geçti (kesik yanıt).
+- **Düşünme düzeyi:** OpenClaw her `--thinking`'i oturumda tutuyor; başarısız yükseltmeler
+  Nemotron'u medium'a indirdi. `WATCH_CEVIZ_THINKING=high` (bu kurulumda açık) yönlendiricinin
+  düzey vermediği her komuta ve tekrara `high` gönderir. Ölçüm: off akıl yürütmesiz, medium
+  ~2,2 bin, high ~3,4 bin karakter.
+- **Konuşma tanıma (29 komut, aynı ses):** Whisper large-v3 15 komutta, iPhone 5'inde daha
+  doğruydu, 8'i aynıydı. Anlamı bozan hata iPhone'da 13, Whisper'da 4 komutta. iPhone İngilizce
+  teknik terimlerde zorlandı (IMAP → "iMac", Node → "not", URL → "yerel"). Varsayılan ipuçlarına
+  bu terimler eklendi; large-v3-turbo ikinci karşılaştırma motoru olarak çalışıyor.
+- **Claude OAuth:** Ceviz'in gateway'i eski Claude Code 2.1.92'yi çalıştırıyor, kullanıcının
+  terminali 2.1.304'ü; ikisi aynı kimlik dosyasını paylaşıyor. Önerilen çözüm uzun ömürlü
+  `claude setup-token` belirteci (kullanıcının yapması gerekiyor).
+- Sürüm notu: `docs/release-notes-helper-2026.10.20-beta.3.md`.
+
 ## 20 Ekim — Yardımcı 2026.10.20 Beta 2 ve Pusula 0.2.2: yönlendirme bütçesi
 
 - **Sorun:** Pusula'nın karar modeli bir dönüşte iki-dört soruyu art arda soruyor. Sıcakken

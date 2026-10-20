@@ -18,7 +18,7 @@ Ayrıntı: [deploy/README.md](deploy/README.md#speech-recognition).
 | Değişken | Default | Açıklama |
 |---|---|---|
 | `WATCH_CEVIZ_STT_ENGINE` | `auto` | `auto` \| `local` \| `openai` \| `phone` |
-| `WATCH_CEVIZ_STT_COMPARE` | boş | `whisper`: telefon modunda aynı sesi arka planda Whisper ile de çözer ve işe `stt_compare` olarak yazar (karşılaştırma için; kullanılan metin telefonunki) |
+| `WATCH_CEVIZ_STT_COMPARE` | boş | Telefon modunda aynı sesi arka planda başka motorlarla da çözer (karşılaştırma için; kullanılan metin telefonunki). Virgülle ayrılmış liste: `whisper` = servisin kendi modeli, `whisper:<model>` = başka bir faster-whisper modeli (örn. `whisper:large-v3-turbo`, bir kez indirilir). İlk motorun sonucu `stt_compare`, diğerleri `stt_compare_more` |
 | `WATCH_CEVIZ_WHISPER_HOTWORDS` | Ceviz'in özel adları | Virgülle ayrılmış özel adlar; Whisper'a ve telefon modunda iPhone'a ipucu olarak gider |
 | `WATCH_CEVIZ_WHISPER_MODEL` | `small` (kurulum `large-v3` yazar) | `large-v3` önerilir; elle başka model de verilebilir |
 | `WATCH_CEVIZ_WHISPER_DEVICE` | `auto` | `auto` \| `cuda` \| `cpu` |

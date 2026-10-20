@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -13,6 +14,9 @@ from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger("watch_ceviz.stt")
+
+# whisper:<faster-whisper model name or Hugging Face repo>; never a path or an option.
+_COMPARE_MODEL = re.compile(r"^whisper:[A-Za-z0-9][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?$")
 
 
 @dataclass
@@ -38,9 +42,25 @@ class WatchSTT:
 
     @property
     def compare_with_whisper(self) -> bool:
-        """WATCH_CEVIZ_STT_COMPARE=whisper: in phone mode, also transcribe the same audio with local
-        Whisper and keep both texts on the job. For comparing the two; the phone's text is used."""
-        return self.on_phone and os.environ.get("WATCH_CEVIZ_STT_COMPARE", "").strip().lower() == "whisper"
+        return bool(self.compare_engines)
+
+    @property
+    def compare_engines(self) -> list[str]:
+        """WATCH_CEVIZ_STT_COMPARE in phone mode: engines that also transcribe each capture, so
+        their text sits beside the phone's on the job. The phone's text is the one used.
+
+        `whisper` is the service's own Whisper model; `whisper:<model>` another faster-whisper
+        model, for example `whisper:large-v3-turbo`. Comma-separated, in the order they run.
+        """
+        if not self.on_phone:
+            return []
+        engines: list[str] = []
+        for item in os.environ.get("WATCH_CEVIZ_STT_COMPARE", "").split(","):
+            item = item.strip()
+            engine = "whisper" if item.lower() == "whisper" else item
+            if (engine == "whisper" or _COMPARE_MODEL.match(engine)) and engine not in engines:
+                engines.append(engine)
+        return engines
 
     @staticmethod
     def speech_hints() -> list[str]:
@@ -52,20 +72,25 @@ class WatchSTT:
             words = os.environ.get("WATCH_CEVIZ_WHISPER_HOTWORDS", "")
         return [word.strip()[:40] for word in words.split(",") if word.strip()][:50]
 
-    def whisper_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """The same capture through local Whisper, for comparison. Never raises."""
+    def whisper_transcript(self, payload: dict[str, Any], engine: str = "whisper") -> dict[str, Any]:
+        """The same capture through a comparison engine (see compare_engines). Never raises."""
+        model = engine.split(":", 1)[1] if engine.startswith("whisper:") else None
+        label = f"local-whisper:{model}" if model else "local-whisper"
         started = time.perf_counter()
         try:
             import local_whisper
             audio = base64.b64decode(payload.get("audio_data") or "", validate=True)
-            text = (local_whisper.transcribe_bytes(
-                audio, payload.get("format", "m4a"), self.language_from_payload(payload) or self.language or None,
-            ) or "").strip()
-            return {"engine": f"local-whisper:{local_whisper.active_device()}", "transcript": text,
+            language = self.language_from_payload(payload) or self.language or None
+            if model:
+                text, device = local_whisper.transcribe_bytes_with(model, audio, payload.get("format", "m4a"), language)
+            else:
+                text = local_whisper.transcribe_bytes(audio, payload.get("format", "m4a"), language)
+                device = local_whisper.active_device()
+            return {"engine": f"{label}:{device}", "transcript": (text or "").strip(),
                     "seconds": round(time.perf_counter() - started, 2)}
         except Exception as exc:
-            logger.warning("Comparison Whisper failed: %s", exc)
-            return {"engine": "local-whisper", "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+            logger.warning("Comparison %s failed: %s", label, exc)
+            return {"engine": label, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
 
     @staticmethod
     def language_from_payload(payload: dict[str, Any]) -> str | None:

@@ -161,7 +161,7 @@ class WatchAdmissionHTTPTests(HTTPFixture):
         started = threading.Event()
         release = threading.Event()
 
-        def whisper(payload):
+        def whisper(payload, engine="whisper"):
             started.set()
             release.wait(5)  # still running when the command is accepted
             return {"engine": "local-whisper:cuda", "transcript": "Rast desk'e bağlan", "seconds": 1.1}
@@ -181,6 +181,30 @@ class WatchAdmissionHTTPTests(HTTPFixture):
                 time.sleep(0.05)
         self.assertEqual(self.main.jobs_db[result["job_id"]]["stt_compare"]["transcript"], "Rast desk'e bağlan")
         self.assertEqual(self.main.jobs_db[result["job_id"]]["stt_source"], "iphone:dictation-transcriber")
+
+    def test_comparison_runs_each_engine_in_order_and_keeps_the_first_in_its_old_field(self):
+        ledger = self.bootstrap()
+        self.transcribe.return_value = SimpleNamespace(transcript="IMAP'i aç", source="iphone:dictation-transcriber", error="")
+        heard = {"whisper": "IMAP'i aç", "whisper:large-v3-turbo": "IMAP'ı aç"}
+        calls = []
+
+        def whisper(payload, engine="whisper"):
+            calls.append(engine)
+            return {"engine": "local-whisper:" + engine, "transcript": heard[engine], "seconds": 0.5}
+
+        with patch.object(self.main.stt_client, "engine", "phone"), \
+             patch.dict(os.environ, {"WATCH_CEVIZ_STT_COMPARE": "whisper, whisper:large-v3-turbo, whisper:--bad, Whisper"}), \
+             patch.object(self.main.stt_client, "whisper_transcript", side_effect=whisper):
+            result = self.http("POST", "/api/v1/watch/command/submit",
+                               command(ledger, transcript="IMAP'i aç", transcript_source="dictation-transcriber"))[1]
+            job = self.main.jobs_db[result["job_id"]]
+            for _ in range(100):
+                if job.get("stt_compare_more"):
+                    break
+                time.sleep(0.05)
+        self.assertEqual(calls, ["whisper", "whisper:large-v3-turbo"])
+        self.assertEqual(job["stt_compare"]["transcript"], "IMAP'i aç")
+        self.assertEqual([more["transcript"] for more in job["stt_compare_more"]], ["IMAP'ı aç"])
 
     def test_bound_identity_parent_target_and_uuid_case_remain_immutable(self):
         payload = command(self.bootstrap(), command_id=str(uuid.uuid4()).upper())

@@ -1262,17 +1262,22 @@ _compare_lock = threading.Lock()  # one comparison Whisper run at a time
 
 
 def compare_transcripts_later(job_id: str, payload: dict) -> None:
-    """Keeps local Whisper's text for the same capture beside the phone's (stt_compare), after the
-    job started: the comparison never delays a command."""
+    """Keeps each comparison engine's text for the same capture beside the phone's, after the job
+    started: the comparison never delays a command. The first engine's result is stt_compare (as
+    before), further engines' are listed in stt_compare_more, each saved as soon as it is done."""
     def run() -> None:
         with _compare_lock:
-            heard = stt_client.whisper_transcript(payload)
-        with jobs_lock:
-            job = jobs_db.get(job_id)
-            if job is None:
-                return
-            job["stt_compare"] = heard
-        save_jobs()
+            for position, engine in enumerate(stt_client.compare_engines):
+                heard = stt_client.whisper_transcript(payload, engine)
+                with jobs_lock:
+                    job = jobs_db.get(job_id)
+                    if job is None:
+                        return
+                    if position == 0:
+                        job["stt_compare"] = heard
+                    else:
+                        job.setdefault("stt_compare_more", []).append(heard)
+                save_jobs()
 
     threading.Thread(target=run, name=f"stt-compare-{job_id}", daemon=True).start()
 

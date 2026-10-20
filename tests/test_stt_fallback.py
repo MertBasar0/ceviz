@@ -45,7 +45,8 @@ class CudaFallbackTests(unittest.TestCase):
         for patcher in (
             mock.patch.dict(sys.modules, fake_modules),
             mock.patch.dict("os.environ", {"WATCH_CEVIZ_WHISPER_DEVICE": "auto", "WATCH_CEVIZ_WHISPER_MODEL": "tiny"}),
-            mock.patch.multiple(local_whisper, _model=None, _model_key=None, _active_device="none", _cuda_failed=False),
+            mock.patch.multiple(local_whisper, _model=None, _model_key=None, _active_device="none", _cuda_failed=False,
+                                _extra_models={}),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -67,6 +68,17 @@ class CudaFallbackTests(unittest.TestCase):
         with self.assertLogs("watch_ceviz.local_whisper", "ERROR"):
             with self.assertRaisesRegex(RuntimeError, "CUDA failed"):
                 local_whisper.transcribe_bytes(b"audio", "m4a", "tr")
+
+    def test_a_comparison_model_stays_loaded_beside_the_service_model_until_it_fails(self) -> None:
+        local_whisper.warmup()
+        self.assertEqual(local_whisper.transcribe_bytes_with("large-v3-turbo", b"audio", "m4a", "tr"), ("metin cuda", "cuda"))
+        self.assertEqual(local_whisper.transcribe_bytes_with("large-v3-turbo", b"audio", "m4a", "tr"), ("metin cuda", "cuda"))
+        self.assertEqual(FakeWhisperModel.created, ["cuda", "cuda"])  # the service model, then one comparison model
+        FakeWhisperModel.fail_on = {"cuda"}
+        with self.assertRaisesRegex(RuntimeError, "CUDA failed"):
+            local_whisper.transcribe_bytes_with("large-v3-turbo", b"audio", "m4a", "tr")
+        self.assertNotIn("large-v3-turbo", local_whisper._extra_models)  # the next capture loads it again
+        self.assertIsNotNone(local_whisper._model)  # the service's own model is untouched
 
     def test_a_cuda_start_failure_is_logged_before_falling_back(self) -> None:
         def broken_cuda(size, device, compute_type):
@@ -138,6 +150,22 @@ class WatchSTTErrorTests(unittest.TestCase):
         with mock.patch.object(local_whisper, "transcribe_bytes", side_effect=RuntimeError(DEAD_CONTEXT)), \
              self.assertLogs("watch_ceviz.stt", "WARNING"):
             self.assertIn(DEAD_CONTEXT, stt.whisper_transcript(self.PAYLOAD)["error"])
+
+    def test_comparison_engines_include_other_whisper_models_but_never_paths(self) -> None:
+        setting = "whisper:large-v3-turbo, Whisper, whisper:../models/x, whisper:--device, whisper:org/model-ct2, whisper"
+        with mock.patch.dict("os.environ", {"WATCH_CEVIZ_STT_COMPARE": setting}):
+            self.assertEqual(self._stt("phone").compare_engines,
+                             ["whisper:large-v3-turbo", "whisper", "whisper:org/model-ct2"])
+            self.assertEqual(self._stt("auto").compare_engines, [])
+        stt = self._stt("phone")
+        with mock.patch.object(local_whisper, "transcribe_bytes_with", return_value=(" IMAP'i aç ", "cuda")) as other:
+            heard = stt.whisper_transcript(self.PAYLOAD, "whisper:large-v3-turbo")
+        self.assertEqual((heard["engine"], heard["transcript"]), ("local-whisper:large-v3-turbo:cuda", "IMAP'i aç"))
+        self.assertEqual(other.call_args.args[0], "large-v3-turbo")
+        with mock.patch.object(local_whisper, "transcribe_bytes_with", side_effect=RuntimeError("no model")), \
+             self.assertLogs("watch_ceviz.stt", "WARNING"):
+            failed = stt.whisper_transcript(self.PAYLOAD, "whisper:large-v3-turbo")
+        self.assertEqual(failed["engine"], "local-whisper:large-v3-turbo")
 
 
 if __name__ == "__main__":

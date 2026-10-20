@@ -30,6 +30,9 @@ _active_device = "none"
 # so the process stays on the CPU until the service restarts.
 _cuda_failed = False
 _lock = threading.Lock()
+# Other models loaded beside the service's own, to compare them on the same audio: size -> (model, device).
+_extra_models: dict[str, tuple] = {}
+_extra_lock = threading.Lock()
 
 
 def is_available() -> bool:
@@ -118,13 +121,43 @@ def hotwords() -> str | None:
     return value or None
 
 
-def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: str | None = None) -> str:
-    """Base64'ten cozulmus ses baytlarini metne cevir. Bos string = transkript yok."""
+def _language(language: str | None) -> str | None:
     # "auto" ya da bos: Whisper dili kendi algilasin (yabanci kullanicilar
     # icin sart — sabit "tr" Ingilizce konusmayi anlamsiz metne cevirirdi).
     lang = (language or os.environ.get("WATCH_CEVIZ_WHISPER_LANGUAGE", "auto") or "").strip().lower()
-    if lang in {"", "auto"}:
-        lang = None
+    return None if lang in {"", "auto"} else lang
+
+
+def transcribe_bytes_with(size: str, audio_bytes: bytes, audio_format: str = "m4a",
+                          language: str | None = None) -> tuple[str, str]:
+    """The same audio through another model than the service's own, to compare models.
+
+    Returns (text, device). The model stays loaded beside the service's for the next capture;
+    one that fails mid-transcription is dropped, so the next capture loads it again.
+    """
+    with _extra_lock:
+        loaded = _extra_models.get(size)
+        if loaded is None:
+            device = os.environ.get("WATCH_CEVIZ_WHISPER_DEVICE", "auto").strip().lower() or "auto"
+            compute = os.environ.get("WATCH_CEVIZ_WHISPER_COMPUTE", "").strip()
+            loaded = _extra_models[size] = open_model(size, device, compute, allow_cuda=not _cuda_failed)
+    model, device = loaded
+    suffix = "." + (audio_format or "m4a").lstrip(".")
+    with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+        tmp.write(audio_bytes)
+        tmp.flush()
+        try:
+            return transcribe_file(model, tmp.name, _language(language)), device
+        except Exception:
+            with _extra_lock:
+                if _extra_models.get(size) is loaded:
+                    del _extra_models[size]
+            raise
+
+
+def transcribe_bytes(audio_bytes: bytes, audio_format: str = "m4a", language: str | None = None) -> str:
+    """Base64'ten cozulmus ses baytlarini metne cevir. Bos string = transkript yok."""
+    lang = _language(language)
     suffix = "." + (audio_format or "m4a").lstrip(".")
     with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
         tmp.write(audio_bytes)

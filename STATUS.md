@@ -1,6 +1,22 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **19 Ekim 2026**
+Son güncelleme: **20 Ekim 2026**
+
+## 20 Ekim — iPhone'da çözümleme ilk deneme; yardımcı 2026.10.20 Beta 1
+
+- **İlk deneme (build 1792443198, yardımcı telefon modunda):** iki komutu da iPhone'un dikte
+  modeli çözdü (`iphone:dictation-transcriber`; yeni SpeechTranscriber Türkçeyi kullanmadı).
+  Özel isim hatalı ("RustDesk" → "rast TESS", "Ras desk"), bir kelimede Türkçe harf yok.
+  Önceki üç Whisper komutunda tek hata ("sekme" → "tekme"). Cümleler farklı olduğundan
+  yalnız eğilim.
+- **Saatten PC kullanımı uçtan uca çalıştı:** "boş bir metin belgesi aç" Not Defteri'ni açtı.
+- **Bu sürümde:** aynı ses üzerinde karşılaştırma (`WATCH_CEVIZ_STT_COMPARE=whisper` →
+  `stt_compare`), Whisper'ın özel ad listesinin telefona ipucu olarak gitmesi, çıktı sınırında
+  kesilen yanıtın "yapılamadı" sayılması (canlıda Nemotron "The" deyip kesilmişti).
+- **Pusula bulgusu:** karar modeli boşta kaldıktan sonraki ilk istek ~1 s sürüyor; iki soru
+  1,2 s'lik ortak bütçeyi paylaştığı için ikincisi kesiliyor ve dönüş varsayılan modelde kalıyor.
+  Düzeltme Pusula deposunda, henüz yapılmadı.
+- Sürüm notu: `docs/release-notes-helper-2026.10.20-beta.1.md`.
 
 ## 19 Ekim — Yardımcı servis 2026.10.19 Beta 1: uyarlanabilir kurulum, PC düğümü
 

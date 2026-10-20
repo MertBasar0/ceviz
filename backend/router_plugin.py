@@ -8,6 +8,8 @@ separately into the helper's Python environment:
   factory called once as ``factory(host)`` with a plain ``dict`` (see ``_host_info``), returning
   a router object.
 - The router declares ``api_version = 1`` and implements ``route(request: dict) -> dict | None``.
+  It may also implement ``prepare()``, which the helper calls without waiting when a command is on
+  its way, before speech recognition.
 - The operator enables it explicitly with ``WATCH_CEVIZ_ROUTER=<entry point name>``. Installing
   a package alone never changes routing, and an unset variable never even looks for plugins.
 
@@ -36,7 +38,10 @@ logger = logging.getLogger("watch_ceviz.router_plugin")
 
 ROUTER_API_VERSION = 1
 ENTRY_POINT_GROUP = "ceviz.routers"
-DEFAULT_TIMEOUT_MS = 1500
+# Pusula asks its local decision model two to four questions in a row: 0.2-0.5 s each when warm,
+# but 1.27 s + 0.98 s on the first turn after it sat idle beside other GPU work. 1500 ms ran
+# that turn unpinned. Routers learn the value as routing_timeout_ms and can plan inside it.
+DEFAULT_TIMEOUT_MS = 3000
 RECENT_JOB_WINDOW_SECONDS = 900
 RECENT_JOB_LIMIT = 8
 
@@ -72,6 +77,8 @@ def _host_info(agent: str) -> dict[str, Any]:
         "agent": agent,
         # Plugins keep their own configuration and caches under this directory.
         "state_dir": str(_state_dir()),
+        # How long the helper waits for each route() answer.
+        "routing_timeout_ms": _timeout_ms(),
     }
 
 
@@ -99,12 +106,12 @@ def recent_jobs(now: float | None = None) -> list[dict[str, Any]]:
     return sorted(recent, key=lambda job: job["created_at"])[-RECENT_JOB_LIMIT:]
 
 
-def _timeout_seconds() -> float:
+def _timeout_ms() -> int:
     try:
         value = int(os.environ.get("WATCH_CEVIZ_ROUTER_TIMEOUT_MS", DEFAULT_TIMEOUT_MS))
     except ValueError:
         value = DEFAULT_TIMEOUT_MS
-    return max(50, min(value, 10_000)) / 1000
+    return max(50, min(value, 10_000))
 
 
 class RouterHost:
@@ -142,6 +149,24 @@ class RouterHost:
         """
         if self.enabled:
             threading.Thread(target=self._get_router, name="ceviz-router-preload", daemon=True).start()
+
+    def prepare(self) -> None:
+        """Tells a loaded router that a command is on its way, before its words are known.
+
+        Called when the phone asks for a command's capabilities and again when the audio arrives,
+        so a router can get ready while speech is recognized. The optional hook runs on its own
+        thread and is never awaited; a router that is still loading is not asked.
+        """
+        router = self._router if self._loaded else None
+        hook = getattr(router, "prepare", None)
+        if callable(hook):
+            threading.Thread(target=self._prepare, args=(hook,), name="ceviz-router-prepare", daemon=True).start()
+
+    def _prepare(self, hook: Callable[[], Any]) -> None:
+        try:
+            hook()
+        except Exception as exc:
+            logger.warning(f"[router] '{self.name}' prepare failed: {exc}")
 
     def _get_router(self) -> Any:
         if self._loaded:
@@ -190,7 +215,7 @@ class RouterHost:
         try:
             # A hung router keeps its single worker busy, so later turns time out too and run
             # unpinned instead of piling up threads.
-            answer = self._executor.submit(router.route, request).result(timeout=_timeout_seconds())
+            answer = self._executor.submit(router.route, request).result(timeout=_timeout_ms() / 1000)
         except FutureTimeout:
             logger.warning(f"[router] '{self.name}' timed out; running on the agent default")
             return None

@@ -39,8 +39,8 @@ share that environment with the helper.
 
 - **Off by default.** With no `WATCH_CEVIZ_ROUTER`, commands are never pinned.
 - **Errors never fail a command.** A router that cannot load, raises, times out
-  (`WATCH_CEVIZ_ROUTER_TIMEOUT_MS`, default 1500 ms), or returns anything invalid is ignored. The
-  command then runs on the agent default.
+  (`WATCH_CEVIZ_ROUTER_TIMEOUT_MS`, default 3000 ms; 1500 ms before helper 2026.10.20 Beta 2), or
+  returns anything invalid is ignored. The command then runs on the agent default.
 - **Only plain selectors reach the command line.** A `model` must look like `provider/model`
   (letters, digits and `._:/@+-`, up to 200 characters). A `thinking` value must be a short
   lowercase word. Anything else is dropped, so an answer cannot inject options.
@@ -71,8 +71,14 @@ in the background:
 | `api_version` | `1` |
 | `agent` | The OpenClaw agent Ceviz sends commands to |
 | `state_dir` | Ceviz state directory; keep plugin config and caches under it |
+| `routing_timeout_ms` | How long the helper waits for each `route()` answer. Helpers before 2026.10.20 Beta 2 leave it out and wait 1500 ms |
 
-It must return an object with `api_version = 1` and `route(request) -> dict | None`:
+It must return an object with `api_version = 1` and `route(request) -> dict | None`. It may also
+implement `prepare()`: the helper calls it when a command is on its way, before speech recognition
+(when the phone asks for the command capabilities, and again when the audio arrives). The helper
+runs it on its own thread and never waits for it, so a router can, for example, wake an idle local
+model while the words are still being recognized. A router that is still loading is not asked, and
+an error in `prepare()` is only logged.
 
 | `request` key | Meaning |
 |---|---|

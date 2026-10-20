@@ -1244,6 +1244,7 @@ def execute_watch_command(payload: dict, *, strict_save=False) -> dict:
         raise RequestReadError(400, str(exc)) from exc
     # No jobs lock during STT or command process startup. Polling and phone
     # conversations remain independent of this serial voice admission.
+    openclaw_client.router.prepare()
     result = stt_client.transcribe_watch_payload(payload)
     job = create_openclaw_job(transcript=result.transcript.strip(), source=result.source,
                              client_timestamp=payload.get("client_timestamp"), stt_error=result.error or "",
@@ -1427,6 +1428,9 @@ class WatchCevizHandler(BoundedHTTPRequestHandler):
             capabilities = {**watch_admission.capabilities(), "speech_on_phone": stt_client.on_phone}
             if stt_client.on_phone:
                 capabilities["speech_hints"] = stt_client.speech_hints()
+            # The phone asks this right before it sends a command, so a router can get ready
+            # while the words are still being recognized.
+            openclaw_client.router.prepare()
             self.send_json(200, capabilities)
             return
         if path == "/api/v1/sessions" or path.startswith("/api/v1/sessions/"):

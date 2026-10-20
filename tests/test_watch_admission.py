@@ -120,6 +120,16 @@ class WatchAdmissionHTTPTests(HTTPFixture):
         self.invoke.assert_not_called()
         self.transcribe.assert_not_called()
 
+    def test_router_hears_of_a_command_before_its_speech_is_recognized(self):
+        order = []
+        self.transcribe.side_effect = lambda payload: order.append("transcribe") or SimpleNamespace(
+            transcript="private fixture transcript", source="test", error="")
+        with patch.object(self.main.openclaw_client.router, "prepare", side_effect=lambda: order.append("prepare")):
+            ledger = self.bootstrap()  # the phone asks right before it sends
+            self.assertEqual(order, ["prepare"])
+            self.assertEqual(self.http("POST", "/api/v1/watch/command/submit", command(ledger))[0], 200)
+        self.assertEqual(order, ["prepare", "prepare", "transcribe"])
+
     def test_phone_transcript_is_accepted_only_when_the_phone_does_speech_recognition(self):
         ledger = self.bootstrap()
         self.assertFalse(self.http("GET", "/api/v1/watch/command/capabilities")[1]["speech_on_phone"])

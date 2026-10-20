@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -76,7 +77,8 @@ class RouterHostTests(unittest.TestCase):
 
         self.assertEqual(choice.argv(), ["--model", "anthropic/claude-sonnet-5", "--thinking", "medium"])
         self.assertEqual(choice.reason, "correction")
-        self.assertEqual(hosts, [{"api_version": 1, "agent": "cevizmain", "state_dir": self.tmp.name}])
+        self.assertEqual(hosts, [{"api_version": 1, "agent": "cevizmain", "state_dir": self.tmp.name,
+                                  "routing_timeout_ms": 3000}])
         request = router.requests[0]
         self.assertEqual(request["api_version"], 1)
         self.assertEqual(request["transcript"], "tekrar dene")
@@ -115,6 +117,51 @@ class RouterHostTests(unittest.TestCase):
         started = time.monotonic()
         self.assertIsNone(host_with(router).choose("Selam"))
         self.assertLess(time.monotonic() - started, 0.4)
+
+    def test_router_learns_the_timeout_it_must_answer_within(self) -> None:
+        for setting, expected in (("2000", 2000), ("soon", 3000), ("20000", 10_000), ("10", 50)):
+            with self.subTest(setting=setting):
+                os.environ["WATCH_CEVIZ_ROUTER_TIMEOUT_MS"] = setting
+                hosts = []
+                host_with(FakeRouter(), hosts=hosts).choose("Selam")
+                self.assertEqual(hosts[0]["routing_timeout_ms"], expected)
+
+    def test_prepare_tells_a_loaded_router_without_waiting_for_it(self) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        class PreparingRouter(FakeRouter):
+            def prepare(self):
+                entered.set()
+                release.wait(5)
+
+        host = host_with(PreparingRouter())
+        host.prepare()  # not loaded yet: nothing to tell
+        self.assertFalse(entered.wait(0.05))
+        host.choose("Selam")
+        started = time.monotonic()
+        host.prepare()
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertTrue(entered.wait(2))
+        release.set()
+
+    def test_prepare_is_optional_and_its_failure_only_logged(self) -> None:
+        plain = host_with(FakeRouter())
+        plain.choose("Selam")
+        plain.prepare()  # no hook: nothing happens
+
+        class FailingRouter(FakeRouter):
+            def prepare(self):
+                raise RuntimeError("model gone")
+
+        failing = host_with(FailingRouter())
+        failing.choose("Selam")
+        with self.assertLogs("watch_ceviz.router_plugin", "WARNING") as logs:
+            failing.prepare()
+            for _ in range(200):
+                if logs.output:
+                    break
+                time.sleep(0.01)
+        self.assertIn("prepare failed: model gone", logs.output[0])
 
     def test_contract_mismatch_or_missing_plugin_disables_routing(self) -> None:
         class OldRouter(FakeRouter):

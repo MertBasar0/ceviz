@@ -1,7 +1,9 @@
 # Ceviz Helper 2026.10.20 Beta 2
 
 Tag: `ceviz-helper-v2026.10.20-beta.2`.
-Compatible app: **Ceviz 2026.6.5** on iPhone and Apple Watch, tested with build **1792492947**.
+Compatible app: **Ceviz 2026.6.5** on iPhone and Apple Watch, tested with build **1791334823**.
+Any build that asks for the command capabilities before sending (all builds with command
+recovery) triggers the router's `prepare()`.
 This is a helper-source release, not a new TestFlight binary or app version. The app–helper
 contract (`contracts/`) and the capability list are unchanged.
 

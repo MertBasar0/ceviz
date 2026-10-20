@@ -2,6 +2,21 @@
 
 Son güncelleme: **20 Ekim 2026**
 
+## 20 Ekim — Yardımcı 2026.10.20 Beta 2 ve Pusula 0.2.2: yönlendirme bütçesi
+
+- **Sorun:** Pusula'nın karar modeli bir dönüşte iki-dört soruyu art arda soruyor. Sıcakken
+  her biri 0,2–0,5 s; boşta kaldıktan sonraki bir dönüşte 1,27 + 0,98 s ölçüldü ve 1,2 s'lik
+  bütçe ikinci soruyu kesti, dönüş varsayılan modelde kaldı.
+- **Yardımcı:** yönlendirici süresi 1,5 s → 3 s; yönlendiriciye `routing_timeout_ms` olarak
+  bildiriliyor. İsteğe bağlı `prepare()` kancası: telefon komut yeteneklerini sorduğunda ve ses
+  geldiğinde, konuşma çözülmeden önce, beklenmeden çağrılıyor.
+- **Pusula 0.2.2:** karar bütçesi 2,5 s (yardımcının süresinin 200 ms altında kalır). `prepare()`
+  30 s'dir cevap vermemiş modele arka planda tek token ürettiriyor.
+- **Ölçüm:** model bellekten atılmışken yükleme 2,8–4,6 s; uyandırma 1,5 s önce başlayınca dönüşün
+  soruları 1,6 s'de bitti. Model yüklü ve 150 s boştayken uyandırmanın etkisi gürültü düzeyinde.
+  İlk ölçülen 1,27 + 0,98 s'nin nedeni hâlâ belirsiz; onu yeni bütçe karşılıyor.
+- Sürüm notu: `docs/release-notes-helper-2026.10.20-beta.2.md`.
+
 ## 20 Ekim — iPhone'da çözümleme ilk deneme; yardımcı 2026.10.20 Beta 1
 
 - **İlk deneme (build 1792443198, yardımcı telefon modunda):** iki komutu da iPhone'un dikte

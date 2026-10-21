@@ -2,6 +2,7 @@ import SwiftUI
 
 struct JobsListView: View {
     @ObservedObject var sessionManager: WatchSessionManager
+    @AppStorage(ResultSpeaker.enabledKey) private var speakResults = true
 
     var body: some View {
         ScrollView {
@@ -51,6 +52,9 @@ struct JobsListView: View {
                     Text("Showing recent jobs. Full history on iPhone.")
                         .font(.caption).foregroundColor(CVZ.textSub).padding(.top, 8)
                 }
+                Toggle("Read results aloud", isOn: $speakResults)
+                    .font(.caption).tint(CVZ.accent).padding(.top, 12)
+                    .accessibilityIdentifier("jobs.speakResults")
             }
             .padding(.horizontal, 2)
         }

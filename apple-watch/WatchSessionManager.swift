@@ -297,7 +297,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         handoffState = .ready
         handoffPreview = nil
         UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
-        playResultHaptic(state)
+        announceResult(state, jobId: jobId)
         if WCSession.default.isReachable {
             fetchJobs()
             if !allowUntrackedJob { processQueue() }
@@ -374,6 +374,14 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         handoffJobId = nil
         handoffState = .idle
         handoffPreview = nil
+    }
+
+    /// The haptic for a finished result and, unless turned off, its summary read aloud
+    /// (once per job; see ResultSpeaker). Call after `responseText` holds the summary.
+    private func announceResult(_ state: CVZJobState, jobId: String, speak: Bool = true) {
+        playResultHaptic(state)
+        guard speak, !isCapturing else { return }
+        ResultSpeaker.shared.announce(responseText, jobID: jobId)
     }
 
     private func playResultHaptic(_ state: CVZJobState) {
@@ -584,9 +592,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 guard !self.deliveryTracking.blocksResultUpdates, self.resultTracking.finish(jobId) else { return }
                 self.stopResultPolling()
                 let state = CVZJobState.resolve(status: jobStatus, outcome: reply["outcome"] as? String ?? reportMeta?.outcome)
-                self.playResultHaptic(state)
                 UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
                 self.applySummarizeReply(reply, jobId: jobId)
+                self.announceResult(state, jobId: jobId)
                 self.jobsTracking.confirmTerminal(
                     jobID: jobId, status: jobStatus, outcome: reply["outcome"] as? String ?? reportMeta?.outcome)
                 self.processQueue()
@@ -927,7 +935,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             jobsTracking.confirmTerminal(
                 jobID: jobId, status: response.status, outcome: response.outcome ?? response.reportMeta?.outcome)
             stopResultPolling()
-            playResultHaptic(resultState ?? .resultReady)
+            // A reply that carries its own recorded speech plays that instead (below).
+            announceResult(resultState ?? .resultReady, jobId: jobId, speak: response.ttsAudioData == nil)
             UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
         } else {
             startResultPolling(jobId: jobId)

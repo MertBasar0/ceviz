@@ -3,6 +3,7 @@ import SwiftUI
 struct JobDetailView: View {
     let job: ActiveJob
     @ObservedObject var sessionManager: WatchSessionManager
+    @ObservedObject private var speaker = ResultSpeaker.shared
 
     private var currentJob: ActiveJob {
         sessionManager.activeJobs.first { $0.id == job.id } ?? job
@@ -23,6 +24,17 @@ struct JobDetailView: View {
                 }
                 Text(currentJob.summaryText).font(.body).foregroundColor(CVZ.text)
                     .fixedSize(horizontal: false, vertical: true)
+                if !currentJob.summaryText.isEmpty {
+                    Button {
+                        if speaker.isSpeaking { speaker.stop() } else { speaker.speak(currentJob.summaryText) }
+                    } label: {
+                        Label(LocalizedStringKey(speaker.isSpeaking ? "Stop" : "Listen"),
+                              systemImage: speaker.isSpeaking ? "stop.fill" : "speaker.wave.2")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .tint(CVZ.accent)
+                    .accessibilityIdentifier("job.listen")
+                }
                 if let nextAction = currentJob.reportMeta?.nextAction, !nextAction.isEmpty {
                     Text("Next step").font(.caption2.weight(.semibold)).foregroundColor(CVZ.accent)
                     Text(nextAction).font(.caption).foregroundColor(CVZ.textSub).lineLimit(3)
@@ -58,5 +70,6 @@ struct JobDetailView: View {
         .background(CVZ.bg)
         .navigationTitle("Details")
         .onAppear { sessionManager.fetchJobs() }
+        .onDisappear { speaker.stop() }
     }
 }

@@ -111,3 +111,9 @@
 "Showing recent jobs. Full history on iPhone." = "Son işler gösteriliyor. Tüm geçmiş iPhone'da.";
 "No jobs yet" = "Henüz iş yok";
 "Showing the last received result." = "Son alınan sonuç gösteriliyor.";
+
+/* Sonucun sesli okunması */
+"Listen" = "Dinle";
+"Stop" = "Durdur";
+"Read results aloud" = "Sonuçları sesli oku";
+"link" = "bağlantı";

@@ -7,6 +7,8 @@ swiftc job-state/CVZJobState.swift apple-watch/Models.swift apple-watch/WatchRes
 build/tests/watch-result-tests
 swiftc apple-watch/WatchRecordingLifecycle.swift tests/swift/WatchRecordingTests.swift -o build/tests/watch-recording-tests
 build/tests/watch-recording-tests
+swiftc apple-watch/SpokenSummary.swift tests/swift/ResultSpeechTests.swift -o build/tests/result-speech-tests
+build/tests/result-speech-tests
 swiftc job-state/CVZJobState.swift ios-bridge/Models.swift watch-transport/WatchCommandTransport.swift tests/swift/WatchTransportTests.swift -o build/tests/phone-transport-tests
 build/tests/phone-transport-tests
 swiftc job-state/CVZJobState.swift apple-watch/Models.swift watch-transport/WatchCommandTransport.swift tests/swift/WatchTransportTests.swift -o build/tests/watch-transport-tests

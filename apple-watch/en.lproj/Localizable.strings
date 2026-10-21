@@ -111,3 +111,9 @@
 "Showing recent jobs. Full history on iPhone." = "Showing recent jobs. Full history on iPhone.";
 "No jobs yet" = "No jobs yet";
 "Showing the last received result." = "Showing the last received result.";
+
+/* Result readback */
+"Listen" = "Listen";
+"Stop" = "Stop";
+"Read results aloud" = "Read results aloud";
+"link" = "link";

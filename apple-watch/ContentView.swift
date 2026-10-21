@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
     @StateObject private var recorder = AudioRecorderManager()
     @StateObject private var player = AudioPlayerManager()
+    @ObservedObject private var speaker = ResultSpeaker.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
     @State private var preparingCapture = false
@@ -89,8 +90,12 @@ struct ContentView: View {
                 sessionManager.resumeResultPollingIfNeeded()
                 sessionManager.processQueue(startNewPass: true)
                 sessionManager.fetchJobs()
+                speaker.announcePending()
             }
-            if phase == .background && preparingCapture { cancelRecording() }
+            if phase == .background {
+                speaker.stop()
+                if preparingCapture { cancelRecording() }
+            }
         }
         .onChange(of: selectedTab) { tab in
             if tab != 0 && sessionManager.isCapturing { cancelRecording() }
@@ -192,6 +197,9 @@ struct ContentView: View {
             Text(displayedText)
                 .font(.body).foregroundColor(CVZ.text)
                 .fixedSize(horizontal: false, vertical: true)
+            if displayedState?.isReportedResult == true || displayedState == .failed, !displayedText.isEmpty {
+                listenButton(for: displayedText)
+            }
             if !sessionManager.pendingCommands.isEmpty {
                 Text("Earlier recordings remain unconfirmed. You can send a different request; do not repeat the same one.")
                     .font(.body).foregroundColor(CVZ.textSub)
@@ -205,6 +213,18 @@ struct ContentView: View {
             }
             followUpCaption(at: date)
         }
+    }
+
+    private func listenButton(for text: String) -> some View {
+        Button {
+            if speaker.isSpeaking { speaker.stop() } else { speaker.speak(text) }
+        } label: {
+            Label(LocalizedStringKey(speaker.isSpeaking ? "Stop" : "Listen"),
+                  systemImage: speaker.isSpeaking ? "stop.fill" : "speaker.wave.2")
+                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered).tint(CVZ.accent)
+        .accessibilityIdentifier("capture.listen")
     }
 
     private var checkDeliveryButton: some View {
@@ -297,6 +317,9 @@ struct ContentView: View {
         preparingCapture = true
         sessionManager.isCapturing = true
         player.audioPlayer?.stop()
+        // The microphone must not hear a summary being read, nor should an older one follow later.
+        speaker.cancelPending()
+        speaker.stop()
         recorder.startRecording { started in
             preparingCapture = false
             guard started else {

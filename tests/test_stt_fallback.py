@@ -134,6 +134,12 @@ class WatchSTTErrorTests(unittest.TestCase):
                                             "Türkçe modeli indirilmedi")
             old_app = stt.transcribe_watch_payload({**self.PAYLOAD, "locale": "en-US"})
             self.assertIn("update the Ceviz iPhone app", old_app.error)
+            # 23 October, live: the current app heard nothing and sent an empty reason; that is not an old app.
+            nothing = stt.transcribe_watch_payload({**self.PAYLOAD, "transcript_error": ""})
+            self.assertEqual(nothing.error, "Bu bilgisayarda konuşmayı iPhone çözüyor ama metin gelmedi: "
+                                            "iPhone kayıtta söz duymadı")
+            self.assertNotIn("update", stt.transcribe_watch_payload(
+                {**self.PAYLOAD, "locale": "en-US", "transcript_error": " "}).error)
 
     def test_comparison_whisper_and_hints_for_the_phone(self) -> None:
         with mock.patch.dict("os.environ", {"WATCH_CEVIZ_STT_COMPARE": "whisper",

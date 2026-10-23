@@ -115,14 +115,19 @@ class WatchSTT:
 
         if self.on_phone:
             reason = str(payload.get("transcript_error") or "").strip()
+            # Only an app that predates phone transcription omits the field; a current one that
+            # heard nothing sends it empty (iPhone apps up to build 1792755880 did).
+            transcribed = "transcript_error" in payload
             return TranscriptionResult(
                 transcript="", source="none",
                 error=self._error(
                     payload,
                     "This computer leaves speech recognition to the iPhone, and no text arrived: "
-                    + (reason or "update the Ceviz iPhone app"),
+                    + (reason or ("the iPhone heard no words in the recording" if transcribed
+                                  else "update the Ceviz iPhone app")),
                     "Bu bilgisayarda konuşmayı iPhone çözüyor ama metin gelmedi: "
-                    + (reason or "iPhone'daki Ceviz uygulamasını güncelle"),
+                    + (reason or ("iPhone kayıtta söz duymadı" if transcribed
+                                  else "iPhone'daki Ceviz uygulamasını güncelle")),
                 ),
             )
 

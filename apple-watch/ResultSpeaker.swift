@@ -17,7 +17,7 @@ final class ResultSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelega
 
     @Published private(set) var isSpeaking = false
     private let synthesizer = AVSpeechSynthesizer()
-    private var pending: (summary: String, jobID: String, until: Date)?
+    private var pending: (summary: String, choices: [String], jobID: String, until: Date)?
 
     var isEnabled: Bool { UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true }
 
@@ -27,16 +27,16 @@ final class ResultSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     }
 
     /// A finished result arrived for `jobID`. Reads it now, or when the app next opens.
-    func announce(_ summary: String, jobID: String) {
+    func announce(_ summary: String, jobID: String, choices: [String] = []) {
         let lastSpoken = UserDefaults.standard.string(forKey: Self.lastSpokenJobKey)
         guard ResultSpeechPolicy.shouldAnnounce(jobID: jobID, lastSpokenJobID: lastSpoken, enabled: isEnabled) else { return }
         guard WKExtension.shared().applicationState == .active else {
-            pending = (summary, jobID, Date().addingTimeInterval(ResultSpeechPolicy.pendingLifetime))
+            pending = (summary, choices, jobID, Date().addingTimeInterval(ResultSpeechPolicy.pendingLifetime))
             return
         }
         pending = nil
         UserDefaults.standard.set(jobID, forKey: Self.lastSpokenJobKey)
-        speak(summary)
+        speak(summary, choices: choices)
     }
 
     /// The app is on screen again: read a result that arrived while it was away, if still fresh.
@@ -44,12 +44,14 @@ final class ResultSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         guard let pending else { return }
         self.pending = nil
         guard ResultSpeechPolicy.pendingIsFresh(until: pending.until, now: Date()) else { return }
-        announce(pending.summary, jobID: pending.jobID)
+        announce(pending.summary, jobID: pending.jobID, choices: pending.choices)
     }
 
-    /// Reads `summary` now, replacing anything being read.
-    func speak(_ summary: String) {
-        let text = SpokenSummary.text(from: summary, linkWord: NSLocalizedString("link", comment: "spoken in place of a web address"))
+    /// Reads `summary` and any answers to choose from now, replacing anything being read.
+    func speak(_ summary: String, choices: [String] = []) {
+        let text = SpokenSummary.text(
+            from: summary, linkWord: NSLocalizedString("link", comment: "spoken in place of a web address"),
+            choices: choices, optionsWord: NSLocalizedString("Options", comment: "spoken before the answers to choose from"))
         guard !text.isEmpty else { return }
         synthesizer.stopSpeaking(at: .immediate)
         do {

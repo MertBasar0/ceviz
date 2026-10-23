@@ -77,7 +77,7 @@ raw CLI diagnostics and hidden reasoning are not returned by this surface.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/v1/capabilities` | Advertise `continuation_v1`, `suggestion_approval_v1`, `conversations_v1`. |
+| `GET /api/v1/capabilities` | Advertise `continuation_v1`, `suggestion_approval_v1`, `choice_reply_v1`, `conversations_v1`. |
 | `GET /api/v1/sessions` | `agent_id`, `search`, `older`, `offset`; return sessions, assistant names and next page. |
 | `GET /api/v1/sessions/history` | `session_key`, `offset`; chronological messages, earlier-page cursor and current target guard. |
 | `POST /api/v1/sessions/message` | `session_key`, `session_id`, `expected_leaf_entry_id` (including explicit null), `text`, `request_id`; return acceptance/run identity. |
@@ -96,6 +96,15 @@ The shortcut endpoint accepts `intent: follow_up` (also the legacy default) and
 and an existing agent-action `next_action_id`; the server resolves its full
 text. A free-text follow-up never implies approval. New standalone commands
 never inherit the globally most recent job.
+
+When a completed job asks the user to pick an answer (outcome `needs_input`),
+its `next_actions` list 2-4 actions of kind `choice` (`choice-1` ...). The
+agent proposes them; the helper keeps the set only if every answer is valid.
+`intent: choose_option` with that `next_action_id` sends the stored answer
+text as the continuation and tells the agent the user chose it. The same answer
+to the same question returns its first job, so a Watch-to-phone retry starts no
+second job. Watch shows the answers as buttons and reads them after the summary;
+iPhone shows them in the report. Clients check `choice_reply_v1` first.
 
 The Watch freezes the displayed result's job ID when recording starts within
 its 180-second continuation window. Delayed delivery retains that same parent.

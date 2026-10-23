@@ -33,6 +33,13 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     private var captureParentJobID: String?
     @Published var handoffState: HandoffState = .idle
     @Published var handoffPreview: HandoffPreview? = nil
+    /// Answers the shown result offers because it asks a question; empty for every other result.
+    @Published private(set) var resultChoices: [NextActionPayload] = []
+    @Published private(set) var resultChoicesJobID: String?
+    @Published private(set) var choiceSendingJobID: String?
+    @Published private(set) var choiceErrorKey: String?
+    /// Questions answered from this Watch; their answers are not offered again.
+    @Published private(set) var answeredChoiceJobIDs: Set<String> = []
 
     private var extendedSession: WKExtendedRuntimeSession?
     private var resultPollTimer: Timer?
@@ -296,8 +303,14 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         handoffJobId = jobId
         handoffState = .ready
         handoffPreview = nil
+        showChoices([], for: jobId)
         UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
-        announceResult(state, jobId: jobId)
+        if state == .needsInput, WCSession.default.isReachable {
+            playResultHaptic(state)
+            loadChoicesThenSpeak(jobId: jobId)
+        } else {
+            announceResult(state, jobId: jobId)
+        }
         if WCSession.default.isReachable {
             fetchJobs()
             if !allowUntrackedJob { processQueue() }
@@ -380,8 +393,89 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     /// (once per job; see ResultSpeaker). Call after `responseText` holds the summary.
     private func announceResult(_ state: CVZJobState, jobId: String, speak: Bool = true) {
         playResultHaptic(state)
-        guard speak, !isCapturing else { return }
-        ResultSpeaker.shared.announce(responseText, jobID: jobId)
+        guard speak else { return }
+        speakResult(jobId: jobId)
+    }
+
+    private func speakResult(jobId: String) {
+        guard !isCapturing else { return }
+        let choices = resultChoicesJobID == jobId ? resultChoices.map(\.label) : []
+        ResultSpeaker.shared.announce(responseText, jobID: jobId, choices: choices)
+    }
+
+    /// A terminal push carries the summary only; a question's answers come from its job.
+    /// The result is read once they arrive, or without them if iPhone does not answer soon.
+    private func loadChoicesThenSpeak(jobId: String) {
+        var spoken = false
+        let speakOnce = { [weak self] in
+            guard let self, !spoken else { return }
+            spoken = true
+            if self.handoffJobId == jobId { self.speakResult(jobId: jobId) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { speakOnce() }
+        WCSession.default.sendMessage(["action": "summarize_job", "job_id": jobId], replyHandler: { reply in
+            DispatchQueue.main.async {
+                if self.handoffJobId == jobId, reply["error"] == nil {
+                    self.showChoices(Self.choices(from: reply["next_actions"]), for: jobId)
+                }
+                speakOnce()
+            }
+        }, errorHandler: { _ in DispatchQueue.main.async { speakOnce() } })
+    }
+
+    private func showChoices(_ choices: [NextActionPayload], for jobId: String) {
+        let offered = resultState == .needsInput && !answeredChoiceJobIDs.contains(jobId) && !choices.isEmpty
+        resultChoices = offered ? choices : []
+        resultChoicesJobID = offered ? jobId : nil
+        choiceErrorKey = nil
+    }
+
+    /// The answers a job offers, as the helper lists them among its next actions.
+    static func choices(from value: Any?) -> [NextActionPayload] {
+        let rows = value as? [[String: Any]] ?? []
+        return Array(rows.compactMap { row -> NextActionPayload? in
+            guard row["kind"] as? String == "choice", let id = row["id"] as? String, !id.isEmpty,
+                  let label = row["label"] as? String, !label.isEmpty else { return nil }
+            return NextActionPayload(id: id, label: label, kind: "choice", target: nil)
+        }.prefix(4))
+    }
+
+    /// Sends the chosen answer to the question `jobId` asked. iPhone forwards only the answer's id;
+    /// repeating it returns the same job, so a retry after a lost reply cannot start a second one.
+    func chooseOption(_ choice: NextActionPayload, for jobId: String) {
+        guard choiceSendingJobID == nil else { return }
+        guard WCSession.default.isReachable else {
+            choiceErrorKey = "iPhone is not reachable. Open Ceviz on iPhone, then choose again."
+            return
+        }
+        choiceSendingJobID = jobId
+        choiceErrorKey = nil
+        ResultSpeaker.shared.stop()
+        let message: [String: Any] = ["action": "choose_option", "job_id": jobId, "choice_id": choice.id,
+                                      "locale": Locale.current.identifier]
+        WCSession.default.sendMessage(message, replyHandler: { reply in
+            DispatchQueue.main.async {
+                self.choiceSendingJobID = nil
+                guard let answerJobId = reply["job_id"] as? String, !answerJobId.isEmpty else {
+                    self.choiceErrorKey = "The answer was not sent. Choose again."
+                    return
+                }
+                self.answeredChoiceJobIDs.insert(jobId)
+                self.showChoices([], for: jobId)
+                self.responseText = String(format: NSLocalizedString("Answer sent: %@", comment: ""), choice.label)
+                self.handoffJobId = answerJobId
+                self.handoffUrl = "ceviz://job/\(answerJobId)"
+                self.handoffState = .ready
+                self.handoffPreview = nil
+                self.startResultPolling(jobId: answerJobId)
+                self.fetchJobs()
+            }
+        }, errorHandler: { _ in
+            DispatchQueue.main.async {
+                self.choiceSendingJobID = nil
+                self.choiceErrorKey = "The answer was not sent. Choose again."
+            }
+        })
     }
 
     private func playResultHaptic(_ state: CVZJobState) {
@@ -466,6 +560,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 previewSections: previewSections
             )
             : nil
+        self.showChoices(Self.choices(from: reply["next_actions"]), for: jobId)
     }
 
     // MARK: - Result polling (PTT sonrasi is tamamlanana kadar)

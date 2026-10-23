@@ -200,6 +200,10 @@ struct ContentView: View {
             if displayedState?.isReportedResult == true || displayedState == .failed, !displayedText.isEmpty {
                 listenButton(for: displayedText)
             }
+            if !displayedChoices.isEmpty, let jobID = displayedJobID {
+                ChoiceButtons(choices: displayedChoices, jobID: jobID, identifierPrefix: "capture",
+                              sessionManager: sessionManager)
+            }
             if !sessionManager.pendingCommands.isEmpty {
                 Text("Earlier recordings remain unconfirmed. You can send a different request; do not repeat the same one.")
                     .font(.body).foregroundColor(CVZ.textSub)
@@ -207,7 +211,7 @@ struct ContentView: View {
             } else if displayedState == .running || displayedState == .queued {
                 Text("You can start another request. Earlier jobs stay in Jobs.")
                     .font(.body).foregroundColor(CVZ.textSub)
-            } else if displayedState?.needsAttention == true {
+            } else if displayedState?.needsAttention == true, displayedChoices.isEmpty {
                 Text("Review the next step on iPhone.")
                     .font(.body).foregroundColor(CVZ.warn)
             }
@@ -215,9 +219,15 @@ struct ContentView: View {
         }
     }
 
+    /// Answers for the result on screen; a result opened from a notification shows none.
+    private var displayedChoices: [NextActionPayload] {
+        guard requestedResult == nil, sessionManager.resultChoicesJobID == displayedJobID else { return [] }
+        return sessionManager.resultChoices
+    }
+
     private func listenButton(for text: String) -> some View {
         Button {
-            if speaker.isSpeaking { speaker.stop() } else { speaker.speak(text) }
+            if speaker.isSpeaking { speaker.stop() } else { speaker.speak(text, choices: displayedChoices.map(\.label)) }
         } label: {
             Label(LocalizedStringKey(speaker.isSpeaking ? "Stop" : "Listen"),
                   systemImage: speaker.isSpeaking ? "stop.fill" : "speaker.wave.2")

@@ -30,6 +30,13 @@ enum WatchJobSnapshot {
             if let outcome = job.outcome ?? job.reportMeta?.outcome {
                 row["outcome"] = shortened(outcome, bytes: 32)
             }
+            // A question's answers let Watch reply from job details; other actions stay on iPhone.
+            let choices = (job.nextActions ?? []).filter { $0.kind == "choice" }.prefix(4)
+            if !choices.isEmpty {
+                row["next_actions"] = choices.map { choice -> [String: Any] in
+                    ["id": shortened(choice.id, bytes: 32), "label": shortened(choice.label, bytes: 160), "kind": "choice"]
+                }
+            }
             return row
         }
         while true {

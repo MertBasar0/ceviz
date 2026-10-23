@@ -28,6 +28,17 @@ struct ResultSpeechTests {
         let wordCut = SpokenSummary.text(from: words, linkWord: link)
         precondition(wordCut.count <= SpokenSummary.maximumCharacters + 1 && wordCut.hasSuffix("kelime…"), wordCut)
 
+        // A question is read with its answers, each heard on its own; the answers survive a long summary.
+        let question = SpokenSummary.text(from: "Eski logları sileyim mi?", linkWord: link,
+                                          choices: ["Evet, sil", "Hayır, bırak!"], optionsWord: "Seçenekler")
+        precondition(question == "Eski logları sileyim mi? Seçenekler: Evet, sil. Hayır, bırak!", question)
+        let longQuestion = SpokenSummary.text(from: sentences, linkWord: link,
+                                              choices: ["Evet, hepsini sil", "Yalnızca bu haftakini sil"], optionsWord: "Seçenekler")
+        precondition(longQuestion.count <= SpokenSummary.maximumCharacters
+                     && longQuestion.hasSuffix("Seçenekler: Evet, hepsini sil. Yalnızca bu haftakini sil."), longQuestion)
+        precondition(SpokenSummary.text(from: "Hazır.", linkWord: link, choices: ["  "], optionsWord: "Seçenekler") == "Hazır.",
+                     "Blank answers add nothing to read")
+
         // The voice follows the summary's own language, else the user's first language.
         precondition(SpokenSummary.language(
             for: "Bilgisayarındaki Not Defteri açıldı ve boş belge yazmaya hazır.", preferredLanguages: ["en-US"]) == "tr")

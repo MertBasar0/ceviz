@@ -57,6 +57,24 @@ struct ConnectionRecoveryTests {
             _ = try WatchJobSnapshot.reply(from: JSONSerialization.data(withJSONObject: ["jobs": malformed]))
             preconditionFailure("Malformed jobs must produce an explicit error, not a misleading empty/success reply")
         } catch {}
-        print("PASS: same-pair identity, bounded Watch snapshots and visible malformed/truncated history")
+        // A question carries its answers to Watch; every other action stays on iPhone.
+        let question: [String: Any] = [
+            "id": "job-question", "name": "Logs", "status": "completed", "outcome": "needs_input",
+            "elapsed_seconds": 1, "summary_text": "Delete the old logs?", "requires_phone_handoff": false,
+            "transcript": "", "phone_report": "",
+            "next_actions": [
+                ["id": "open-on-phone", "label": "Open on Phone", "kind": "deeplink", "target": "ceviz://job/job-question"],
+                ["id": "choice-1", "label": "Yes, delete", "kind": "choice", "target": NSNull()],
+                ["id": "choice-2", "label": "No, keep them", "kind": "choice", "target": NSNull()],
+                ["id": "suggested-next-action", "label": "Archive first", "kind": "agent_command", "target": NSNull()],
+            ],
+        ]
+        let answers = try WatchJobSnapshot.reply(from: JSONSerialization.data(withJSONObject: ["jobs": [question]]))
+        _ = try PropertyListSerialization.data(fromPropertyList: answers, format: .binary, options: 0)
+        let asked = try JSONDecoder().decode(ActiveJobsResponse.self, from: JSONSerialization.data(withJSONObject: answers))
+        precondition(asked.jobs.first?.nextActions?.map(\.id) == ["choice-1", "choice-2"]
+                     && asked.jobs.first?.nextActions?.allSatisfy { $0.kind == "choice" && $0.target == nil } == true,
+                     "Only the answers reach Watch, as plist-safe rows")
+        print("PASS: same-pair identity, bounded Watch snapshots, answers in snapshots, visible malformed/truncated history")
     }
 }

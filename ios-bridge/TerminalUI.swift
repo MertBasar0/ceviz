@@ -217,6 +217,13 @@ struct CVZActionsView: View {
         actions.filter { $0.id != "open-on-phone" }
     }
 
+    /// A question takes one answer: once any is sent, all of its answers are spent.
+    private func isSpent(_ action: NextActionPayload) -> Bool {
+        if usedActionIds.contains(action.id) { return true }
+        guard action.kind == "choice" else { return false }
+        return actions.contains { $0.kind == "choice" && usedActionIds.contains($0.id) }
+    }
+
     var body: some View {
         // Gosterilecek aksiyon yoksa bos baslik cizme.
         if visibleActions.isEmpty {
@@ -251,8 +258,8 @@ struct CVZActionsView: View {
                         actionRow(action)
                     }
                     .buttonStyle(.plain)
-                    .disabled(usedActionIds.contains(action.id))
-                    .opacity(usedActionIds.contains(action.id) ? 0.35 : 1)
+                    .disabled(isSpent(action))
+                    .opacity(isSpent(action) ? 0.35 : 1)
                 }
             }
         }
@@ -260,7 +267,7 @@ struct CVZActionsView: View {
     }
 
     private func isPrimary(_ action: NextActionPayload) -> Bool {
-        action.kind == "api_call" || action.kind == "agent_command"
+        action.kind == "api_call" || action.kind == "agent_command" || action.kind == "choice"
     }
 
     private func actionRow(_ action: NextActionPayload) -> some View {
@@ -292,6 +299,7 @@ struct CVZActionsView: View {
         case "deep_link", "deeplink", "open_url": return "arrow.up.right"
         case "copy": return "doc.on.doc"
         case "api_call", "agent_command": return "bolt.fill"
+        case "choice": return "arrowshape.turn.up.left"
         case "hint": return "lightbulb"
         default: return "arrow.forward"
         }
@@ -300,8 +308,8 @@ struct CVZActionsView: View {
     private func handleAction(_ action: NextActionPayload) {
         // Gonderim tetikleyen aksiyonlar tek kullanimlik: ust uste basip
         // ayni isi tekrar tekrar calistirmayi engelle.
-        if action.kind == "agent_command" || action.kind == "api_call" {
-            guard !usedActionIds.contains(action.id) else { return }
+        if action.kind == "agent_command" || action.kind == "api_call" || action.kind == "choice" {
+            guard !isSpent(action) else { return }
             usedActionIds.insert(action.id)
         }
         switch action.kind {
@@ -329,6 +337,8 @@ struct CVZActionsView: View {
         case "agent_command":
             // Ajanin calistirabilecegi oneri: baglamla birlikte OpenClaw'a gider.
             sendSuggestionAsCommand(action)
+        case "choice":
+            sendChoice(action)
         default:
             onFeedback("→ \(action.label)")
         }
@@ -362,6 +372,40 @@ struct CVZActionsView: View {
                     if error is BackendCapabilityError { usedActionIds.remove(action.id) }
                     onFeedback(String(format: NSLocalizedString("✕ Could not send: %@", comment: ""), error.localizedDescription))
                 }
+            }
+        }
+    }
+
+    /// Answers the job's question with one of the answers it offered; the helper supplies the text.
+    private func sendChoice(_ action: NextActionPayload) {
+        if DemoMode.isActive {
+            onFeedback(NSLocalizedString("Demo mode — sample data", comment: ""))
+            return
+        }
+        var request = BackendConfig.request("/api/v1/shortcuts/command", method: "POST")
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(PhoneJobCommand.chooseOption(
+            jobId: jobId, choiceId: action.id, locale: Locale.current.identifier
+        ))
+        onFeedback(NSLocalizedString("→ Sending your answer…", comment: ""))
+
+        Task { @MainActor in
+            do {
+                let (data, response) = try await BackendTransport.shared.data(for: request, requiring: .choiceReply)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw URLError(.badServerResponse)
+                }
+                onFeedback(NSLocalizedString("✓ Answer sent — opening its result", comment: ""))
+                // The answer continues this conversation in a new job; follow it like a typed follow-up.
+                if let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let newJobId = payload["job_id"] as? String,
+                   let url = URL(string: "ceviz://job/\(newJobId)") {
+                    _ = router.open(url: url, source: .deepLink, presentImmediately: true)
+                }
+            } catch {
+                // Sending the same answer again returns the job it already started.
+                usedActionIds.remove(action.id)
+                onFeedback(String(format: NSLocalizedString("✕ Could not send: %@", comment: ""), error.localizedDescription))
             }
         }
     }

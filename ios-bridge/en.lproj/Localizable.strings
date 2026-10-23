@@ -178,3 +178,7 @@
 "The recording could not be read." = "The recording could not be read.";
 "The recording could not be saved for transcription." = "The recording could not be saved for transcription.";
 "iPhone speech recognition failed: %@" = "iPhone speech recognition failed: %@";
+
+/* Answer choices */
+"→ Sending your answer…" = "→ Sending your answer…";
+"✓ Answer sent — opening its result" = "✓ Answer sent — opening its result";

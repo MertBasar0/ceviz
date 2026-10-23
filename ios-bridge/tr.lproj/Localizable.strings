@@ -178,3 +178,7 @@
 "The recording could not be read." = "Kayıt okunamadı.";
 "The recording could not be saved for transcription." = "Kayıt metne çevrilmek üzere kaydedilemedi.";
 "iPhone speech recognition failed: %@" = "iPhone konuşma tanıması başarısız oldu: %@";
+
+/* Answer choices */
+"→ Sending your answer…" = "→ Cevabın gönderiliyor…";
+"✓ Answer sent — opening its result" = "✓ Cevap gönderildi — sonucu açılıyor";

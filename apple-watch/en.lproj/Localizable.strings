@@ -117,3 +117,11 @@
 "Stop" = "Stop";
 "Read results aloud" = "Read results aloud";
 "link" = "link";
+
+/* Answer choices */
+"Options" = "Options";
+"Choose an answer" = "Choose an answer";
+"Answer sent: %@" = "Answer sent: %@";
+"Answer sent. Its result appears on the Voice tab." = "Answer sent. Its result appears on the Voice tab.";
+"iPhone is not reachable. Open Ceviz on iPhone, then choose again." = "iPhone is not reachable. Open Ceviz on iPhone, then choose again.";
+"The answer was not sent. Choose again." = "The answer was not sent. Choose again.";

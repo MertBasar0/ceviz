@@ -319,6 +319,10 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
                 replyHandler(safeReply(DemoMode.watchReply(for: message["job_id"] as? String)))
                 return
             }
+            if action == "choose_option" {
+                replyHandler(["error": NSLocalizedString("Demo mode — sample data", comment: "")])
+                return
+            }
         }
         if message["action"] as? String == "fetch_jobs" {
             fetchActiveJobs(replyHandler: replyHandler)
@@ -326,6 +330,10 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             performJobAction(jobId: jobId, actionPath: "cancel", replyHandler: replyHandler)
         } else if message["action"] as? String == "summarize_job", let jobId = message["job_id"] as? String {
             performJobAction(jobId: jobId, actionPath: "summarize", replyHandler: replyHandler)
+        } else if message["action"] as? String == "choose_option", let jobId = message["job_id"] as? String,
+                  let choiceId = message["choice_id"] as? String {
+            sendChoice(jobId: jobId, choiceId: choiceId,
+                       locale: message["locale"] as? String ?? Locale.current.identifier, replyHandler: replyHandler)
         } else if message["action"] as? String == "open_handoff", let urlString = message["url"] as? String {
             logger.info("Handoff requested from Watch to continue deep-link URL: \(urlString)")
 
@@ -482,6 +490,31 @@ class WatchBridgeCoordinator: NSObject, WCSessionDelegate, UNUserNotificationCen
             replyHandler(self.safeReply(resultObj))
         }
         task.resume()
+    }
+
+    /// Forwards a Watch answer to the question a job asked. Only the answer's id travels; the helper
+    /// supplies its text and returns the first job for a repeated answer, so Watch may retry freely.
+    private func sendChoice(jobId: String, choiceId: String, locale: String,
+                            replyHandler: @escaping ([String: Any]) -> Void) {
+        var request = BackendConfig.request("/api/v1/shortcuts/command", method: "POST")
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(PhoneJobCommand.chooseOption(
+            jobId: jobId, choiceId: choiceId, locale: locale))
+        Task {
+            do {
+                let (data, response) = try await BackendTransport.shared.data(for: request, requiring: .choiceReply)
+                guard let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status),
+                      let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let answerJobId = payload["job_id"] as? String, !answerJobId.isEmpty else {
+                    replyHandler(["error": "The helper did not accept the answer"])
+                    return
+                }
+                replyHandler(["job_id": answerJobId])
+            } catch {
+                self.logger.error("Answer delivery failed: \(error.localizedDescription)")
+                replyHandler(["error": error.localizedDescription])
+            }
+        }
     }
 
     private func fetchActiveJobs(replyHandler: @escaping ([String : Any]) -> Void) {

@@ -19,10 +19,12 @@ struct WatchCommandRequest: Codable {
     }
 }
 
-/// Continuing a report is not approval to execute its suggested action.
+/// Continuing a report is not approval to execute its suggested action, and answering a question
+/// sends only the id of an answer the job offered: the helper supplies the answer's text.
 enum PhoneJobCommand: Encodable {
     case followUp(jobId: String, text: String, locale: String)
     case approveSuggestion(jobId: String, actionId: String, locale: String)
+    case chooseOption(jobId: String, choiceId: String, locale: String)
 
     private enum CodingKeys: String, CodingKey {
         case intent, text, locale
@@ -43,6 +45,11 @@ enum PhoneJobCommand: Encodable {
             try values.encode(jobId, forKey: .continueJobId)
             try values.encode(actionId, forKey: .nextActionId)
             try values.encode(locale, forKey: .locale)
+        case let .chooseOption(jobId, choiceId, locale):
+            try values.encode("choose_option", forKey: .intent)
+            try values.encode(jobId, forKey: .continueJobId)
+            try values.encode(choiceId, forKey: .nextActionId)
+            try values.encode(locale, forKey: .locale)
         }
     }
 }
@@ -50,19 +57,28 @@ enum PhoneJobCommand: Encodable {
 enum BackendCapability {
     case continuation
     case suggestionApproval
+    case choiceReply
 }
 
 struct BackendCapabilities: Decodable {
     let continuationV1: Bool
     let suggestionApprovalV1: Bool
+    /// Absent on helpers released before answer choices.
+    var choiceReplyV1: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case continuationV1 = "continuation_v1"
         case suggestionApprovalV1 = "suggestion_approval_v1"
+        case choiceReplyV1 = "choice_reply_v1"
     }
 
     func supports(_ capability: BackendCapability) -> Bool {
-        continuationV1 && (capability == .continuation || suggestionApprovalV1)
+        guard continuationV1 else { return false }
+        switch capability {
+        case .continuation: return true
+        case .suggestionApproval: return suggestionApprovalV1
+        case .choiceReply: return choiceReplyV1 == true
+        }
     }
 }
 

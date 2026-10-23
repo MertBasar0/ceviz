@@ -47,11 +47,11 @@ OpenClaw is installed. If Ceviz is already installed, use the update section
 below; do not reinstall over a working service.
 
 These commands use the versioned helper release
-`ceviz-helper-v2026.10.20-beta.3`, matching the existing TestFlight app
+`ceviz-helper-v2026.10.24-beta.1`, matching the existing TestFlight app
 **2026.6.5 (1791334823)**.
 
 ```bash
-git clone --branch ceviz-helper-v2026.10.20-beta.3 --single-branch https://github.com/MertBasar0/ceviz.git
+git clone --branch ceviz-helper-v2026.10.24-beta.1 --single-branch https://github.com/MertBasar0/ceviz.git
 cd ceviz
 bash deploy/install.sh
 ```

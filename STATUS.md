@@ -1,6 +1,22 @@
 # Ceviz — yayın durumu ve devir notu
 
-Son güncelleme: **20 Ekim 2026**
+Son güncelleme: **24 Ekim 2026**
+
+## 24 Ekim — Yardımcı 2026.10.24 Beta 1: cevap seçenekleri
+
+- **Cevap seçenekleri:** Ajan kullanıcıdan seçim istediğinde (`needs_input`) 2–4 kısa cevap
+  önerebiliyor. Yardımcı yalnızca tümü geçerli bir seti tutuyor; cevaplar `next_actions` içinde
+  `choice` olarak listeleniyor. `choose_option` cevabın metnini kayıtlı işten alıyor; aynı
+  soruya aynı cevap ilk işi döndürüyor (saat-telefon tekrarı ikinci iş açmıyor). Yeni yetenek
+  `choice_reply_v1`. Canlı deneme (Nemotron 3 Ultra): seçim isteyen soruda 3 geçerli cevap,
+  "17 × 23" sorusunda cevap yok.
+- **Boş iPhone transkripti:** 23 Ekim'de 9 komuttan 3'ü metinsiz ve boş gerekçeyle geldi;
+  yardımcı güncel uygulamaya "güncelle" diyordu. Artık "iPhone kayıtta söz duymadı" diyor.
+  Tanıyıcının neden boş döndüğü henüz bilinmiyor.
+- **Uygulama tarafı (sonraki TestFlight):** saatte cevap düğmeleri ve sesli okumada
+  "Seçenekler: …"; önceki komutların sonuçları da okunuyor; uygulama 2 dakika içinde açılırsa
+  bekleyen sonuç okunuyor (önceden 30 sn).
+- Sürüm notu: `docs/release-notes-helper-2026.10.24-beta.1.md`.
 
 ## 20 Ekim — Yardımcı 2026.10.20 Beta 3: düşünme düzeyi, model karşılaştırması
 

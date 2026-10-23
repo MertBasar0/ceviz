@@ -31,10 +31,16 @@ enum PhoneSpeechRecognizer {
         defer { try? FileManager.default.removeItem(at: file) }
         let locale = locale(request.locale)
         do {
+            let heard: PhoneTranscript
             if #available(iOS 26.0, *) {
-                return try await analyze(file: file, locale: locale, hints: hints)
+                heard = try await analyze(file: file, locale: locale, hints: hints)
+            } else {
+                heard = try await recognizeOnDevice(file: file, locale: locale, hints: hints)
             }
-            return try await recognizeOnDevice(file: file, locale: locale, hints: hints)
+            // A recognizer that finishes without words reports no error; the helper needs a reason.
+            guard heard.text.isEmpty, heard.error.isEmpty else { return heard }
+            return PhoneTranscript(error: NSLocalizedString("The iPhone heard no words in the recording.",
+                                                            comment: "Phone transcription"))
         } catch {
             return PhoneTranscript(error: String(format: NSLocalizedString("iPhone speech recognition failed: %@", comment: "Phone transcription"),
                                                  error.localizedDescription))

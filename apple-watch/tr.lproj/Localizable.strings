@@ -125,3 +125,4 @@
 "Answer sent. Its result appears on the Voice tab." = "Cevap gönderildi. Sonucu Ses sekmesinde görünecek.";
 "iPhone is not reachable. Open Ceviz on iPhone, then choose again." = "iPhone'a ulaşılamıyor. iPhone'da Ceviz'i aç, sonra yeniden seç.";
 "The answer was not sent. Choose again." = "Cevap gönderilemedi. Yeniden seç.";
+"Earlier request: %@" = "Önceki istek: %@";

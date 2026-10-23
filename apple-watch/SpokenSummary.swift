@@ -63,8 +63,9 @@ enum SpokenSummary {
 
 /// When a result is read without being asked: once per job, only while enabled.
 enum ResultSpeechPolicy {
-    /// A result that arrives while the app is away is still read if the app opens this soon.
-    static let pendingLifetime: TimeInterval = 30
+    /// A result that arrives while the app is away is still read if the app opens this soon:
+    /// watchOS returns to the app on a wrist raise within 2 minutes by default.
+    static let pendingLifetime: TimeInterval = 120
 
     static func shouldAnnounce(jobID: String, lastSpokenJobID: String?, enabled: Bool) -> Bool {
         enabled && !jobID.isEmpty && jobID != lastSpokenJobID

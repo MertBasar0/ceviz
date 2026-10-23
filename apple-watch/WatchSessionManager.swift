@@ -51,6 +51,10 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
     private static let pendingJobDefaultsKey = "cvz.pendingJobId"
     private static let pendingJobAtDefaultsKey = "cvz.pendingJobAt"
     private static let lastTerminalJobDefaultsKey = "cvz.lastTerminalJobId"
+    /// Commands this Watch sent recently, by job id: the screen follows only the newest, but the
+    /// result of an earlier one is still read aloud when it arrives.
+    private static let followedJobsDefaultsKey = "cvz.followedJobs"
+    private static let followedJobLifetime: TimeInterval = 30 * 60
     private static let pendingCommandsDefaultsKey = "cvz.pendingCommands.v1"
     /// Sesli komutlar uzun süre sonra sürpriz biçimde çalıştırılmamalı.
     private static let pendingCommandMaxAge = WatchCommandTransport.maximumAge
@@ -282,6 +286,11 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         // A notification the user explicitly tapped is different: its APNs
         // payload is the authoritative terminal result even if watchOS already
         // expired the polling window and cleared the pending-job record.
+        if !allowUntrackedJob, jobId != pollingJobId, jobId != persisted,
+           !deliveryTracking.blocksResultUpdates, forgetFollowedJob(jobId) {
+            announceEarlierResult(message, jobId: jobId, status: status)
+            return
+        }
         guard allowUntrackedJob || (!deliveryTracking.blocksResultUpdates && (jobId == pollingJobId || jobId == persisted)) else { return }
         if UserDefaults.standard.string(forKey: Self.lastTerminalJobDefaultsKey) == jobId,
            pollingJobId != jobId, !allowUntrackedJob {
@@ -292,6 +301,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
         let deepLink = (message["deep_link"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let state = CVZJobState.resolve(status: status, outcome: message["outcome"] as? String)
         jobsTracking.confirmTerminal(jobID: jobId, status: status, outcome: message["outcome"] as? String)
+        _ = forgetFollowedJob(jobId)
 
         stopResultPolling()
         resultState = state
@@ -421,6 +431,40 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 speakOnce()
             }
         }, errorHandler: { _ in DispatchQueue.main.async { speakOnce() } })
+    }
+
+    /// An earlier command's result arrived while the screen follows a newer one: the list shows it
+    /// and it is read once, labelled, without replacing the result on screen.
+    private func announceEarlierResult(_ message: [String: Any], jobId: String, status: String) {
+        let outcome = message["outcome"] as? String
+        let state = CVZJobState.resolve(status: status, outcome: outcome)
+        jobsTracking.confirmTerminal(jobID: jobId, status: status, outcome: outcome)
+        playResultHaptic(state)
+        let summary = (message["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let text = summary.isEmpty ? NSLocalizedString(state.titleKey, comment: "job state") : summary
+        if !isCapturing {
+            ResultSpeaker.shared.announce(
+                String(format: NSLocalizedString("Earlier request: %@", comment: "read before an earlier command's result"), text),
+                jobID: jobId)
+        }
+        if WCSession.default.isReachable { fetchJobs() }
+    }
+
+    private func rememberFollowedJob(_ jobId: String) {
+        let now = Date().timeIntervalSince1970
+        var followed = (UserDefaults.standard.dictionary(forKey: Self.followedJobsDefaultsKey) as? [String: Double] ?? [:])
+            .filter { now - $0.value < Self.followedJobLifetime }
+        followed[jobId] = now
+        if followed.count > 20, let oldest = followed.min(by: { $0.value < $1.value })?.key { followed[oldest] = nil }
+        UserDefaults.standard.set(followed, forKey: Self.followedJobsDefaultsKey)
+    }
+
+    /// True once for a recent command this Watch sent.
+    private func forgetFollowedJob(_ jobId: String) -> Bool {
+        var followed = UserDefaults.standard.dictionary(forKey: Self.followedJobsDefaultsKey) as? [String: Double] ?? [:]
+        guard let sentAt = followed.removeValue(forKey: jobId) else { return false }
+        UserDefaults.standard.set(followed, forKey: Self.followedJobsDefaultsKey)
+        return Date().timeIntervalSince1970 - sentAt < Self.followedJobLifetime
     }
 
     private func showChoices(_ choices: [NextActionPayload], for jobId: String) {
@@ -567,6 +611,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
 
     private func startResultPolling(jobId: String) {
         stopResultPolling()
+        rememberFollowedJob(jobId)
         resultTracking.start(jobId)
         resultState = .running
         // watchOS uygulamayi tamamen oldurebilir; bekleyen isi diske yaz ki
@@ -686,6 +731,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
                 // A late reply for an older job cannot clear a newer receipt.
                 guard !self.deliveryTracking.blocksResultUpdates, self.resultTracking.finish(jobId) else { return }
                 self.stopResultPolling()
+                _ = self.forgetFollowedJob(jobId)
                 let state = CVZJobState.resolve(status: jobStatus, outcome: reply["outcome"] as? String ?? reportMeta?.outcome)
                 UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)
                 self.applySummarizeReply(reply, jobId: jobId)
@@ -1030,6 +1076,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate, WKExte
             jobsTracking.confirmTerminal(
                 jobID: jobId, status: response.status, outcome: response.outcome ?? response.reportMeta?.outcome)
             stopResultPolling()
+            _ = forgetFollowedJob(jobId)
             // A reply that carries its own recorded speech plays that instead (below).
             announceResult(resultState ?? .resultReady, jobId: jobId, speak: response.ttsAudioData == nil)
             UserDefaults.standard.set(jobId, forKey: Self.lastTerminalJobDefaultsKey)

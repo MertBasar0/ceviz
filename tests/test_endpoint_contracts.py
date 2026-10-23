@@ -148,8 +148,8 @@ class EndpointContractTests(unittest.TestCase):
                 capabilities = json.loads(response.read())
                 self.assertEqual(response.status, 200)
             self.assertEqual(capabilities, {
-                "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
-                "watch_command_recovery_v1": True, "speech_on_phone": False,
+                "continuation_v1": True, "suggestion_approval_v1": True, "choice_reply_v1": True,
+                "conversations_v1": True, "watch_command_recovery_v1": True, "speech_on_phone": False,
             })
             with mock.patch.object(main.stt_client, "engine", "phone"), request.urlopen(req) as response:
                 self.assertTrue(json.loads(response.read())["speech_on_phone"])
@@ -610,6 +610,7 @@ class EndpointContractTests(unittest.TestCase):
             next_action="İlk öncelikten başla.",
             outcome="completed",
             next_action_actor="backend",
+            choices=(),
         )
 
         with mock.patch.object(
@@ -708,6 +709,53 @@ class EndpointContractTests(unittest.TestCase):
         self.assertEqual(invoke.call_args.args[0]["transcript"], suggestion.strip())
         self.assertIn("ONAYLADI", invoke.call_args.args[0]["_continuation_context"])
         self.assertNotIn("tekrar teyit isteme", invoke.call_args.args[0]["_continuation_context"])
+
+    def test_choice_answer_sends_the_stored_option_once_per_question(self) -> None:
+        parent = main.jobs_db["job-102"]
+        parent.update(outcome="needs_input", choices=["Evet, sil", "Hayır, bırak"], conversation_id="question")
+        _, summary = self._post_json(f"/api/v1/jobs/{parent['id']}/summarize", {})
+        self.assertEqual([(a["id"], a["label"]) for a in summary["next_actions"] if a["kind"] == "choice"],
+                         [("choice-1", "Evet, sil"), ("choice-2", "Hayır, bırak")])
+        answer = {"intent": "choose_option", "continue_job_id": parent["id"], "next_action_id": "choice-2",
+                  "text": "client text is ignored"}
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command",
+                               side_effect=main.OpenClawUnavailable("Test boundary")) as invoke:
+            status, first = self._post_json("/api/v1/shortcuts/command", answer)
+            _, retry = self._post_json("/api/v1/shortcuts/command", answer)
+            _, other = self._post_json("/api/v1/shortcuts/command", {**answer, "next_action_id": "choice-1"})
+        self.assertEqual(status, 200)
+        self.assertEqual(first["job_id"], retry["job_id"])  # a Watch-to-phone retry starts no second job
+        self.assertNotEqual(first["job_id"], other["job_id"])
+        self.assertEqual(invoke.call_count, 2)
+        sent = invoke.call_args_list[0].args[0]
+        self.assertEqual(sent["transcript"], "Hayır, bırak")
+        self.assertIn("SEÇTİ", sent["_continuation_context"])
+        self.assertNotIn("ONAYLADI", sent["_continuation_context"])
+        self.assertEqual(main.jobs_db[first["job_id"]]["conversation_id"], "question")
+        persisted = json.loads(main.JOBS_STATE_PATH.read_text(encoding="utf-8"))["jobs"]
+        stored = next(job for job in persisted if job["id"] == parent["id"])
+        self.assertEqual(stored["choice_jobs"], {"choice-2": first["job_id"], "choice-1": other["job_id"]})
+
+    def test_choice_answer_rejects_options_the_job_does_not_offer(self) -> None:
+        parent = main.jobs_db["job-102"]
+        parent.update(outcome="needs_input", choices=["Evet", "Hayır"], next_action_actor="agent")
+        base = {"intent": "choose_option", "continue_job_id": parent["id"]}
+        cases = [
+            {**base}, {**base, "next_action_id": "choice-3"},
+            {**base, "next_action_id": "suggested-next-action"},
+            {"intent": "approve_suggestion", "continue_job_id": parent["id"], "next_action_id": "choice-1"},
+            {"intent": "follow_up", "continue_job_id": parent["id"], "next_action_id": "choice-1", "text": "Evet"},
+        ]
+        with mock.patch.object(main.openclaw_client, "invoke_watch_command") as invoke:
+            for payload in cases:
+                with self.subTest(payload=payload), self.assertRaises(request.HTTPError) as rejected:
+                    self._post_json("/api/v1/shortcuts/command", payload)
+                self.assertEqual(rejected.exception.code, 400)
+            parent["outcome"] = "done"  # an answered question no longer takes answers
+            with self.assertRaises(request.HTTPError) as rejected:
+                self._post_json("/api/v1/shortcuts/command", {**base, "next_action_id": "choice-1"})
+            self.assertEqual(rejected.exception.code, 400)
+            invoke.assert_not_called()
 
     def test_command_intent_rejects_invalid_or_unavailable_targets_before_invocation(self) -> None:
         cases = [

@@ -45,6 +45,10 @@ def redact_secrets(text: str) -> str:
     )
 
 
+MAX_CHOICES = 4
+MAX_CHOICE_CHARS = 60
+
+
 @dataclass
 class TaskResult:
     category: str
@@ -55,6 +59,7 @@ class TaskResult:
     next_action: str | None
     outcome: str | None = None
     next_action_actor: str | None = None
+    choices: tuple[str, ...] = ()
 
 
 class OpenClawUnavailable(RuntimeError):
@@ -301,6 +306,11 @@ class OpenClawClient:
             next_action=structured["next_action"] or self._extract_next_action(clean_text),
             outcome=normalize_job_outcome("completed", structured.get("outcome")),
             next_action_actor=structured.get("next_action_actor"),
+            choices=(
+                tuple(redact_secrets(choice) for choice in structured["choices"])
+                if normalize_job_outcome("completed", structured.get("outcome")) == "needs_input"
+                else ()
+            ),
         )
 
     # --- Canli durum enjeksiyonu ---------------------------------------
@@ -681,12 +691,16 @@ class OpenClawClient:
             "Bu blok telefonda gösterilecek olan detaylı içeriktir.\n"
             f"2) İkinci blok tam olarak {self.META_START} ile başlayıp {self.META_END} ile bitsin. "
             "Bu blokta tek satır geçerli JSON nesnesi ver. Şema: "
-            '{"watch_summary":"...","next_action":"..."|null,"next_action_actor":"agent"|"user"|null,"outcome":"done"|"blocked"|"needs_input","requires_phone_handoff":true|false,"category":"..."}\n'
+            '{"watch_summary":"...","next_action":"..."|null,"next_action_actor":"agent"|"user"|null,"outcome":"done"|"blocked"|"needs_input","choices":["..."]|null,"requires_phone_handoff":true|false,"category":"..."}\n'
             "- watch_summary: Apple Watch ekranı ve seslendirme için doğrudan kullanıcıya hitap eden 160 karakter altı tek net cümle.\n"
             "- outcome: soru yanıtlandıysa veya iş yapıldıysa 'done', yapılamadıysa 'blocked', kullanıcıdan onay/bilgi gerekiyorsa 'needs_input'.\n"
             "- requires_phone_handoff: cevap detaylıysa, uzunsa veya telefonda okunması daha uygunsa true; saat ekranında tamamen yeterli kısa bir yanıtsa false.\n"
             "- next_action: Eğer devamında gerçekten yapılması gereken somut bir adım varsa doldur; yoksa MUTLAKA null yap. "
             "'Yok', 'Ek işlem gerekmiyor' gibi dolgu ifadeleri ASLA yazma. next_action null ise next_action_actor da null olmalıdır.\n"
+            "- choices: YALNIZCA outcome 'needs_input' ise ve kullanıcı birkaç açık seçenekten birini seçerek yanıt verebiliyorsa "
+            f"en az 2, en fazla {MAX_CHOICES} kısa seçenek yaz (her biri en çok {MAX_CHOICE_CHARS} karakter, "
+            "kullanıcının ağzından bir cevap olarak: 'Evet, sil', 'Hayır, bırak'). Seçenekler saatte düğme olur ve seçilen metin "
+            "sana cevap olarak döner; her seçenek tek başına anlaşılır olsun. Serbest metin cevap gerekiyorsa veya seçim yoksa null yaz.\n"
             "- JSON dışında meta bloğunda başka hiçbir metin veya markdown yazma."
         )
 
@@ -711,7 +725,19 @@ class OpenClawClient:
             "requires_phone_handoff": self._coerce_optional_bool(meta.get("requires_phone_handoff")),
             "outcome": self._clean_optional_text(meta.get("outcome")),
             "next_action_actor": self._clean_optional_text(meta.get("next_action_actor")),
+            "choices": self._clean_choices(meta.get("choices")),
         }
+
+    def _clean_choices(self, value: Any) -> tuple[str, ...]:
+        """Accept a complete answer set or none: a dropped option would misstate the question."""
+        if not isinstance(value, list) or not 2 <= len(value) <= MAX_CHOICES:
+            return ()
+        choices = tuple(" ".join(item.split()) if isinstance(item, str) else "" for item in value)
+        if any(not choice or len(choice) > MAX_CHOICE_CHARS for choice in choices):
+            return ()
+        if len({choice.casefold() for choice in choices}) != len(choices):
+            return ()
+        return choices
 
     def _extract_tagged_block(self, text: str, start_tag: str, end_tag: str) -> str | None:
         pattern = re.escape(start_tag) + r"\s*(.*?)\s*" + re.escape(end_tag)

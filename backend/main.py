@@ -550,6 +550,19 @@ def is_no_op_next_action(text: str) -> bool:
     return any(marker in compact for marker in NO_OP_NEXT_ACTION_MARKERS)
 
 
+def choice_actions(job: dict) -> list[dict[str, str | None]]:
+    """Answer buttons for the question a finished job asked; nothing else is a choice."""
+    if clean_text(job.get("status")).lower() != "completed" or normalize_job_outcome(
+        job.get("status"), job.get("outcome")
+    ) != "needs_input":
+        return []
+    choices = job.get("choices")
+    if not isinstance(choices, list):
+        return []
+    return [{"id": f"choice-{index}", "label": clean_text(label), "kind": "choice", "target": None}
+            for index, label in enumerate(choices, start=1) if clean_text(label)]
+
+
 def build_next_actions(job: dict) -> list[dict[str, str | None]]:
     actions: list[dict[str, str | None]] = []
     seen: set[tuple[str, str | None, str]] = set()
@@ -587,6 +600,9 @@ def build_next_actions(job: dict) -> list[dict[str, str | None]]:
             "kind": "api_call",
             "target": f"/api/v1/jobs/{job_id}/cancel",
         })
+
+    for action in choice_actions(job):
+        append_action(action)
 
     for action in get_explicit_next_actions(job):
         append_action(action)
@@ -921,7 +937,7 @@ def apply_task_result(job: dict, result: TaskResult) -> None:
         watch_summary=result.watch_summary, requires_phone_handoff=result.requires_phone_handoff,
         phone_report=result.phone_report, next_action=result.next_action,
         outcome=normalize_job_outcome("completed", result.outcome),
-        next_action_actor=result.next_action_actor, status="completed",
+        next_action_actor=result.next_action_actor, choices=list(result.choices), status="completed",
     )
 
 
@@ -1039,9 +1055,15 @@ def remember_job(job, *, strict=False):
     return job
 
 
-def build_continuation_context(prev_job: dict, *, approved_suggestion: bool) -> str:
+def build_continuation_context(prev_job: dict, *, approved_suggestion: bool, chosen_option: bool = False) -> str:
     prev_summary = trim_watch_text(prev_job.get("watch_summary") or prev_job.get("canned_result") or "", 220)
-    if approved_suggestion:
+    if chosen_option:
+        directive = (
+            "Kullanıcı önceki sorunun seçeneklerinden BİRİNİ SEÇTİ; transkript yalnızca seçtiği seçeneğin metnidir. "
+            "Bu cevaba göre devam et. Seçim yalnızca seçeneğin açıkça söylediği şeyi onaylar; "
+            "farklı işlemler ve gerekli güvenlik onayları için yeniden sor."
+        )
+    elif approved_suggestion:
         directive = (
             "Kullanıcı, rapordaki seçili öneriyi UYGULAMANI ONAYLADI; transkript yalnızca o önerinin metnidir. "
             "Onay bu işlemle sınırlıdır; farklı işlemler ve gerekli güvenlik onayları için yeniden sor."
@@ -1067,6 +1089,7 @@ def create_openclaw_job(
     stt_error: str = "",
     continue_job: dict | None = None,
     approved_suggestion: bool = False,
+    chosen_option: bool = False,
     locale: str = "",
     audio_fingerprint: str | None = None,
     strict_save: bool = False,
@@ -1090,7 +1113,7 @@ def create_openclaw_job(
     }
     if continue_job is not None:
         invocation_payload["_continuation_context"] = build_continuation_context(
-            continue_job, approved_suggestion=approved_suggestion
+            continue_job, approved_suggestion=approved_suggestion, chosen_option=chosen_option
         )
     new_job_id = f"job-{uuid.uuid4().hex[:8]}"
     try:
@@ -1302,7 +1325,7 @@ def resolve_command_context(payload: dict | str, *, allow_approval: bool = False
     if not isinstance(payload, dict):
         raise ValueError("Expected a command object or text.")
     intent = payload.get("intent", "follow_up")
-    if intent not in ("follow_up", "approve_suggestion"):
+    if intent not in ("follow_up", "approve_suggestion", "choose_option"):
         raise ValueError("Unknown command intent.")
     parent_id = payload.get("continue_job_id")
     parent = None
@@ -1323,6 +1346,11 @@ def resolve_command_context(payload: dict | str, *, allow_approval: bool = False
     if not allow_approval or parent is None or parent.get("status") != "completed":
         raise ValueError("Suggestion approval requires a completed job report.")
     action_id = payload.get("next_action_id")
+    if intent == "choose_option":
+        chosen = [action for action in choice_actions(parent) if action["id"] == action_id]
+        if len(chosen) != 1:
+            raise ValueError("This answer is no longer offered. Refresh the report.")
+        return parent, clean_text(chosen[0]["label"])
     actions = get_explicit_next_actions(parent)
     if parent.get("next_action_actor") == "agent" and not is_no_op_next_action(parent.get("next_action") or ""):
         actions.append({"id": "suggested-next-action", "kind": "agent_command", "label": parent["next_action"]})
@@ -1330,6 +1358,27 @@ def resolve_command_context(payload: dict | str, *, allow_approval: bool = False
     if len(selected) != 1:
         raise ValueError("This suggestion is unavailable or cannot be applied by the agent. Refresh the report.")
     return parent, clean_text(selected[0]["label"])
+
+
+_choice_lock = threading.Lock()
+
+
+def answer_choice(parent: dict, action_id: str, text: str, client_timestamp: str | None, locale: str) -> dict:
+    """One continuation per (question, answer): a Watch-to-phone retry returns the first job."""
+    with _choice_lock:
+        with jobs_lock:
+            answered = (jobs_db.get(parent["id"]) or {}).get("choice_jobs", {}).get(action_id)
+            existing = jobs_db.get(answered) if answered else None
+        if existing is not None:
+            return existing
+        job = create_openclaw_job(transcript=text, source="shortcut", client_timestamp=client_timestamp,
+                                  continue_job=parent, chosen_option=True, locale=locale)
+        with jobs_lock:
+            stored = jobs_db.get(parent["id"])
+            if stored is not None:
+                stored.setdefault("choice_jobs", {})[action_id] = job["id"]
+                save_jobs()
+        return job
 
 
 def parse_wait_seconds(payload: dict | str, query: dict[str, list[str]]) -> float:
@@ -1423,7 +1472,8 @@ class WatchCevizHandler(BoundedHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({
-                "continuation_v1": True, "suggestion_approval_v1": True, "conversations_v1": True,
+                "continuation_v1": True, "suggestion_approval_v1": True, "choice_reply_v1": True,
+                "conversations_v1": True,
                 "watch_command_recovery_v1": True, "speech_on_phone": stt_client.on_phone,
             }).encode("utf-8"))
             return
@@ -1754,14 +1804,19 @@ Content-Type: application/json
                 }).encode("utf-8"))
                 return
 
-            job = create_openclaw_job(
-                transcript=transcript,
-                source="shortcut",
-                client_timestamp=client_timestamp,
-                continue_job=continue_job,
-                approved_suggestion=approved_text is not None,
-                locale=str(payload.get("locale") or "") if isinstance(payload, dict) else "",
-            )
+            chosen_option = isinstance(payload, dict) and payload.get("intent") == "choose_option"
+            if chosen_option:
+                job = answer_choice(continue_job, str(payload["next_action_id"]), transcript,
+                                    client_timestamp, str(payload.get("locale") or ""))
+            else:
+                job = create_openclaw_job(
+                    transcript=transcript,
+                    source="shortcut",
+                    client_timestamp=client_timestamp,
+                    continue_job=continue_job,
+                    approved_suggestion=approved_text is not None,
+                    locale=str(payload.get("locale") or "") if isinstance(payload, dict) else "",
+                )
             wait_for_job_completion(job, parse_wait_seconds(payload, query))
 
             self.send_response(200)

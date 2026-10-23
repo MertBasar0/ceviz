@@ -125,6 +125,24 @@ Takvim etkinliğini telefonda açıp katılımcıları kontrol et.
                 expected = outcome if outcome in {"done", "blocked", "needs_input"} else "unknown"
                 self.assertEqual(result.outcome, expected)
 
+    def test_choices_are_kept_only_as_a_complete_answer_set_for_a_question(self) -> None:
+        def result(meta: dict):
+            text = ("<watch_ceviz_phone_report>Silmemi ister misin?</watch_ceviz_phone_report>"
+                    f"<watch_ceviz_meta>{json.dumps(meta, ensure_ascii=False)}</watch_ceviz_meta>")
+            return self.client.extract_result(self._write_log(text))
+
+        question = {"outcome": "needs_input", "watch_summary": "Eski logları sileyim mi?"}
+        self.assertEqual(result({**question, "choices": ["  Evet,  sil ", "Hayır, bırak"]}).choices,
+                         ("Evet, sil", "Hayır, bırak"))
+        for choices in (
+            None, "Evet", [], ["Tek seçenek"], ["A", "B", "C", "D", "E"],
+            ["Evet", "x" * 61], ["Evet", ""], ["Evet", 3], ["Evet", "evet"],
+        ):
+            with self.subTest(choices=choices):
+                self.assertEqual(result({**question, "choices": choices}).choices, ())
+        # An answered question offers nothing to choose.
+        self.assertEqual(result({"outcome": "done", "choices": ["Evet", "Hayır"]}).choices, ())
+
 
 class ReportBuilderTests(unittest.TestCase):
     def test_active_lifecycle_takes_precedence_over_stale_terminal_outcome(self) -> None:
@@ -300,6 +318,18 @@ class ReportBuilderTests(unittest.TestCase):
             "copy-link",
             "suggested-next-action",
         ])
+
+    def test_choice_actions_belong_only_to_a_finished_question(self) -> None:
+        job = {"id": "job-q", "status": "completed", "outcome": "needs_input",
+               "choices": ["Evet, sil", "Hayır, bırak"], "next_action": None}
+        choices = [action for action in main.build_next_actions(job) if action["kind"] == "choice"]
+        self.assertEqual(choices, [
+            {"id": "choice-1", "label": "Evet, sil", "kind": "choice", "target": None},
+            {"id": "choice-2", "label": "Hayır, bırak", "kind": "choice", "target": None},
+        ])
+        for changes in ({"outcome": "done"}, {"status": "running"}, {"status": "failed"}, {"choices": None}):
+            with self.subTest(changes=changes):
+                self.assertEqual(main.choice_actions({**job, **changes}), [])
 
     def test_build_next_actions_adds_runtime_api_actions_for_running_jobs(self) -> None:
         job = {
